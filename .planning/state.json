@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Arquivo privado com mensagens e mídias reais",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "2",
@@ -29,5 +29,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 1 of 4 · 0% · executing"
   },
-  "updated_at": "2026-10-10T21:07:50.226Z"
+  "updated_at": "2026-10-10T21:19:03.589Z"
 }
