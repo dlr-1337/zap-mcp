@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 Phase: 1 of 4 (Arquivo privado com mensagens e mídias reais)
 Plan: 0 of 0 in current phase (não planejado)
 Status: Ready to plan
-Last activity: 2026-10-10 — Configuração interativa salva no projeto e nos padrões globais; 32/32 requisitos mapeados, nenhum implementado ou verificado.
+Last activity: 2026-10-10 — Repositório público github.com/dlr-1337/zap-mcp criado e publicado em main; planejamento e configuração salvos, nenhum requisito implementado.
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -81,5 +81,5 @@ Nenhum impedimento para iniciar o planejamento.
 ## Session Continuity
 
 Last session: 2026-10-10 16:51 -03:00
-Stopped at: GSD configurado interativamente, com padrões globais salvos; Phase 1 pronta para planejamento, sem planos ou código de produto.
+Stopped at: Repositório público conectado a origin/main, com README e exclusão de dados privados; GSD configurado e Phase 1 pronta para planejamento, sem código de produto.
 Resume file: None

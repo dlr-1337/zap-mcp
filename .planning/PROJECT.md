@@ -49,6 +49,7 @@ Nenhum requisito de produto validado ainda; a pasta começou sem código e sem a
 - O arquivo persistido deve continuar consultável quando a conexão com WhatsApp cair. A conexão é necessária para obter novos dados, não para reler o que já foi salvo.
 - A disponibilidade de mensagens antigas e mídias deve ser investigada e depois validada com a conta real; ausência de um registro no arquivo não prova que ele nunca existiu.
 - Ambiente inicial: repositório Git vazio em `/home/otavio/Documents/ChatGPT/zap-mcp 2`, sem `.planning/` anterior.
+- Repositório público criado a pedido do usuário: https://github.com/dlr-1337/zap-mcp, com branch principal `main`. Fonte e documentação são públicas; mensagens, mídias, banco, sessões e credenciais permanecem no ambiente privado e fora do Git.
 - VPS, domínio, capacidade de armazenamento e acessos de implantação ainda precisam ser identificados na etapa de preparação do ambiente; não são pré-requisitos para este planejamento.
 - Não há prazo ou orçamento numérico informado.
 
