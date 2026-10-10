@@ -46,7 +46,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     if (!/^(127\.0\.0\.1|localhost)(:[0-9]+)?$/.test(req.get('Host') ?? '') || !['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(req.socket.remoteAddress ?? '')) { res.status(403).json({ error: 'Transporte recusado' }); return; } next();
   });
   app.use((_req, res, next) => {
-    res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
+    res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
   app.use(express.json({ limit: '4kb' }));
   app.use(express.urlencoded({ extended: false, limit: '4kb' }));
@@ -102,17 +102,37 @@ export function createService({ dataDir }: { dataDir: string }) {
     if (!Array.isArray(parts) || !parts.every(p => typeof p === 'string') || parts[0] !== kind || parts[1] !== scope || parts.length !== (kind === 'conversations' ? 3 : 4)) throw Object.assign(Error('cursor'), { status: 400 });
     return parts;
   };
+  const limit = (input: unknown, maximum: number) => {
+    if (input === undefined) return maximum;
+    if (typeof input !== 'string' || !/^[1-9]\d*$/.test(input) || Number(input) > maximum) throw Object.assign(Error('limit'), { status: 400 });
+    return Number(input);
+  };
+  const pageQuery = (req: Request) => {
+    if (Object.keys(req.query).some(key => !['limit', 'cursor'].includes(key))) throw Object.assign(Error('query'), { status: 400 });
+  };
+  const conversationEvidence = (conversation: { id: string; name: string | null }) => {
+    const row = archiveDb.prepare('SELECT source_id FROM conversations WHERE id=?').get(conversation.id) as { source_id: string | null };
+    const identity = row.source_id;
+    return { ...conversation, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity?.endsWith('@s.whatsapp.net') || identity?.endsWith('@lid') ? 'individual' : null };
+  };
   app.get('/api/conversations', (req, res) => {
+    pageQuery(req);
     const cursor = decodeCursor(req.query.cursor, 'conversations', '');
-    const page = archive.listConversations({ cursor: cursor?.[2] });
-    res.json({ conversations: page.conversations, nextCursor: page.nextCursor ? encodeCursor(['conversations', '', page.nextCursor]) : null });
+    const page = archive.listConversations({ cursor: cursor?.[2], limit: limit(req.query.limit, 50) });
+    res.json({ conversations: page.conversations.map(conversationEvidence), nextCursor: page.nextCursor ? encodeCursor(['conversations', '', page.nextCursor]) : null });
   });
   app.get('/api/conversations/:id/messages', (req, res) => {
+    pageQuery(req);
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
     const cursor = decodeCursor(req.query.cursor, 'messages', req.params.id);
-    const page = archive.readConversation(req.params.id, { cursor: cursor ? { timestamp: cursor[2], reference: cursor[3] } : undefined });
+    const page = archive.readConversation(req.params.id, { limit: limit(req.query.limit, 100), cursor: cursor ? { timestamp: cursor[2], reference: cursor[3] } : undefined });
     if (!page) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
-    res.json({ ...page, nextCursor: page.nextCursor ? encodeCursor(['messages', req.params.id, page.nextCursor.timestamp, page.nextCursor.reference]) : null });
+    for (const message of page.messages) for (const attachment of message?.attachments ?? []) {
+      if (attachment?.state !== 'available') continue;
+      const file = openVerifiedAttachment(archive, mediaDir, attachment.id);
+      if (file) closeSync(file.fd); else Object.assign(attachment, archive.getAttachment(attachment.id));
+    }
+    res.json({ ...page, conversation: conversationEvidence(page.conversation as { id: string; name: string | null }), nextCursor: page.nextCursor ? encodeCursor(['messages', req.params.id, page.nextCursor.timestamp, page.nextCursor.reference]) : null });
   });
   const publicDir = fileURLToPath(new URL('../../public/', import.meta.url));
   for (const [route, filename] of [['/', 'index.html'], ['/app.js', 'app.js'], ['/style.css', 'style.css']]) {

@@ -5,6 +5,9 @@ body { margin: 0; padding: 32px; }
 h1 { font-size: 1.75rem; line-height: 1.2; font-weight: 600; margin: 0 0 16px; }
 h2 { font-size: 1.25rem; line-height: 1.2; font-weight: 600; margin: 0 0 16px; }
 p { margin: 0 0 16px; }
+h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
+strong { font-weight: 600; }
+body, dd, li, button { overflow-wrap: anywhere; }
 button, input, a { font: inherit; }
 button, input { min-height: 48px; border: 1px solid #66717f; border-radius: 4px; padding: 8px 16px; background: #fff; color: #17212b; max-width: 100%; }
 button { font-weight: 600; cursor: pointer; }
@@ -30,6 +33,15 @@ article { padding: 16px 0; border-bottom: 1px solid #d7dce1; }
 article p { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80ch; }
 article header { display: block; margin-bottom: 8px; }
 details { font-size: .875rem; margin-bottom: 8px; } summary { cursor: pointer; padding: 8px 0; }
+summary { min-height: 48px; }
+blockquote { margin: 16px 0; padding: 16px; border-left: 1px solid #66717f; white-space: pre-wrap; overflow-wrap: anywhere; }
+.attachment { margin: 16px 0; padding: 16px; border: 1px solid #d7dce1; }
+.download { display: inline-block; min-height: 48px; padding: 8px 16px; border: 1px solid #155e75; border-radius: 4px; color: #155e75; font-weight: 600; }
+#qr { width: 256px; height: auto; max-width: 100%; display: block; margin-bottom: 16px; image-rendering: pixelated; }
+#pairing { margin-top: 24px; }
+#coverage-batches li { margin-bottom: 8px; }
+#refresh-conversation { margin-bottom: 16px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 .skip { position: absolute; left: 16px; top: 16px; padding: 8px 16px; background: #fff; transform: translateY(-200%); }
 .skip:focus { transform: none; }
 @media (max-width: 767px) {

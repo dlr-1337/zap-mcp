@@ -13,10 +13,10 @@
     <p>Acesso exclusivo do proprietário.</p>
     <form id="login-form" novalidate>
       <label for="password">Senha</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <input id="password" name="password" type="password" autocomplete="current-password" aria-describedby="login-error" required>
+      <p id="login-error" role="alert"></p>
       <button id="login-button" type="submit" class="primary">Entrar no acervo</button>
     </form>
-    <p id="login-error" role="alert"></p>
     <p id="login-status" role="status"></p>
   </section>
   <div id="archive" hidden>
@@ -27,9 +27,12 @@
     </header>
     <section class="status-panel" aria-label="Estado e cobertura">
       <p id="connection" role="status"></p>
-      <dl><dt>Última ingestão</dt><dd>Nenhuma ingestão confirmada ainda.</dd><dt>Intervalo observado — America/Sao_Paulo</dt><dd>Intervalo observado ainda desconhecido.</dd></dl>
+      <p id="status-loading" role="status"></p>
+      <dl id="coverage"></dl>
       <p class="meta">Cobertura observada; este intervalo não garante histórico integral da conta.</p>
-      <p>Pareamento ainda indisponível. A preparação da cópia recuperável precisa ser concluída no host.</p>
+      <ul id="coverage-batches"></ul>
+      <p id="media-status"></p>
+      <div id="pairing" hidden><p id="qr-status" role="status"></p><p id="qr-instruction" hidden>No WhatsApp do celular, abra Dispositivos conectados e leia este QR.</p></div>
     </section>
     <p id="archive-error" role="alert"></p>
     <button id="retry" hidden>Tentar carregar novamente</button>
@@ -45,6 +48,7 @@
         <a id="back" href="/" hidden>Voltar às conversas</a>
         <h2 id="message-title" tabindex="-1">Mensagens arquivadas</h2>
         <p class="meta">Datas em America/Sao_Paulo</p>
+        <button id="refresh-conversation" hidden>Há novas mensagens arquivadas. Atualizar conversa</button>
         <p id="reader-status" role="status">Abra uma conversa da lista para ler as mensagens arquivadas.</p>
         <ol id="messages"></ol>
         <button id="more-messages" hidden>Carregar mensagens anteriores</button>
