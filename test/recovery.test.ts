@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createService } from '../src/main.js';
 import { startMediaWorker } from '../src/media.js';
+import { createAuthState } from '../src/whatsapp.js';
 const bytes = Buffer.from('original persistido');
 const hash = createHash('sha256').update(bytes).digest();
 function media(id: string, node: Record<string, unknown> = {}) { return { key: { remoteJid: '1@s.whatsapp.net', id, fromMe: false }, messageTimestamp: 1700000000, message: { documentMessage: { url: 'https://mmg.whatsapp.net/file', mediaKey: Buffer.alloc(32), fileLength: bytes.length, fileSha256: hash, ...node } } }; }
@@ -89,4 +90,38 @@ test('original ausente e espaço desconhecido esgotado ficam explícitos sem apa
   f.service.archive.db.prepare("UPDATE media_jobs SET attempts=5,state='unavailable' WHERE attachment_id=?").run(id);
   worker = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), diskSpace: () => ({ free: 256n * 1024n * 1024n + 2n, total: 1n << 30n }), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   assert.equal(f.service.archive.getCoverage().uniqueMessages, 2); assert.equal(f.service.archive.getAttachment(idOf(f.service, unknown))!.attempts, 1); assert.notEqual(f.service.archive.getAttachment(idOf(f.service, unknown))!.state, 'available'); assert.equal(worker.snapshot().paused, true);
+});
+
+const backupModulePath = '../src/backup.js';
+test('gate exige restore autenticado do mesmo perfil e restauração nunca habilita coletor', async t => {
+  const m = await import(backupModulePath); assert.ok(m.verifyBackup && m.assertCollectorReady, 'gate precisa de prova efetiva de restore');
+  const base = mkdtempSync(join(tmpdir(), 'zap-gate-')), source = join(base, 'source'), snapshot = join(base, 'snapshot'); t.after(() => rmSync(base, { recursive: true }));
+  let s = createService({ dataDir: source }); createAuthState(s.authDb, { newProfile: true });
+  assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+  await m.createSnapshot({ dataDir: source, destination: snapshot });
+  s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+  await m.verifyBackup({ dataDir: source, snapshotDir: snapshot, destination: join(base, 'checked') });
+  s = createService({ dataDir: source }); assert.doesNotThrow(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+  const receipt = readFileSync(join(source, 'backup-receipt.json'));
+  const restored = createService({ dataDir: join(base, 'checked') });
+  try { assert.throws(() => m.assertCollectorReady(join(base, 'checked'), restored.authDb), /restaurad|offline/); assert.equal(existsSync(join(base, 'checked', 'backup-receipt.json')), false); } finally { await restored.close(); }
+  const other = createService({ dataDir: join(base, 'other') }); createAuthState(other.authDb, { newProfile: true }); writeFileSync(join(base, 'other', 'backup-receipt.json'), receipt, { mode: 0o600 });
+  try { assert.throws(() => m.assertCollectorReady(join(base, 'other'), other.authDb)); } finally { await other.close(); }
+  const altered = JSON.parse(receipt.toString()); altered.verifiedAt = new Date(0).toISOString(); writeFileSync(join(source, 'backup-receipt.json'), JSON.stringify(altered));
+  s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+  writeFileSync(join(source, 'backup-receipt.json'), receipt); writeFileSync(join(snapshot, 'auth.sqlite'), 'tampered');
+  s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+});
+
+test('interrupção de backup ou verify antes do recibo não abre gate nem altera snapshot anterior', async t => {
+  const m = await import(backupModulePath); assert.ok(m.verifyBackup, 'verify deve emitir prova somente após conclusão');
+  for (const operation of ['backup', 'verify']) {
+    const base = mkdtempSync(join(tmpdir(), 'zap-copy-kill-')), dataDir = join(base, 'source'), snapshot = join(base, 'snapshot'); t.after(() => rmSync(base, { recursive: true }));
+    const s = createService({ dataDir }); createAuthState(s.authDb, { newProfile: true }); await s.close(); await m.createSnapshot({ dataDir, destination: snapshot }); const prior = readFileSync(join(snapshot, 'manifest.json'));
+    const source = `import {createSnapshot,verifyBackup} from './dist/src/backup.js'; const wait=async point=>{if(point==='verified'){console.log('ready');await new Promise(()=>{});}}; if(process.env.OP==='backup')await createSnapshot({dataDir:process.env.ZAP_DATA_DIR,destination:process.env.NEW_DIR,fault:wait});else await verifyBackup({dataDir:process.env.ZAP_DATA_DIR,snapshotDir:process.env.SNAPSHOT,destination:process.env.NEW_DIR,fault:wait});`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', source], { env: { ...process.env, OP: operation, ZAP_DATA_DIR: dataDir, SNAPSHOT: snapshot, NEW_DIR: join(base, 'new') }, stdio: ['ignore', 'pipe', 'pipe'] }); t.after(() => child.kill('SIGKILL'));
+    await new Promise<void>((accept, reject) => { const timeout = setTimeout(() => reject(Error('timeout')), 5000); child.stdout.on('data', b => { if (String(b).includes('ready')) { clearTimeout(timeout); accept(); } }); child.once('exit', c => { clearTimeout(timeout); reject(Error('unexpected exit ' + c)); }); });
+    child.kill('SIGKILL'); await once(child, 'exit'); assert.deepEqual(readFileSync(join(snapshot, 'manifest.json')), prior); assert.equal(existsSync(join(dataDir, 'backup-receipt.json')), false);
+    const reopened = createService({ dataDir }); assert.throws(() => m.assertCollectorReady(dataDir, reopened.authDb)); await reopened.close();
+  }
 });
