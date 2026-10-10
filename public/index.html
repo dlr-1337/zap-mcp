@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zap MCP — arquivo privado</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <section id="login-panel" class="login-panel" aria-labelledby="login-title">
+    <h1 id="login-title">Zap MCP — arquivo privado</h1>
+    <p>Acesso exclusivo do proprietário.</p>
+    <form id="login-form" novalidate>
+      <label for="password">Senha</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button id="login-button" type="submit" class="primary">Entrar no acervo</button>
+    </form>
+    <p id="login-error" role="alert"></p>
+    <p id="login-status" role="status"></p>
+  </section>
+  <div id="archive" hidden>
+    <a class="skip" href="#message-title">Ir para as mensagens</a>
+    <header>
+      <div><h1>Zap MCP</h1><p>Arquivo privado</p></div>
+      <div><button id="logout-button">Sair do site</button><p class="meta">Sair do site mantém o coletor e o acervo.</p></div>
+    </header>
+    <section class="status-panel" aria-label="Estado e cobertura">
+      <p id="connection" role="status"></p>
+      <dl><dt>Última ingestão</dt><dd>Nenhuma ingestão confirmada ainda.</dd><dt>Intervalo observado — America/Sao_Paulo</dt><dd>Intervalo observado ainda desconhecido.</dd></dl>
+      <p class="meta">Cobertura observada; este intervalo não garante histórico integral da conta.</p>
+      <p>Pareamento ainda indisponível. A preparação da cópia recuperável precisa ser concluída no host.</p>
+    </section>
+    <p id="archive-error" role="alert"></p>
+    <button id="retry" hidden>Tentar carregar novamente</button>
+    <main class="workspace">
+      <nav id="conversation-panel" aria-label="Conversas arquivadas">
+        <h2>Conversas arquivadas</h2>
+        <p id="list-status" role="status"></p>
+        <div id="empty-list" hidden><h2>Nenhuma conversa no acervo</h2><p>As conversas aparecerão quando mensagens forem recebidas e arquivadas. Confira o estado da conexão.</p></div>
+        <ul id="conversations"></ul>
+        <button id="more-conversations" hidden>Carregar conversas seguintes</button>
+      </nav>
+      <section id="reader" aria-labelledby="message-title">
+        <a id="back" href="/" hidden>Voltar às conversas</a>
+        <h2 id="message-title" tabindex="-1">Mensagens arquivadas</h2>
+        <p class="meta">Datas em America/Sao_Paulo</p>
+        <p id="reader-status" role="status">Abra uma conversa da lista para ler as mensagens arquivadas.</p>
+        <ol id="messages"></ol>
+        <button id="more-messages" hidden>Carregar mensagens anteriores</button>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

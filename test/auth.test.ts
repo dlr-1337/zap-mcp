@@ -56,13 +56,13 @@ test('autentica e reabre mensagem persistida', async () => {
     assert.equal((await fetch(service.base + '/api/conversations')).status, 401, 'leitor anônimo deve ser recusado');
     await service.setPassword(password);
     const message = { reference: 'm-tracer', conversationId: 'c-tracer', conversationName: 'Conversa sintética', text: 'Orçamento sintético <script>alert(1)</script>', originalTimestamp: '2026-10-09T23:59:58.000Z' };
-    service.writeMessage(message);
+    const conversationId = service.writeMessage(message);
     const auth = await login(service.base);
     assert.equal(auth.response.status, 200);
     assert.notEqual(auth.cookie, auth.oldCookie);
     assert.match(auth.response.headers.get('set-cookie')!, /HttpOnly/);
     assert.match(auth.response.headers.get('set-cookie')!, /SameSite=Strict/);
-    const read = await fetch(service.base + '/api/conversations/c-tracer/messages', { headers: { Cookie: auth.cookie } });
+    const read = await fetch(service.base + `/api/conversations/${conversationId}/messages`, { headers: { Cookie: auth.cookie } });
     assert.equal(read.status, 200);
     const before = await read.json();
     assert.equal(before.messages[0].reference, message.reference);
@@ -70,7 +70,7 @@ test('autentica e reabre mensagem persistida', async () => {
     assert.equal(before.messages[0].originalTimestamp, message.originalTimestamp);
     await service.stop();
     service = await start(dir);
-    const after = await fetch(service.base + '/api/conversations/c-tracer/messages', { headers: { Cookie: auth.cookie } });
+    const after = await fetch(service.base + `/api/conversations/${conversationId}/messages`, { headers: { Cookie: auth.cookie } });
     assert.equal(after.status, 200);
     assert.deepEqual(await after.json(), before);
     assert.equal(statSync(dir).mode & 0o777, 0o700);
@@ -190,5 +190,53 @@ test('owner-set exige serviço exclusivo e stdin; Host externo é recusado', asy
     const set = spawnSync(process.execPath, ['dist/src/main.js', 'owner-set'], { env: { ...process.env, ZAP_DATA_DIR: dir }, input: 'sintética-cli\n', encoding: 'utf8' });
     assert.equal(set.status, 0); assert.equal(set.stdout, ''); assert.equal(set.stderr, '');
     service = await start(dir); assert.equal((await login(service.base, 'sintética-cli')).response.status, 200);
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('UI HTTP vazia, texto hostil e janelas com cursor estável sem coletor', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-pages-')); const service = await start(dir);
+  try {
+    await service.setPassword(password);
+    const publicPage = await fetch(service.base + '/');
+    assert.equal(publicPage.status, 200); assert.match(publicPage.headers.get('content-security-policy')!, /script-src 'self'/);
+    assert.match(await publicPage.text(), /<html lang="pt-BR">/);
+    for (const path of ['/app.js', '/style.css']) assert.equal((await fetch(service.base + path)).status, 200);
+    for (const path of ['/src/main.ts', '/package.json', '/archive.sqlite', '/public/index.html', '/service.lock/pid']) assert.equal((await fetch(service.base + path)).status, 404);
+    for (const path of ['/api/status', '/api/conversations', '/api/conversations/arbitrary/messages']) assert.equal((await fetch(service.base + path)).status, 401);
+    const auth = await login(service.base); const headers = { Cookie: auth.cookie };
+    const empty = await (await fetch(service.base + '/api/conversations', { headers })).json();
+    assert.deepEqual(empty, { conversations: [], nextCursor: null });
+    const status = await (await fetch(service.base + '/api/status', { headers })).json();
+    assert.equal(status.connection, 'disconnected'); assert.equal(status.collectorEnabled, false); assert.equal(status.pairingAvailable, false);
+    const hostile = '<img src=x onerror=alert(1)>\n' + 'muito-longo-sem-espaço'.repeat(100);
+    let id = '';
+    for (let n = 0; n < 205; n++) id = service.writeMessage({ reference: `m-${String(n).padStart(3, '0')}`, conversationId: 'source-private', conversationName: hostile, text: hostile, originalTimestamp: '2026-10-10T00:00:00.000Z' });
+    assert.match(id, /^[0-9a-f-]{36}$/);
+    for (let n = 0; n < 55; n++) service.writeMessage({ reference: `extra-${n}`, conversationId: `source-${n}`, conversationName: 'Homônimo', text: 'texto', originalTimestamp: '2026-10-10T00:00:00.000Z' });
+    let cursor: string | null = null; const ids: string[] = [];
+    do {
+      const data = await (await fetch(service.base + '/api/conversations' + (cursor ? '?cursor=' + cursor : ''), { headers })).json();
+      assert.ok(data.conversations.length <= 50);
+      ids.push(...data.conversations.map((c: { id: string }) => c.id)); cursor = data.nextCursor;
+      assert.ok(!JSON.stringify(data).includes('source-private'));
+    } while (cursor);
+    assert.equal(ids.length, 56); assert.equal(new Set(ids).size, 56);
+    const refs: string[] = []; let firstCursor = '';
+    do {
+      const response = await fetch(service.base + `/api/conversations/${id}/messages` + (cursor ? '?cursor=' + cursor : ''), { headers });
+      assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+      const data = await response.json(); assert.ok(data.messages.length <= 100); assert.equal(data.messages[0].text, hostile);
+      assert.deepEqual(data.messages.map((m: { reference: string }) => m.reference), data.messages.map((m: { reference: string }) => m.reference).sort());
+      refs.push(...data.messages.map((m: { reference: string }) => m.reference)); cursor = data.nextCursor; firstCursor ||= cursor ?? '';
+    } while (cursor);
+    assert.equal(refs.length, 205); assert.equal(new Set(refs).size, 205);
+    for (const bad of ['bad', firstCursor + 'x', ['x', 'y']]) {
+      const suffix = Array.isArray(bad) ? '?cursor=x&cursor=y' : '?cursor=' + encodeURIComponent(bad);
+      assert.equal((await fetch(service.base + `/api/conversations/${id}/messages` + suffix, { headers })).status, 400);
+    }
+    assert.equal((await fetch(service.base + '/api/conversations?cursor=' + firstCursor, { headers })).status, 400);
+    const other = ids.find(value => value !== id)!;
+    assert.equal((await fetch(service.base + `/api/conversations/${other}/messages?cursor=` + firstCursor, { headers })).status, 400);
+    assert.equal((await fetch(service.base + '/api/conversations/%27%20OR%201=1/messages', { headers })).status, 404);
   } finally { await service.stop(); rmSync(dir, { recursive: true }); }
 });

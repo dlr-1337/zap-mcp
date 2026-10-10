@@ -1,0 +1,44 @@
+:root { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17212b; background: #f5f6f7; font-size: 100%; line-height: 1.5; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px; }
+[hidden] { display: none !important; }
+h1 { font-size: 1.75rem; line-height: 1.2; font-weight: 600; margin: 0 0 16px; }
+h2 { font-size: 1.25rem; line-height: 1.2; font-weight: 600; margin: 0 0 16px; }
+p { margin: 0 0 16px; }
+button, input, a { font: inherit; }
+button, input { min-height: 48px; border: 1px solid #66717f; border-radius: 4px; padding: 8px 16px; background: #fff; color: #17212b; max-width: 100%; }
+button { font-weight: 600; cursor: pointer; }
+button:disabled { cursor: wait; }
+button.primary { background: #155e75; color: #fff; border-color: #155e75; }
+label { display: block; margin-bottom: 4px; font-size: .875rem; font-weight: 600; }
+:focus-visible, h2:focus { outline: 2px solid #155e75; outline-offset: 2px; }
+a { color: #17212b; overflow-wrap: anywhere; }
+.login-panel { max-width: 400px; margin: 64px auto 0; padding: 24px; background: #fff; border: 1px solid #d7dce1; }
+.login-panel input, .login-panel button { width: 100%; margin-bottom: 16px; }
+#archive { max-width: 1280px; margin: 0 auto; }
+header { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; }
+.status-panel { padding: 24px; margin-bottom: 32px; background: #fff; border: 1px solid #d7dce1; }
+dl { margin: 0 0 16px; } dt { font-size: .875rem; font-weight: 600; } dd { margin: 0 0 8px; }
+.workspace { display: grid; grid-template-columns: 288px minmax(0, 1fr); gap: 32px; }
+nav, #reader { min-width: 0; padding: 24px; background: #fff; border: 1px solid #d7dce1; overflow-wrap: anywhere; }
+ul, ol { list-style: none; padding: 0; margin: 0; }
+nav a, #back { display: block; min-height: 48px; padding: 8px 16px; border: 1px solid #66717f; margin-bottom: 8px; border-radius: 4px; text-decoration: none; }
+nav a[aria-current] { border-left: 4px solid #155e75; }
+nav a span { display: block; }
+.meta { font-size: .875rem; color: #4b5563; }
+article { padding: 16px 0; border-bottom: 1px solid #d7dce1; }
+article p { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80ch; }
+article header { display: block; margin-bottom: 8px; }
+details { font-size: .875rem; margin-bottom: 8px; } summary { cursor: pointer; padding: 8px 0; }
+.skip { position: absolute; left: 16px; top: 16px; padding: 8px 16px; background: #fff; transform: translateY(-200%); }
+.skip:focus { transform: none; }
+@media (max-width: 767px) {
+  body { padding: 16px; }
+  .login-panel { margin-top: 32px; padding: 24px; }
+  .workspace { display: block; }
+  #reader { display: none; }
+  .reading #reader { display: block; }
+  .reading #conversation-panel { display: none; }
+  .status-panel { padding: 16px; margin-bottom: 24px; }
+  nav, #reader { padding: 16px; }
+}
