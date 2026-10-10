@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Arquivo privado com mensagens e mídias reais
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-10-10T22:03:40.856Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-10-10T22:25:51.691Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 1 execution started
-state_head: 4021ac5fcb76bd6b9de14ae9c572420447dee60d
+state_head: a20c89e75e9269216800b3031c902d1709d5ae13
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 ## Current Position
 
 Phase: 1 (Arquivo privado com mensagens e mídias reais) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-10-10 — Phase 1 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 8min | 2 tasks | 5 files |
 | Phase 01 P04 | 14min | 2 tasks | 7 files |
 | Phase 01 P05 | 12min | 2 tasks | 7 files |
+| Phase 01 P06 | 15min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-03 usa ownership Linux boot/PID/starttime, auth transacional dez categorias e isolamento de credenciais por geração;34 testes sintéticos passam e coleta real permanece bloqueada até snapshot/restore01-06.
 - [Phase 01]: Plano01-04 preserva originais por stream com hash e publicação exclusiva; fila2/5/120s, reserva max(256MiB,5%), recoverySIGKILL/ENOSPC conferidos por49 testes sintéticos; conta real continua pendente.
 - [Phase 01]: Plano01-05 mantém UI nativa50/100 e QR efêmero; respostas tardias e páginas restauradas exigem sessão atual.52 testes e QA browser320/768/1280 sintéticos; conta real continua pendente.
+- [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
 
 ### Pending Todos
 
@@ -103,6 +105,6 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-10T22:03:40.819Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-10-10T22:25:51.652Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
