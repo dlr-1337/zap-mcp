@@ -5,9 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import { spawnSync } from 'node:child_process';
+import { get } from 'node:http';
 import Database from 'better-sqlite3';
 import QRCode from 'qrcode';
 import { createService } from '../src/main.js';
+import { SQLiteStore } from '../src/auth.js';
 
 const password = 'senha sintética 🧪 com espaço ';
 async function start(dataDir: string) {
@@ -149,5 +152,43 @@ test('TTL idle/absoluto, Origin e CSRF são impostos pelo servidor', async () =>
     const data = JSON.parse(row.data); data.authenticatedAt = Date.now() - 8 * 60 * 60_000;
     service.authDb.prepare('UPDATE web_sessions SET data = ? WHERE id = ?').run(JSON.stringify(data), row.id);
     assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: absolute.cookie } })).status, 401);
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('revogação resiste a save tardio e reset durante login; logout falho não anuncia sucesso', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-races-')); const service = await start(dir);
+  try {
+    await service.setPassword(password);
+    const auth = await login(service.base); const c = await form(service.base, auth.cookie);
+    const row = service.authDb.prepare("SELECT id, data FROM web_sessions WHERE json_extract(data, '$.owner') = 1").get() as { id: string; data: string };
+    service.authDb.exec("CREATE TRIGGER fail_logout BEFORE DELETE ON web_sessions BEGIN SELECT RAISE(ABORT, 'synthetic fault'); END");
+    const logout = () => fetch(service.base + '/logout', { method: 'POST', headers: { Cookie: auth.cookie, Origin: service.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ csrfToken: c.token }) });
+    assert.equal((await logout()).status, 500);
+    service.authDb.exec('DROP TRIGGER fail_logout');
+    assert.equal((await logout()).status, 200);
+    const store = new SQLiteStore(service.authDb);
+    await new Promise<void>((ok, fail) => store.set(row.id, JSON.parse(row.data), error => error ? fail(error) : ok()));
+    assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: auth.cookie } })).status, 401);
+    const challenge = await form(service.base);
+    const reset = service.setPassword('nova senha');
+    const request = fetch(service.base + '/login', { method: 'POST', headers: { Cookie: challenge.cookie, Origin: service.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password, csrfToken: challenge.token }) });
+    await reset; const late = await request;
+    if (late.status === 200) assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: late.headers.get('set-cookie')!.split(';')[0] } })).status, 401);
+    else assert.equal(late.status, 401);
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('owner-set exige serviço exclusivo e stdin; Host externo é recusado', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-owner-cli-')); let service = await start(dir);
+  try {
+    assert.throws(() => createService({ dataDir: dir }), /ativo/);
+    const busy = spawnSync(process.execPath, ['dist/src/main.js', 'owner-set'], { env: { ...process.env, ZAP_DATA_DIR: dir }, input: 'sintética-cli\n', encoding: 'utf8' });
+    assert.notEqual(busy.status, 0); assert.ok(!busy.stderr.includes('sintética-cli'));
+    const externalHost = await new Promise<number | undefined>((ok, fail) => get(service.base + '/api/session', { headers: { Host: 'evil.example' } }, response => { response.resume(); ok(response.statusCode); }).on('error', fail));
+    assert.equal(externalHost, 403);
+    await service.stop();
+    const set = spawnSync(process.execPath, ['dist/src/main.js', 'owner-set'], { env: { ...process.env, ZAP_DATA_DIR: dir }, input: 'sintética-cli\n', encoding: 'utf8' });
+    assert.equal(set.status, 0); assert.equal(set.stdout, ''); assert.equal(set.stderr, '');
+    service = await start(dir); assert.equal((await login(service.base, 'sintética-cli')).response.status, 200);
   } finally { await service.stop(); rmSync(dir, { recursive: true }); }
 });
