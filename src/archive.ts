@@ -75,7 +75,7 @@ function projection(input: unknown, blocked: boolean) {
     expirationSeconds: typeof context.expiration === 'number' && Number.isSafeInteger(context.expiration) && context.expiration >= 0 ? context.expiration : null
   };
 }
-type Revision = { id: number; kind: string; source_time: string | null; observed_at: string; evidence: string; payload: Buffer | null; restricted: number };
+type Revision = { id: number; fingerprint: string; kind: string; source_time: string | null; observed_at: string; evidence: string; payload: Buffer | null; restricted: number };
 type MessageRow = { reference: string; conversation_id: string; text: string | null; original_timestamp: string | null; logical_key: string | null; author: string | null; from_me: number | null; restricted: number; order_uncertain: number; revoked: number; evidence: string | null };
 
 export function openArchive(dataDir: string) {
@@ -229,9 +229,19 @@ export function openArchive(dataDir: string) {
     const blocked = key.isViewOnce === true || restricted(source.message);
     const evidence = projection(source.message, blocked);
     const sourceTime = kind === 'original' ? originalTime : timestamp(source.revisionTimestamp, true) ?? timestamp(source.messageTimestamp);
-    const safeSource = blocked ? { key, messageTimestamp: source.messageTimestamp } : permitted(source);
+    const safeSource = blocked ? { key, messageTimestamp: source.messageTimestamp } : permitted(kind === 'edit' ? { ...source, message: content(source.message) } : source);
     const payload = blocked || kind === 'revoke' ? null : serialize(safeSource);
-    const fingerprint = createHash('sha256').update(serialize([kind, sourceTime, evidence, blocked ? null : permitted(source.message)])).digest('hex');
+    // rc14 delivers each edit twice; its update truncates the protocol's milliseconds.
+    const fingerprintAt = (time: string | null) => createHash('sha256').update(serialize([kind, time, evidence, blocked ? null : permitted(kind === 'edit' ? content(source.message) : source.message)])).digest('hex');
+    const fingerprint = fingerprintAt(sourceTime), preciseTime = timestamp(source.revisionTimestamp, true);
+    if (kind === 'edit' && sourceTime !== null) {
+      const equivalent = (db.prepare("SELECT * FROM revisions WHERE reference=? AND kind='edit' AND substr(source_time,1,19)=?").all(reference, sourceTime.slice(0, 19)) as Revision[]).find(r =>
+        r.fingerprint === fingerprintAt(r.source_time) && (r.source_time === sourceTime || preciseTime === null || timestamp(r.payload ? obj(deserialize(r.payload)).revisionTimestamp : null, true) === null));
+      if (equivalent) {
+        if (preciseTime !== null) db.prepare('UPDATE revisions SET fingerprint=?,source_time=?,payload=? WHERE id=?').run(fingerprint, sourceTime, payload, equivalent.id);
+        project(reference); return reference;
+      }
+    }
     const inserted = db.prepare('INSERT OR IGNORE INTO revisions(reference,fingerprint,kind,source_time,observed_at,evidence,payload,restricted) VALUES(?,?,?,?,?,?,?,?)').run(reference, fingerprint, kind, sourceTime, now(), JSON.stringify(evidence), payload, Number(blocked));
     if (inserted.changes && !blocked && kind !== 'revoke') {
       const m = content(source.message), type = mediaTypes.find(k => m[k] != null);
