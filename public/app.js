@@ -4,12 +4,11 @@ const noServer = 'Sem acesso ao servidor. O conteúdo exibido pode estar desatua
 const date = value => value ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value)).replace(',', '') : unknown;
 let csrfToken, listCursor, messageCursor, selected, listPosition = 0, reading = false, authenticated = false;
 let readVersion = 0, navigationVersion = 0, statusVersion = 0, qrTimer, lastReference, attemptsLimit;
-const downloadUrls = new Set();
 function hideQr() { clearTimeout(qrTimer); $('qr')?.remove(); $('qr-instruction').hidden = true; }
 function signedOut(message = '') {
   ++readVersion; ++navigationVersion; ++statusVersion;
   authenticated = reading = false; selected = listCursor = messageCursor = csrfToken = lastReference = attemptsLimit = undefined;
-  hideQr(); for (const url of downloadUrls) URL.revokeObjectURL(url); downloadUrls.clear();
+  hideQr();
   $('archive').hidden = true; $('archive').classList.remove('reading'); $('login-panel').hidden = false;
   for (const id of ['conversations', 'messages', 'coverage', 'coverage-batches']) $(id).replaceChildren();
   for (const id of ['connection', 'qr-status', 'media-status', 'archive-error', 'list-status', 'status-loading']) $(id).textContent = '';
@@ -66,11 +65,10 @@ function attachmentBlock(article, attachment) {
     event.preventDefault(); if (link.getAttribute('aria-busy') === 'true') return;
     const version = readVersion; link.setAttribute('aria-busy', 'true'); status.textContent = 'Carregando original…';
     try {
-      const response = await request(link.getAttribute('href')); if (!response.ok) throw Error('download');
-      const blob = await response.blob(); if (version !== readVersion || !authenticated) return;
-      const url = URL.createObjectURL(blob); downloadUrls.add(url);
-      const save = document.createElement('a'); save.href = url; save.download = attachment.name ?? 'original'; document.body.append(save); save.click(); save.remove();
-      setTimeout(() => { URL.revokeObjectURL(url); downloadUrls.delete(url); }, 60_000); status.textContent = '';
+      const response = await request(link.getAttribute('href'), { method: 'HEAD' }); if (!response.ok) throw Error('download');
+      if (version !== readVersion || !authenticated) return;
+      const save = document.createElement('a'); save.href = link.href; save.download = ''; document.body.append(save); save.click(); save.remove();
+      status.textContent = 'Download solicitado ao navegador. Confira a conclusão nos downloads.';
     } catch (error) { if (version === readVersion && !['expired', 'stale'].includes(error.message)) { status.textContent = 'Não foi possível baixar o original. Confira o estado do anexo e tente novamente se ele estiver disponível.'; if (error instanceof TypeError) failure(error); } }
     finally { link.removeAttribute('aria-busy'); }
   });
