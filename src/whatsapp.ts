@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { Archive } from './archive.js';
 import QRCode from 'qrcode';
 import { mediaDispatcher, type MediaJob } from './media.js';
+import { assertCollectorReady } from './backup.js';
 
 function processStart(pid: number) {
   const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
@@ -101,8 +102,7 @@ const silent: SocketConfig['logger'] = { level: 'silent', child: () => silent, t
 export function createCollector({ authDb, archive, lock, onStatus = () => {}, socketFactory, newProfile = false, clock = realClock }: { authDb: Database.Database; archive: Archive; lock: ServiceLock; onStatus?: () => void; socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock }) {
   lock.assert();
   if (dirname(resolve(authDb.name)) !== lock.dir || dirname(resolve(archive.db.name)) !== lock.dir) throw Error('Bancos fora da trava exclusiva');
-  // Plan 01-06 supplies verified snapshot/restore validation before any live socket.
-  if (!socketFactory) throw Error('Coleta real bloqueada: cópia privada e restauração conferidas são obrigatórias');
+  if (!socketFactory) { assertCollectorReady(lock.dir, authDb); socketFactory = makeWASocket; }
   lock.claimCollector();
   let socket: Socket | undefined, generation = 0, stopped = false, state: CollectorState = 'connecting', diagnostic: string | null = null;
   let downloads = new AbortController();

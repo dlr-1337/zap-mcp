@@ -61,3 +61,14 @@ ZAP_DATA_DIR=/caminho/privado/restore-001 mise exec node@24.21.0 -- node dist/sr
 Snapshot offline inclui bancos por API de backup SQLite (inclusive WAL), originais disponíveis finalizados e seus manifests. Contagens de todas tabelas, schema, FK/integridade e hashes são conferidos antes da publicação atômica. Temporários e arquivos desconhecidos continuam preservados na fonte; uma cópia não afirma que mídia pendente foi recuperada. Snapshots são imutáveis: cada atualização usa novo destino, preservando cópia anterior mesmo em corrupção, interrupção ou falta de espaço. Dir0700/arquivo0600; snapshot contém sessão e conteúdo privado, portanto nunca deve ir ao Git, logs ou pacote público.
 
 Restore exige destino inexistente e inicia somente consulta offline. Não inicia segundo coletor. Restaurar bytes da sessão não prova sua validade remota. A integração não oficial pode entregar apenas parte do histórico e mídias; ausência significa “não encontrado no acervo”.
+
+Para conferir a cópia e gravar o recibo obrigatório no perfil fonte, mantenha a fonte parada e use outro destino novo:
+
+```sh
+mise exec node@24.21.0 -- node dist/src/main.js verify-backup /caminho/privado/copia-001 /caminho/privado/verificacao-001
+mise exec node@24.21.0 -- node dist/src/main.js preflight
+```
+
+`verify-backup` restaura sem coletor, confere SQL/schema/contagens/hash, testa login, percorre mensagens e baixa originais pelo HTTP autenticado em loopback. Para exercitar login troca somente a senha da cópia de verificação por uma senha efêmera; essa cópia permanece para inspeção privada, mas para consulta pessoal use um `restore` separado com a senha original. Só após sucesso grava recibo privado autenticado, ligado à identidade do perfil fonte, ao seu diretório e ao hash do manifesto. `preflight` é somente leitura: confere runtime, permissões, reserva, ausência de trava e recibo/snapshot íntegro, sem imprimir caminhos nem segredos. Falha tem exit não zero. Trava órfã exige retomada offline normal (`serve` e parada graciosa) para recuperação segura antes de preflight.
+
+O piloto do plano01-07 pode iniciar `mise exec node@24.21.0 -- node dist/src/main.js serve --collect` apenas depois do preflight aprovado. O QR aparece somente na tela autenticada e precisa ser lido no celular. Não há flag para dispensar a prova; cópia de outro perfil, recibo adulterado, snapshot removido/corrompido e diretório restaurado bloqueiam o coletor antes do socket. `serve` sem flag continua offline. Receber dados novos não invalida a prova inicial de recuperabilidade: ao acumular material, repita parada → backup em destino novo → verify-backup em destino novo → preflight → serve no perfil fonte. Não apague snapshots anteriores automaticamente. A cópia local ainda não é backup externo da VPS.

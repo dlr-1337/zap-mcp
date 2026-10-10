@@ -27,11 +27,13 @@ export async function seed(dataDir: string, count = 4) {
 }
 test('snapshot restaura WAL, sessão e quatro originais offline com proveniência', async t => {
   const m = await load(), f = setup(t), seeded = await seed(f.dataDir);
+  const sourceDb = new Database(join(f.dataDir, 'archive.sqlite')); sourceDb.exec("CREATE VIRTUAL TABLE test_fts USING fts5(text); INSERT INTO test_fts VALUES ('proveniência original')"); sourceDb.close();
   await m.createSnapshot(f); const restored = join(f.base, 'restore'); await m.restoreSnapshot({ snapshotDir: f.destination, destination: restored });
   const s = createService({ dataDir: restored });
   try {
     assert.deepEqual(s.archive.listConversations().conversations.flatMap(c => s.archive.readConversation(c.id)!.messages), seeded.messages);
     assert.equal(s.archive.getCoverage().uniqueMessages, 4);
+    assert.equal((s.archiveDb.prepare("SELECT count(*) n FROM test_fts WHERE test_fts MATCH 'original'").get() as { n: number }).n, 1);
     assert.deepEqual((await createAuthState(s.authDb).state.keys.get('session', ['synthetic'])).synthetic, Buffer.from('private key fixture'));
     for (const row of s.archiveDb.prepare("SELECT id FROM attachments WHERE state='available'").all() as { id: string }[]) assert.deepEqual(readFileSync(join(restored, 'media', row.id + '.bin')), seeded.bytes);
     assert.equal(statSync(restored).mode & 0o777, 0o700); assert.equal(statSync(join(f.destination, 'auth.sqlite')).mode & 0o777, 0o600);

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
 import { startMediaWorker, openVerifiedAttachment, reconcileMedia } from './media.js';
-import { createSnapshot, restoreSnapshot } from './backup.js';
+import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -172,9 +172,13 @@ export function createService({ dataDir }: { dataDir: string }) {
 async function cli() {
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
-  if (process.argv.includes('--collect')) throw Error('Coleta real bloqueada: cópia privada e restauração conferidas são obrigatórias');
+  const collect = process.argv.includes('--collect');
+  if (collect && (process.argv[2] !== 'serve' || process.argv.length !== 4)) throw Error('Uso: serve --collect');
   if (process.argv[2] === 'backup') { if (process.argv.length !== 4) throw Error('Uso: backup DESTINO_NOVO'); await createSnapshot({ dataDir, destination: process.argv[3] }); console.log('Snapshot privado íntegro; restauração ainda deve ser verificada'); return; }
   if (process.argv[2] === 'restore') { if (process.argv.length !== 5) throw Error('Uso: restore SNAPSHOT DESTINO_NOVO'); await restoreSnapshot({ snapshotDir: process.argv[3], destination: process.argv[4] }); console.log('Arquivo restaurado para consulta offline; coletor bloqueado'); return; }
+  if (process.argv[2] === 'verify-backup') { if (process.argv.length !== 5) throw Error('Uso: verify-backup SNAPSHOT RESTORE_NOVO'); await verifyBackup({ dataDir, snapshotDir: process.argv[3], destination: process.argv[4] }); console.log('Restore isolado conferido; recibo privado gravado no perfil fonte. Conta ainda não validada'); return; }
+  if (process.argv[2] === 'preflight') { if (process.argv.length !== 3) throw Error('Uso: preflight'); preflight(dataDir); console.log('Pronto para um único coletor; conta e cobertura ainda não validadas'); return; }
+  if (!collect && process.argv.length !== 3) throw Error('Argumentos inválidos');
   const service = createService({ dataDir });
   if (process.argv[2] === 'profile-init') {
     try { createAuthState(service.authDb, { newProfile: true }); console.log('Perfil local preparado; nenhuma conta conectada'); } finally { await service.close(); }
@@ -184,6 +188,7 @@ async function cli() {
       await service.setPassword(input.replace(/\r?\n$/, ''));
     } finally { service.close(); }
   } else if (process.argv[2] === 'serve') {
+    if (collect) { try { service.startCollector(); } catch (error) { await service.close(); throw error; } }
     const port = Number(process.env.ZAP_PORT ?? 3000);
     if (!Number.isInteger(port) || port < 1 || port > 65535) { await service.close(); throw Error('ZAP_PORT inválido'); }
     const server = service.app.listen(port, '127.0.0.1');
@@ -191,5 +196,5 @@ async function cli() {
   } else { service.close(); throw Error('Comando inválido'); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  await cli().catch(() => { console.error('Operação recusada. Confira comando, diretórios privados, integridade e espaço. Pare o serviço com SIGTERM e aguarde seu encerramento antes de backup/reset.'); process.exitCode = 1; });
+  void cli().catch(error => { console.error(error instanceof Error && error.message === 'Serviço já ativo' ? 'Serviço já ativo. Pare com SIGTERM e aguarde o encerramento antes de backup/reset.' : 'Operação recusada. Confira comando, diretórios privados, integridade e espaço. Para --collect, prepare backup e verify-backup do mesmo perfil. Pare o serviço com SIGTERM e aguarde seu encerramento antes de backup/reset.'); process.exitCode = 1; });
 }
