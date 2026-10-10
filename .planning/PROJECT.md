@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Um site privado na VPS do Otavio que arquiva o histórico de sua conta de WhatsApp e os arquivos reais que a integração conseguir acessar: áudios, imagens, vídeos e documentos. O usuário consulta e exporta esse arquivo pelo site; Codex e Claude consultam os mesmos dados por MCP, sem copiar conversas manualmente e sem manter um navegador com WhatsApp Web aberto.
+Um site privado na VPS do Otavio que arquiva o histórico de sua conta de WhatsApp e os arquivos reais que a integração conseguir acessar: áudios, imagens, vídeos e documentos. O usuário consulta e exporta esse arquivo pelo site; seu Codex consulta os mesmos dados por MCP, sem copiar conversas manualmente e sem manter um navegador com WhatsApp Web aberto.
 
 A integração funciona como dispositivo vinculado, com pareamento pelo WhatsApp do celular. A primeira versão é pessoal e somente leitura: sincronizar e armazenar dados não dá à aplicação ou às IAs permissão para enviar mensagens ou alterar conversas no WhatsApp.
 
@@ -25,7 +25,7 @@ Nenhum requisito de produto validado ainda; a pasta começou sem código e sem a
 - [ ] Consultar o arquivo por contato, palavra ou período, com resultados que abram a conversa no contexto da mensagem.
 - [ ] Abrir várias conversas em abas no site.
 - [ ] Visualizar ou baixar anexos e exportar mensagens com os arquivos disponíveis.
-- [ ] Permitir que Codex e Claude encontrem conversas, leiam trechos e recuperem arquivos por MCP autenticado e somente leitura.
+- [ ] Permitir que o Codex do usuário encontre conversas, leia trechos e recupere arquivos por MCP autenticado e somente leitura.
 - [ ] Manter o site, a sessão de WhatsApp, o banco, os arquivos e as exportações privados.
 - [ ] Operar na VPS com dados persistentes e backup recuperável.
 
@@ -38,12 +38,14 @@ Nenhum requisito de produto validado ainda; a pasta começou sem código e sem a
 - Transcrição automática, OCR, embeddings e chatbot embutido — não foram solicitados; as IAs conectadas fazem a análise do material acessível.
 - Automação comercial, disparos, CRM e pagamentos — não são necessários para guardar e consultar o histórico.
 - Importadores de outros formatos e fontes — considerar depois de validar a cobertura da sincronização real.
+- Validação no Claude e autenticação adicional exigida por outros clientes — o usuário esclareceu que quer usar o MCP no seu Codex no v1; manter o protocolo padrão para extensão posterior.
 
 ## Context
 
 - Definição fornecida pelo usuário em 2026-10-10: guardar WhatsApp e arquivos reais, consultar pelo site e dar acesso às IAs por MCP.
 - Exemplo de uso: “Leia minha conversa com o João, encontre o orçamento e me diga o que ficou combinado.”
 - O usuário esclareceu que “sem depender do WhatsApp Web” significa não depender do navegador; conexão como dispositivo vinculado é a opção desejada.
+- A descrição inicial citou Codex e Claude; ao esclarecer onde pretende usar o MCP, o usuário respondeu “no meu codex”. A validação obrigatória do v1 será no Codex do usuário.
 - O arquivo persistido deve continuar consultável quando a conexão com WhatsApp cair. A conexão é necessária para obter novos dados, não para reler o que já foi salvo.
 - A disponibilidade de mensagens antigas e mídias deve ser investigada e depois validada com a conta real; ausência de um registro no arquivo não prova que ele nunca existiu.
 - Ambiente inicial: repositório Git vazio em `/home/otavio/Documents/ChatGPT/zap-mcp 2`, sem `.planning/` anterior.
@@ -67,11 +69,16 @@ Nenhum requisito de produto validado ainda; a pasta começou sem código e sem a
 |----------|-----------|---------|
 | Integração como dispositivo vinculado, sem navegador | Confirmado pelo usuário; atende a conta pessoal sem depender da interface WhatsApp Web | Confirmado como direção; implementação pendente |
 | Arquivo próprio como fonte de consulta | Mantém o histórico já salvo consultável mesmo sem conexão ativa | Pendente de implementação |
-| MCP somente leitura para Codex e Claude | Resolve a consulta e análise sem dar capacidades de envio | Confirmado como escopo |
+| MCP somente leitura com validação no Codex do usuário | A última orientação prioriza o Codex e dispensa autenticação extra para clientes não usados no v1 | Confirmado como escopo |
 | Uma conta e um proprietário no v1 | Menor solução completa para o uso pessoal descrito | Padrão assumido; revisável |
 | Anexos binários persistidos com estado de disponibilidade | Links de mídia podem expirar e não equivalem a guardar o arquivo | Pendente de implementação |
 | Análise feita pela IA cliente | Dispensa provedor de IA e custos adicionais dentro do site | Padrão assumido; revisável |
 | Fases que entregam capacidades utilizáveis de ponta a ponta | Valida cedo a integração real e evita construir a interface sobre uma recuperação inviável | Pendente de roadmap |
+| Um serviço Node.js/TypeScript ESM, Express, SQLite FTS5 e arquivos locais | Pesquisa convergiu para a menor arquitetura que atende arquivo, site e MCP na mesma VPS | Direção técnica; build e operação não validados |
+| Baileys 7.0.0-rc14 fixado para o piloto | Integração direta sem navegador; versão pesquisada continua não oficial e candidata a lançamento | Revalidar release e correções antes da instalação; piloto obrigatório |
+| Downloads começam junto da ingestão | Uma mídia recuperável hoje pode não estar acessível ao terminar a interface | Decisão de ordem de implementação |
+| Token privado e revogável no MCP do Codex | Cliente obrigatório oferece autenticação por bearer; dispensa provedor de identidade no v1 | Testar no Codex realmente instalado |
+| Sessão WhatsApp transacional e um único coletor | Perda de chaves ou escritores concorrentes podem quebrar a conexão e a identidade do arquivo | Condição de implementação e operação |
 
 ## Evolution
 
