@@ -12,6 +12,9 @@ import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
+import { createAuthState } from '../src/whatsapp.js';
+import { createSnapshot, verifyBackup } from '../src/backup.js';
+import { deserialize } from 'node:v8';
 
 const bytes = Buffer.from('original sintético\0🧪');
 const hash = createHash('sha256').update(bytes).digest();
@@ -25,6 +28,79 @@ function fixture(t: { after(fn: () => unknown): void }) {
   return { dir, service, archive: service.archive };
 }
 async function moduleMedia() { const path = '../src/media.js'; return import(path); }
+
+test('PN/LID mantém o único original disponível, locator privado, HTTP offline e backup restaurado', async t => {
+  const base = mkdtempSync(join(tmpdir(), 'zap-media-merge-')), dataDir = join(base, 'source');
+  const service = createService({ dataDir }), archive = service.archive; let closed = false;
+  t.after(async () => { if (!closed) await service.close(); rmSync(base, { recursive: true }); });
+  createAuthState(service.authDb, { newProfile: true });
+  const pn = media('same'), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
+  archive.ingestHistory({ messages: [pn, lid] });
+  const kept = archive.readStoredMessage(pn.key)!, keptId = kept.attachments[0]!.id, availableId = archive.readStoredMessage(lid.key)!.attachments[0]!.id;
+  archive.db.prepare("UPDATE attachments SET state='unavailable' WHERE id=?").run(keptId);
+  archive.db.prepare("UPDATE media_jobs SET state='unavailable',attempts=5 WHERE attachment_id=?").run(keptId);
+  let downloads = 0; const { startMediaWorker } = await moduleMedia();
+  const worker = startMediaWorker({ archive, mediaDir: join(dataDir, 'media'), downloadOriginal: async () => { downloads++; return Readable.from([bytes]); } });
+  await worker.drain(); await worker.stop();
+  const job = archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(availableId);
+  archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid });
+  const merged = archive.readStoredMessage(pn.key)!;
+  assert.equal(merged.reference, kept.reference); assert.equal(archive.readStoredMessage(lid.key)!.reference, kept.reference);
+  assert.equal(merged.attachments[0]!.id, availableId); assert.equal(merged.attachments[0]!.state, 'available');
+  assert.equal(merged.attachments[0]!.sourceHashVerified, true); assert.equal(merged.attachments[0]!.sha256, hash.toString('hex'));
+  assert.deepEqual(archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(availableId), job);
+  const privateSource = archive.db.prepare('SELECT payload FROM revisions WHERE reference=?').get(kept.reference) as { payload: Buffer };
+  assert.equal(deserialize(privateSource.payload).key.remoteJid, lid.key.remoteJid, 'locator do original mantido para renovação privada');
+  assert.equal(merged.revisions.length, 1); assert.equal(archive.getCoverage().uniqueMessages, 1); assert.equal(downloads, 1);
+  assert.deepEqual(archive.db.pragma('foreign_key_check'), []);
+  await service.setPassword('synthetic-password');
+  const server = service.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try {
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    assert.equal((await fetch(url + '/api/attachments/' + availableId)).status, 401);
+    const challenge = await fetch(url + '/api/session'), form = await challenge.json() as { csrfToken: string };
+    const login = await fetch(url + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: url, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'synthetic-password', csrfToken: form.csrfToken }) });
+    assert.equal(login.status, 200);
+    const response = await fetch(url + '/api/attachments/' + availableId, { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
+    assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  await service.close(); closed = true;
+  const snapshotDir = join(base, 'snapshot'), destination = join(base, 'restore');
+  await createSnapshot({ dataDir, destination: snapshotDir });
+  assert.equal((await verifyBackup({ dataDir, snapshotDir, destination })).verified, true, 'restore inclui login e download HTTP offline autenticados');
+  assert.deepEqual(readFileSync(join(destination, 'media', availableId + '.bin')), bytes);
+});
+
+test('PN/LID conserva a lease em andamento e finaliza uma vez em ambas as perspectivas', async t => {
+  for (const activeJid of ['1@s.whatsapp.net', '9@lid']) {
+    const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia();
+    const pn = media('lease'), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
+    archive.ingestHistory({ messages: [pn, lid] });
+    const activeId = archive.readStoredMessage({ ...pn.key, remoteJid: activeJid })!.attachments[0]!.id;
+    const otherId = archive.readStoredMessage({ ...pn.key, remoteJid: activeJid === pn.key.remoteJid ? lid.key.remoteJid : pn.key.remoteJid })!.attachments[0]!.id;
+    let start!: () => void, release!: (stream: Readable) => void, downloads = 0;
+    const started = new Promise<void>(resolve => { start = resolve; }), blocked = new Promise<Readable>(resolve => { release = resolve; });
+    const worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async () => { downloads++; start(); return blocked; } });
+    archive.db.prepare("UPDATE media_jobs SET retry_at=? WHERE attachment_id=?").run(Date.now() + 60_000, otherId);
+    t.after(() => worker.stop()); await started;
+    const lease = archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(activeId);
+    archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid });
+    assert.deepEqual(archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(activeId), lease);
+    release(Readable.from([bytes])); await worker.drain(); await worker.stop();
+    assert.equal(archive.getAttachment(activeId)!.state, 'available'); assert.equal(downloads, 1);
+    assert.deepEqual(readFileSync(join(dir, 'media', activeId + '.bin')), bytes);
+  }
+});
+test('PN/LID conserva job pendente quando a outra origem esgotou tentativas', t => {
+  const { archive } = fixture(t), pn = media('pending'), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
+  archive.ingestHistory({ messages: [pn, lid] });
+  const failedId = archive.readStoredMessage(pn.key)!.attachments[0]!.id, pendingId = archive.readStoredMessage(lid.key)!.attachments[0]!.id;
+  archive.db.prepare("UPDATE attachments SET state='unavailable' WHERE id=?").run(failedId);
+  archive.db.prepare("UPDATE media_jobs SET state='unavailable',attempts=5 WHERE attachment_id=?").run(failedId);
+  archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid });
+  assert.equal(archive.readStoredMessage(pn.key)!.attachments[0]!.id, pendingId);
+  assert.equal(archive.getAttachment(pendingId)!.state, 'pending');
+});
 
 test('thumbnail-only nunca cria job nem satisfaz original disponível', t => {
   const { archive } = fixture(t); const message = media('thumbnail', 'imageMessage', { url: undefined, mediaKey: undefined, thumbnailDirectPath: '/thumb' });

@@ -163,7 +163,14 @@ export function openArchive(dataDir: string) {
     for (const r of db.prepare('SELECT * FROM revisions WHERE reference=?').all(drop) as Revision[]) {
       const duplicate = db.prepare('SELECT id FROM revisions WHERE reference=? AND fingerprint=(SELECT fingerprint FROM revisions WHERE id=?)').get(keep, r.id) as { id: number } | undefined;
       if (duplicate) {
-        for (const attachment of db.prepare('SELECT id FROM attachments WHERE revision_id=?').all(r.id) as { id: string }[]) { db.prepare('DELETE FROM media_jobs WHERE attachment_id=?').run(attachment.id); db.prepare('DELETE FROM attachments WHERE id=?').run(attachment.id); }
+        const attachments = db.prepare("SELECT a.id,a.revision_id FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.revision_id IN (?,?) ORDER BY CASE a.state WHEN 'available' THEN 4 WHEN 'downloading' THEN 3 WHEN 'pending' THEN 2 WHEN 'retry_wait' THEN 1 ELSE 0 END DESC,(j.id IS NOT NULL) DESC,a.rowid").all(duplicate.id, r.id) as { id: string; revision_id: number }[];
+        const winner = attachments[0];
+        // Keep the binary/manifest ID and any live lease; removing losers fences their workers.
+        for (const loser of attachments.slice(1)) { db.prepare('DELETE FROM media_jobs WHERE attachment_id=?').run(loser.id); db.prepare('DELETE FROM attachments WHERE id=?').run(loser.id); }
+        if (winner?.revision_id === r.id) {
+          db.prepare('UPDATE attachments SET reference=?,revision_id=? WHERE id=?').run(keep, duplicate.id, winner.id);
+          db.prepare('UPDATE revisions SET payload=? WHERE id=?').run(r.payload, duplicate.id);
+        }
         db.prepare('DELETE FROM revisions WHERE id=?').run(r.id);
       } else { db.prepare('UPDATE revisions SET reference=? WHERE id=?').run(keep, r.id); db.prepare('UPDATE attachments SET reference=? WHERE revision_id=?').run(keep, r.id); }
     }
