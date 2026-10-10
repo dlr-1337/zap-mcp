@@ -54,6 +54,46 @@ test('update antes do protocolo conserva precisão; dois instantes precisos não
   assert.equal(a.readStoredMessage(key).orderUncertain, true);
   assert.equal(a.readStoredMessage(key).text, null);
 });
+test('protocolos rc14 usam perspectiva do envelope em recebidas, próprias e grupos, inclusive histórico', async t => {
+  const s = fixture(t), a = s.archive;
+  const cases = [
+    { remoteJid: 'contact@s.whatsapp.net', fromMe: false },
+    { remoteJid: 'contact@s.whatsapp.net', fromMe: true },
+    { remoteJid: 'group@g.us', fromMe: false, participant: 'alice@s.whatsapp.net' },
+    { remoteJid: 'group@g.us', fromMe: true, participant: 'owner@s.whatsapp.net' }
+  ];
+  for (const [i, perspective] of cases.entries()) for (const historical of [false, true]) {
+    const target = { ...perspective, id: `${i}-${historical}` };
+    a.ingestHistory({ messages: [{ key: target, messageTimestamp: 1700000000, message: { conversation: 'antes' } }] });
+    const other = { ...target, participant: 'bob@s.whatsapp.net' };
+    if (perspective.remoteJid.endsWith('@g.us')) a.ingestHistory({ messages: [{ key: other, message: { conversation: 'outra autoria' } }] });
+    const protocolKey = { ...target, remoteJid: 'owner@s.whatsapp.net', fromMe: true, participant: 'bob@s.whatsapp.net' };
+    const envelope = (type: number) => ({ key: { ...target, id: 'envelope-' + type + target.id }, messageTimestamp: 1700000010,
+      message: { protocolMessage: { type, key: protocolKey, ...(type === 14 ? { timestampMs: 1700000010123, editedMessage: { conversation: 'depois' } } : {}) } } });
+    const before = a.getCoverage().uniqueMessages;
+    const dispatch = async (type: number) => { if (historical) a.ingestHistory({ messages: [proto.WebMessageInfo.decode(proto.WebMessageInfo.encode(envelope(type)).finish())] }); else await protocolEvents(a, envelope(type)); };
+    await dispatch(14);
+    const edited = a.readStoredMessage(target);
+    assert.equal(edited.text, 'depois'); assert.equal(edited.fromMe, perspective.fromMe);
+    assert.equal(edited.author, perspective.participant ?? (perspective.fromMe ? null : perspective.remoteJid));
+    assert.equal(edited.revisions.length, 2); assert.equal(a.getCoverage().uniqueMessages, before);
+    assert.equal(a.readStoredMessage(protocolKey), null, 'chave interna não cria mensagem fantasma');
+    await dispatch(0);
+    assert.equal(a.readStoredMessage(target).revoked, true); assert.equal(a.readStoredMessage(target).revisions.length, 3);
+    assert.equal(a.getCoverage().uniqueMessages, before);
+    if (perspective.remoteJid.endsWith('@g.us')) { assert.equal(a.readStoredMessage(other).text, 'outra autoria'); assert.equal(a.readStoredMessage(other).revoked, false); }
+  }
+});
+test('protocolo sem alvo e alteração de grupo sem participante ficam falhos sem inventar identidade', t => {
+  const s = fixture(t), a = s.archive;
+  a.ingestHistory({ messages: [
+    { key: { ...key, id: 'envelope' }, message: { protocolMessage: { type: 14, key: {}, editedMessage: { conversation: 'inválida' } } } },
+    { key: { remoteJid: 'group@g.us', id: 'envelope', fromMe: false }, message: { protocolMessage: { type: 0, key: { id: 'target', participant: 'alice@s.whatsapp.net' } } } }
+  ] });
+  a.ingestUpdates([{ key: { remoteJid: 'group@g.us', id: 'target', fromMe: false }, update: { message: null } }]);
+  assert.equal(a.getCoverage().uniqueMessages, 0);
+  assert.equal(a.getCoverage().batches.reduce((n: number, b: any) => n + b.failed, 0), 3);
+});
 test('edit antes do original e replay antigo não regridem; revoke retém histórico', t => {
   const s = fixture(t), a = s.archive;
   a?.ingestUpdates([{ key, update: { message: { conversation: 'editado 🧪' }, messageTimestamp: 1700000020 } }]);

@@ -212,10 +212,12 @@ export function openArchive(dataDir: string) {
     const raw = obj(input), protocol = obj(content(raw.message).protocolMessage);
     let source = raw;
     if (protocol.type === 0 || protocol.type === 14) {
-      source = { key: protocol.key, message: protocol.type === 0 ? null : protocol.editedMessage, revisionTimestamp: protocol.timestampMs };
+      // The inner key is sender-relative; rc14 targets the local envelope key plus this ID.
+      source = { key: { ...obj(raw.key), id: str(obj(protocol.key).id) }, message: protocol.type === 0 ? null : protocol.editedMessage, revisionTimestamp: protocol.timestampMs, messageTimestamp: protocol.type === 14 ? raw.messageTimestamp : undefined };
       kind = protocol.type === 0 ? 'revoke' : 'edit';
     }
     const key = keyOf(source.key);
+    if ((kind === 'edit' || kind === 'revoke') && (!key.id || !key.remoteJid || key.fromMe === null || key.remoteJid.endsWith('@g.us') && !key.fromMe && !key.participant)) throw Error('Identidade da alteração não recebida');
     alias(key.remoteJid, key.remoteJidAlt); alias(key.participant, key.participantAlt);
     const logical = key.id && key.remoteJid ? logicalKey(key) : randomUUID();
     let row = db.prepare('SELECT reference FROM origins WHERE origin=?').get(originKey(key)) as { reference: string } | undefined;
