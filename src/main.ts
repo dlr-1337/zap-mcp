@@ -7,8 +7,9 @@ import { join, resolve } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
-import { acquireServiceLock, createCollector, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
+import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
 import { startMediaWorker, openVerifiedAttachment, reconcileMedia } from './media.js';
+import { createSnapshot, restoreSnapshot } from './backup.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -162,24 +163,33 @@ export function createService({ dataDir }: { dataDir: string }) {
     },
     close() {
       const finish = () => { archiveDb.close(); authDb.close(); lock.release(); };
-      if (collector) return mediaWorker!.stop().then(() => collector!.stop()).then(finish);
+      if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(finish);
       finish();
     }
   };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+async function cli() {
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
   if (process.argv.includes('--collect')) throw Error('Coleta real bloqueada: cópia privada e restauração conferidas são obrigatórias');
+  if (process.argv[2] === 'backup') { if (process.argv.length !== 4) throw Error('Uso: backup DESTINO_NOVO'); await createSnapshot({ dataDir, destination: process.argv[3] }); console.log('Snapshot privado íntegro; restauração ainda deve ser verificada'); return; }
+  if (process.argv[2] === 'restore') { if (process.argv.length !== 5) throw Error('Uso: restore SNAPSHOT DESTINO_NOVO'); await restoreSnapshot({ snapshotDir: process.argv[3], destination: process.argv[4] }); console.log('Arquivo restaurado para consulta offline; coletor bloqueado'); return; }
   const service = createService({ dataDir });
-  if (process.argv[2] === 'owner-set') {
+  if (process.argv[2] === 'profile-init') {
+    try { createAuthState(service.authDb, { newProfile: true }); console.log('Perfil local preparado; nenhuma conta conectada'); } finally { await service.close(); }
+  } else if (process.argv[2] === 'owner-set') {
     try {
       let input = ''; process.stdin.setEncoding('utf8'); for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 4096) throw Error('Senha inválida'); }
       await service.setPassword(input.replace(/\r?\n$/, ''));
     } finally { service.close(); }
   } else if (process.argv[2] === 'serve') {
-    const server = service.app.listen(Number(process.env.PORT ?? 3000), '127.0.0.1');
+    const port = Number(process.env.ZAP_PORT ?? 3000);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) { await service.close(); throw Error('ZAP_PORT inválido'); }
+    const server = service.app.listen(port, '127.0.0.1');
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => server.close(() => { void service.close(); }));
   } else { service.close(); throw Error('Comando inválido'); }
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await cli().catch(() => { console.error('Operação recusada. Confira comando, diretórios privados, integridade e espaço. Pare o serviço com SIGTERM e aguarde seu encerramento antes de backup/reset.'); process.exitCode = 1; });
 }
