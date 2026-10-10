@@ -49,14 +49,14 @@ function evidence(article, message) {
     for (const revision of message.revisions) {
       addText(history, 'p', 'Conteúdo anteriormente capturado — registro histórico'); detail(history, 'Registro', revision.kind);
       detail(history, 'Observado em America/Sao_Paulo', date(revision.observedAt)); detail(history, 'Observado em UTC', revision.observedAt); detail(history, 'Instante da alteração recebido da origem', revision.sourceTimestamp);
-      addText(history, 'p', revision.restricted ? 'Visualização única — conteúdo indisponível; somente metadados recebidos.' : revision.text ?? unknown).dir = 'auto';
+      addText(history, 'p', message.restricted || revision.restricted ? 'Visualização única — conteúdo indisponível; somente metadados recebidos.' : revision.text ?? unknown).dir = 'auto';
     }
   }
 }
 function attachmentBlock(article, attachment) {
   const block = document.createElement('section'); block.className = 'attachment'; article.append(block);
   addText(block, 'h3', attachment.name ?? 'Nome original não informado'); detail(block, 'Tipo recebido', attachment.type); detail(block, 'Tamanho local em bytes', attachment.size);
-  detail(block, 'SHA-256 local', attachment.sha256); detail(block, 'Hash de origem', attachment.sourceHashVerified ? 'Conferido com o original preservado' : 'Não informado pela origem');
+  detail(block, 'SHA-256 local', attachment.sha256); detail(block, 'Hash de origem', attachment.sourceHashVerified ? 'Conferido com o original preservado' : attachment.state === 'available' ? 'Não informado pela origem' : 'Comparação ainda não confirmada');
   const reason = attachment.reason ?? unknown;
   const state = attachment.state === 'available' ? 'Disponível — arquivo finalizado e verificado.' : attachment.state === 'downloading' ? 'Pendente — download em andamento.' : attachment.state === 'pending' ? 'Pendente — o original ainda não foi preservado.' : attachment.state === 'retry_wait' ? 'Falha recuperável — ' + reason + '. Tentativas: ' + attachment.attempts + '/' + (attemptsLimit ?? unknown) + '.' : 'Indisponível — ' + reason + '. A mensagem permanece no acervo.';
   addText(block, 'p', state); if (attachment.state !== 'available') return;
@@ -176,6 +176,7 @@ async function refreshStatus() {
       const id = selected, navigation = navigationVersion, latest = await request('/api/conversations/' + encodeURIComponent(id) + '/messages?limit=1');
       if (latest.ok) { const page = await latest.json(); if (version === readVersion && ticket === statusVersion && navigation === navigationVersion && selected === id) $('refresh-conversation').hidden = page.messages.at(-1)?.reference === lastReference; }
     }
+    return version === readVersion && ticket === statusVersion;
   } catch (error) { if (version === readVersion && ticket === statusVersion) failure(error); }
   finally { if (version === readVersion && ticket === statusVersion) $('status-loading').textContent = ''; }
 }
@@ -213,7 +214,16 @@ $('retry').addEventListener('click', async () => {
 });
 window.addEventListener('popstate', async () => { if (!authenticated) return; try { if (!(await challenge()).authenticated) { signedOut(expired); return; } const id = new URL(location.href).searchParams.get('conversation'); if (id) openConversation(id); else back(); } catch (error) { failure(error); } });
 window.addEventListener('offline', () => { if (authenticated) failure(new TypeError('network')); });
-async function revalidate() { if (!authenticated) return; hideQr(); try { if (!(await challenge()).authenticated) { signedOut(expired); return; } await refreshStatus(); } catch (error) { failure(error); } }
-window.addEventListener('online', revalidate); window.addEventListener('pageshow', event => { if (event.persisted) revalidate(); }); window.addEventListener('pagehide', hideQr);
+async function revalidate() {
+  if (!authenticated) return; const version = readVersion, wasOffline = $('archive-error').textContent === noServer; hideQr();
+  try {
+    const session = await challenge(); if (version !== readVersion) return;
+    if (!session.authenticated) { signedOut(expired); return; } $('archive').hidden = false; $('login-panel').hidden = true;
+    if (await refreshStatus() && version === readVersion && wasOffline) $('archive-error').textContent = 'Acesso ao servidor restabelecido. Atualize os dados para conferir o estado atual.';
+  }
+  catch (error) { failure(error); if ($('archive').hidden && authenticated) { $('login-panel').hidden = false; $('login-error').textContent = noServer; } }
+}
+window.addEventListener('online', revalidate); window.addEventListener('pageshow', event => { if (event.persisted) revalidate(); });
+window.addEventListener('pagehide', () => { hideQr(); if (authenticated) $('archive').hidden = true; });
 setInterval(() => { if (authenticated && document.visibilityState === 'visible') refreshStatus(); }, 10_000);
 challenge().then(data => data.authenticated ? enter() : signedOut()).catch(() => { $('login-error').textContent = noServer; });

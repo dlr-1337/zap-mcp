@@ -81,9 +81,11 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });
   app.get('/api/qr', async (req, res) => {
     const pairing = await collector?.pairing();
-    if (!req.session.owner || !authDb.prepare('SELECT 1 FROM web_sessions WHERE id=?').get(req.sessionID)) { res.status(401).json({ error: 'Autenticação necessária' }); return; }
-    if (!pairing) { res.status(409).json({ error: 'QR vigente não disponível' }); return; }
-    res.json(pairing);
+    requireOwner(req, res, error => {
+      if (error) { res.status(500).json({ error: 'Solicitação não concluída' }); return; }
+      if (!pairing) { res.status(409).json({ error: 'QR vigente não disponível' }); return; }
+      res.json(pairing);
+    });
   });
   const signingKey = (authDb.prepare('SELECT value FROM web_config WHERE key = ?').get('signing-secret') as { value: string }).value;
   const encodeCursor = (parts: string[]) => {
@@ -112,7 +114,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   };
   const conversationEvidence = (conversation: { id: string; name: string | null }) => {
     const row = archiveDb.prepare('SELECT source_id FROM conversations WHERE id=?').get(conversation.id) as { source_id: string | null };
-    const identity = row.source_id;
+    const identity = row.source_id && /@(g\.us|s\.whatsapp\.net|lid)$/.test(row.source_id) ? row.source_id : null;
     return { ...conversation, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity?.endsWith('@s.whatsapp.net') || identity?.endsWith('@lid') ? 'individual' : null };
   };
   app.get('/api/conversations', (req, res) => {
@@ -138,6 +140,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   for (const [route, filename] of [['/', 'index.html'], ['/app.js', 'app.js'], ['/style.css', 'style.css']]) {
     app.get(route, (_req, res) => res.sendFile(join(publicDir, filename), { cacheControl: false, lastModified: false, etag: false }));
   }
+  app.use((_req, res) => { res.status(404).json({ error: 'Não encontrado no acervo' }); });
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => { const status = (error as { status?: number }).status; res.status(status === 413 ? 413 : status === 400 ? 400 : 500).json({ error: 'Solicitação não concluída' }); });
   return {
     app, archiveDb, archive, authDb,

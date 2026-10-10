@@ -57,7 +57,11 @@ export function createWebAuth(authDb: Database.Database) {
   let active = 0;
   const middleware = session({ name: 'zap.sid', secret: config(authDb, 'signing-secret')!, store, resave: false, saveUninitialized: false, rolling: true, cookie: { httpOnly: true, sameSite: 'strict', secure: false, maxAge: IDLE } });
   const requireOwner = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.owner || req.session.ownerGeneration !== config(authDb, 'owner-generation')) { res.status(401).json({ error: 'Autenticação necessária' }); return; } next();
+    store.get(req.sessionID, (error, current) => {
+      if (error) { next(error); return; }
+      if (!req.session.owner || !current?.owner || current.ownerGeneration !== config(authDb, 'owner-generation')) { res.status(401).json({ error: 'Autenticação necessária' }); return; }
+      next();
+    });
   };
   const csrf = (req: Request, res: Response, next: NextFunction) => {
     const origin = `http://${req.get('Host')}`;
