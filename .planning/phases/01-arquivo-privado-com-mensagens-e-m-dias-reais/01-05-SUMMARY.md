@@ -13,7 +13,7 @@ provides:
 affects: ["01-06", "01-07", phase-2, phase-3]
 tech-stack:
   added: []
-  patterns: [DOM-textContent, async-generation-fencing, SQLiteStore-revalidation, verified-original-download]
+  patterns: [DOM-textContent, async-generation-fencing, SQLiteStore-revalidation, native-attachment-download-with-HEAD]
 key-files:
   created: [test/http.test.ts, test/security.test.ts]
   modified: [src/main.ts, src/auth.ts, public/index.html, public/app.js, public/style.css, .planning/WINDOWS.md]
@@ -55,12 +55,12 @@ coverage:
     human_judgment: true
     rationale: Pareamento, cobertura conhecida e quatro originais da conta ainda não foram observados; plano01-06 prepara o gate.
 actuals:
-  tokens: 17582
+  tokens: 17523
   tasks: 2
-  commits: 4
-commits: 4
+  commits: 7
+commits: 7
 plan_head_before: ae8c910d66066dac463f4034859786ab0946d9d4
-plan_head_after: 23b9fb2a4fe038ce466e54ff2469bed3400ac7bd
+plan_head_after: 373702cf92118eb31b71707ed05de741a446cd98
 duration: 12min
 completed: 2026-10-10
 status: complete
@@ -77,8 +77,8 @@ status: complete
 - Duration: 12min
 - Tasks: 2/2
 - Arquivos de produto/teste: 7; evidências RED: 2; ledger de desvios: 1.
-- Actual tokens: caracteres/4 do diff realizado antes deste SUMMARY, incluindo evidências RED e ledger; não é contador do harness.
-- Commits medidos antes dos commits de documentação: 4.
+- Actual tokens: caracteres/4 do diff realizado dos7 arquivos de produto/teste,2 evidências RED e WINDOWS; exclui este SUMMARY/tracking para não medir recursivamente o próprio relatório. Não é contador do harness.
+- Commits medidos entre ledger inicial e plan_head_after: 7 (cinco de produto/teste e dois de documentação anteriores à correção nativa).
 
 ## Accomplishments
 
@@ -93,6 +93,10 @@ status: complete
 1. 01-05-01: `d4c169f` test — janelas/identidade/limites; `46204db` feat — leitor nativo e evidências.
 2. 01-05-02: `d426ff3` test — TTL durante resposta QR; `23b9fb2` feat — revalidação e fronteiras privadas.
 
+### Correção final — download nativo
+
+`373702c` fix — troca buffering por Blob/ObjectURL por HEAD autenticado e link same-origin nativo. HEAD verifica sessão, disponibilidade/hash e headers sem corpo; depois o navegador transfere o original por GET com novo gate no servidor. Resposta HEAD atrasada após logout/expiração não inicia GET. A UI informa solicitação ao navegador, sem afirmar conclusão; conclusão/interrupção da transferência é informada pelo gerenciador de downloads. Sem File System Access, dependência, limite artificial de tamanho ou UI extra. STATE/ROADMAP não foram avançados novamente.
+
 ## Verification
 
 - `mise exec node@24.21.0 -- npm test`: **52/52**, zero falhas, skipped ou todo; 11,137s. Log externo: `/tmp/zap05-full-suite.log`.
@@ -103,6 +107,7 @@ status: complete
 - Seis conexões simuladas, QR vigente/vencido/bloqueado e imagem real do encoder; WhatsApp offline mantém consulta, browser offline preserva só leitura renderizada/oculta QR. Retomada e pagehide/pageshow verificam sessão antes de revelar página. Expiração remove dados e retorna ao login.
 - Zero/uma/muitas conversas/mensagens, conversa sem nome, conversa sem mensagens e ID desconhecido conferidos. Unicode/RTL, texto multilinha, nomes/IDs/hashes longos sem rolagem horizontal nos tamanhos testados.
 - Download original HTML/SVG sintético passou por interação real, conferência de bytes e SHA-256 `97ba26a8d216233d97e356d624fcb0d04179c5e24cf6bc131e2d7a967266a273`; nenhum script/HTML recebido executou.
+- QA final repetido após correção nativa: evento Playwright download concluído sem failure em320/768/1280, servidor recebeu sequênciaHEAD→GET com `Sec-Fetch-Mode: navigate` noGET e os mesmos bytes/hash. HEAD500 preserva mensagem/informa erro; HEAD401 após revogação limpa DOM/login; HEAD200 retido até após logout terminou sem iniciarGET. Nenhum `.blob()`, Blob ou ObjectURL permanece em public/app.js. `test/http.test.js` + `test/security.test.js`:3/3 verdes (~2,014s), sintaxe/diff verdes; backend sem alteração desde a suíte52/52.
 - Anônimo/cookie vazio/inválido/expirado/revogado negado antes de IDs/HEAD/Range. Range primeiro/último/sufixo, malformados e múltiplos; path/Unicode/SQL/symlink; headers/caches; payload/quote restritos e erros simultâneos sem sentinelas privadas em DTO/headers/logs.
 - Evidência externa: `/tmp/zap05-browser-qa.mjs`, `/tmp/zap05-browser-result.json`; 13 screenshots `/tmp/zap05-{qr,reader,zoom}-{320,768,1280}.png`, `qr-expired.png`, `server-offline.png`, `session-expired.png`, `empty-320.png` com prefixo zap05. Somente dados sintéticos.
 
@@ -156,8 +161,8 @@ Nenhuma intervenção para este plano. Conta/celular/VPS/cópia continuam separa
 
 Pronto para01-06: preparar snapshot/restore privado e o gate real. Não executado aqui. Todos requisitos v1 continuam Pending até a evidência real prevista; testes sintéticos não estabelecem cobertura histórica da conta nem integração no Codex.
 
-Limites: Chromium local e escala de texto200%, sem certificação de acessibilidade ou prova de zoom/chrome nativo de outros browsers. O download por Blob mantém o original em memória no navegador até entrega/revogação; originais muito grandes e custo de hash do acervo não foram medidos em volume real. Nenhum dado/QR real foi coletado/publicado; temporários e screenshots permanecem fora do repositório. `.planning/milestone.lock` preexistente desconhecido foi preservado.
+Limites: Chromium local e escala de texto200%, sem certificação de acessibilidade ou prova de zoom/chrome nativo de outros browsers. Originais grandes usam transferência nativa do navegador, sem buffering JavaScript; vazão e custo do hash não foram medidos em volume real. Nenhum dado/QR real foi coletado/publicado; temporários e screenshots permanecem fora do repositório. `.planning/milestone.lock` preexistente desconhecido foi preservado.
 
 ## Self-Check: PASSED
 
-Arquivos de produto/teste/evidências presentes; quatro commits ancestrais de HEAD verificados pelo resolver evaluation-scope (plan-subjects). Build/testes/sintaxe/diff/browser verdes; nenhum arquivo rastreado removido. WINDOWS sem entradas abertas.
+Arquivos de produto/teste/evidências presentes; commits anteriores e373702c ancestrais de HEAD, contagem7 medida do ledger ao plan_head_after. Build/testes/sintaxe/diff/browser verdes; nenhum arquivo rastreado removido. WINDOWS sem entradas abertas. Correção nativa verificada antes desta atualização; tracking de fase preservado.
