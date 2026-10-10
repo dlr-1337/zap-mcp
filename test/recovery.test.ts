@@ -45,6 +45,17 @@ test('reserva no limiar e ENOSPC pausam sem alterar originais anteriores', async
   assert.deepEqual(readFileSync(join(f.dir, 'media', id + '.bin')), bytes); assert.equal(f.service.archive.getCoverage().uniqueMessages, 2);
 });
 
+test('reserva de tamanho desconhecido cede variação do disco sem cancelar compromisso conhecido', async t => {
+  const f = setup(t), known = media('known-space'), unknown = media('unknown-space', { fileLength: undefined, fileSha256: undefined });
+  f.service.archive.ingestUpsert({ messages: [known, unknown], type: 'notify' });
+  let free = 1n << 30n, calls = 0;
+  const worker = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), diskSpace: () => ({ free, total: 1n << 30n }),
+    downloadOriginal: async () => { calls++; if (calls === 2) free -= 4096n; return Readable.from([bytes]); } });
+  await worker.drain(); await worker.stop();
+  assert.equal(calls, 2); assert.equal(f.service.archive.getAttachment(idOf(f.service, known))!.state, 'available'); assert.equal(f.service.archive.getAttachment(idOf(f.service, unknown))!.state, 'available');
+  assert.equal(worker.snapshot().diagnostic, null);
+});
+
 test('crash após job/part/publicação/beforeAvailable recupera sem apagar acervo', async t => {
   for (const point of ['job', 'part', 'published', 'beforeAvailable']) {
     const dir = mkdtempSync(join(tmpdir(), 'zap-crash-')); const parent = createService({ dataDir: dir });
@@ -97,20 +108,33 @@ test('gate exige restore autenticado do mesmo perfil e restauração nunca habil
   const m = await import(backupModulePath); assert.ok(m.verifyBackup && m.assertCollectorReady, 'gate precisa de prova efetiva de restore');
   const base = mkdtempSync(join(tmpdir(), 'zap-gate-')), source = join(base, 'source'), snapshot = join(base, 'snapshot'); t.after(() => rmSync(base, { recursive: true }));
   let s = createService({ dataDir: source }); createAuthState(s.authDb, { newProfile: true });
+  for (const type of ['imageMessage','audioMessage','videoMessage','documentMessage']) s.archive.ingestUpsert({ type: 'notify', messages: [media(type, {})].map(value => ({ ...value, message: { [type]: value.message.documentMessage } })) });
+  const worker = startMediaWorker({ archive: s.archive, mediaDir: join(source, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
   await m.createSnapshot({ dataDir: source, destination: snapshot });
   s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
-  await m.verifyBackup({ dataDir: source, snapshotDir: snapshot, destination: join(base, 'checked') });
+  const verified = await m.verifyBackup({ dataDir: source, snapshotDir: snapshot, destination: join(base, 'checked') }); assert.equal(verified.messages, 4);
   s = createService({ dataDir: source }); assert.doesNotThrow(() => m.assertCollectorReady(source, s.authDb)); await s.close();
   const receipt = readFileSync(join(source, 'backup-receipt.json'));
   const restored = createService({ dataDir: join(base, 'checked') });
   try { assert.throws(() => m.assertCollectorReady(join(base, 'checked'), restored.authDb), /restaurad|offline/); assert.equal(existsSync(join(base, 'checked', 'backup-receipt.json')), false); } finally { await restored.close(); }
   const other = createService({ dataDir: join(base, 'other') }); createAuthState(other.authDb, { newProfile: true }); writeFileSync(join(base, 'other', 'backup-receipt.json'), receipt, { mode: 0o600 });
   try { assert.throws(() => m.assertCollectorReady(join(base, 'other'), other.authDb)); } finally { await other.close(); }
-  const altered = JSON.parse(receipt.toString()); altered.verifiedAt = new Date(0).toISOString(); writeFileSync(join(source, 'backup-receipt.json'), JSON.stringify(altered));
+  const altered = JSON.parse(receipt.toString()); const proof = JSON.parse(altered.proof); proof.verifiedAt = new Date(0).toISOString(); altered.proof = JSON.stringify(proof); writeFileSync(join(source, 'backup-receipt.json'), JSON.stringify(altered));
   s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
   writeFileSync(join(source, 'backup-receipt.json'), receipt); writeFileSync(join(snapshot, 'auth.sqlite'), 'tampered');
   s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+});
+
+test('ramo real libera exatamente um socket após prova e bloqueia clone restaurado antes do socket', async t => {
+  const m = await import(backupModulePath), base = mkdtempSync(join(tmpdir(), 'zap-real-gate-')), dataDir = join(base, 'source'); t.after(() => rmSync(base, { recursive: true }));
+  const s = createService({ dataDir }); createAuthState(s.authDb, { newProfile: true }); await s.close();
+  const snapshotDir = join(base, 'snapshot'), restored = join(base, 'restore'); await m.createSnapshot({ dataDir, destination: snapshotDir });
+  const verifyCli = spawn(process.execPath, ['dist/src/main.js', 'verify-backup', snapshotDir, restored], { env: { ...process.env, ZAP_DATA_DIR: dataDir }, stdio: ['ignore','ignore','pipe'] });
+  let verifyError = ''; verifyCli.stderr.on('data', b => verifyError += b); const [verifyCode] = await once(verifyCli, 'exit'); assert.equal(verifyCode, 0, verifyError);
+  const source = `import {mock} from 'node:test'; import {EventEmitter} from 'node:events'; import assert from 'node:assert/strict'; const baileys=await import('@whiskeysockets/baileys'); const exports=Object.fromEntries(Object.entries(baileys).filter(([k])=>k!=='default'));let sockets=0; mock.module('@whiskeysockets/baileys',{namedExports:{...exports,makeWASocket:()=>{sockets++;return {ev:new EventEmitter(),end(){}};}},defaultExport:baileys.default});const {createService}=await import('./dist/src/main.js');const s=createService({dataDir:process.env.ZAP_DATA_DIR});s.startCollector();assert.equal(sockets,1);assert.throws(()=>s.startCollector());assert.throws(()=>createService({dataDir:process.env.ZAP_DATA_DIR}));const clone=createService({dataDir:process.env.RESTORED});assert.throws(()=>clone.startCollector());assert.equal(sockets,1);await clone.close();await s.close();console.log('one socket, offline clone');`;
+  const child = spawn(process.execPath, ['--experimental-test-module-mocks', '--input-type=module', '-e', source], { env: { ...process.env, ZAP_DATA_DIR: dataDir, RESTORED: restored }, stdio: ['ignore','pipe','pipe'] });
+  let stdout = '', stderr = ''; child.stdout.on('data', b => stdout += b); child.stderr.on('data', b => stderr += b); const [code] = await once(child, 'exit'); assert.equal(code, 0, stderr); assert.match(stdout, /one socket, offline clone/);
 });
 
 test('interrupção de backup ou verify antes do recibo não abre gate nem altera snapshot anterior', async t => {
