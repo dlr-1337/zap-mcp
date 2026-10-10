@@ -47,12 +47,12 @@ coverage:
     human_judgment: true
     rationale: Conferência visual no browser da wave ainda necessária; sintaxe e respostas HTTP não provam a apresentação.
 actuals:
-  tokens: 16048
+  tokens: 16080
   tasks: 2
-  commits: 4
+  commits: 8
 plan_head_before: 10c93b445d03534813f11ac35d24d7114544a0c5
-plan_head_after: f4c29514452f70604b2cb643e7b62d01bd4e3602
-duration: 10min
+plan_head_after: 7db33a7a6bc901a23492259fb5034d75f0fc6c9a
+duration: 12min
 completed: 2026-10-10
 status: complete
 ---
@@ -64,11 +64,11 @@ status: complete
 ## Performance
 
 - Started: 2026-10-10T21:08:00Z
-- Completed: 2026-10-10T21:17:54Z
-- Duration: 10min
+- Completed: 2026-10-10T21:19:52Z
+- Duration: 12min
 - Tasks: 2
 - Product files: 6; duas evidências RED adicionais em planejamento.
-- Actual tokens: 16048, teto de caracteres/4 do diff realizado dos seis arquivos de produto/teste.
+- Actual tokens: 16080, teto de caracteres/4 do diff realizado dos seis arquivos de produto/teste. Commits8 medidos incluem quatro RED/GREEN, três commits de documentação canônica e uma correção de reconciliação.
 
 ## Accomplishments
 
@@ -84,12 +84,15 @@ status: complete
 2. Task 01-02-01 GREEN: `14a601f` — arquivo transacional, origens, revisões e recibos privados.
 3. Task 01-02-02 RED: `3892c38` — ausência da cobertura HTTP e watchdog/retomada.
 4. Task 01-02-02 GREEN: `f4c2951` — cobertura, retomada e leitor com evidência.
+5. Correção final: `7db33a7` — alias tardio preserva cada ocorrência incompleta sem chave.
+
+Documentação/estado: `e1e5700`, `7ff52bc`, `42afe39` — SUMMARY antes da atualização canônica e projeção SDK.
 
 ## Verification
 
 - Task1: `mise exec node@24.21.0 -- npm run build` seguido de `node --test --test-reporter=tap dist/test/archive.test.js dist/test/revisions.test.js dist/test/auth.test.js`: **18/18 pass**, cerca de7.5s.
 - Task2/plan: build seguido de `node --test --test-reporter=tap dist/test/coverage.test.js dist/test/archive.test.js dist/test/revisions.test.js dist/test/auth.test.js`: **22/22 pass**, cerca de7.5s.
-- Última execução após ajustes finais: `mise exec node@24.21.0 -- npm test`: **22 tests,22 pass,0 fail,0 skipped**, 7497ms. Os quatro arquivos de alvo executaram; nenhum zero-test foi tratado como êxito.
+- Última execução após ajustes finais: `mise exec node@24.21.0 -- npm test`: **22 tests,22 pass,0 fail,0 skipped**, 8459ms. Os quatro arquivos de alvo executaram; nenhum zero-test foi tratado como êxito.
 - `node --check public/app.js` e `git diff --check`: pass. Busca de TODO/FIXME/placeholder e chamadas sendMessage/readMessages/chatModify nos arquivos do plano: nenhum resultado.
 - Falha SQL injetada prova rollback de mensagem/revisão/origem/job, contagem de falha e erro sanitizado. Migração real v2, FK/integrity, 130 itens empatados, replay e lote vazio, homônimos/PN-LID/grupo, Long/buffer, update-before-original, revogação/replay, viewOnce/citação/recibos e retomada após reabrir banco foram exercitados.
 - `check evaluation-scope --plan 01-02 --commits-only --raw`: resolved, quatro commits alcançáveis neste ramo.
@@ -107,6 +110,8 @@ Sem novas bibliotecas, ORM, socket, fila externa ou infraestrutura. Mídia tem s
 ## Deviations from Plan
 
 **[Rule1 - Bug] Marcador restrito preservado durante retomada:** a leitura do recibo sanitizado removia o wrapper viewOnce e perdia a indicação na citação. O gate passou a reconhecer o marcador interno; `test/revisions.test.ts` e o teste de recibo privado confirmam ausência de corpo e indicação correta. Corrigido em `f4c2951`.
+
+**[Rule1 - Bug] Alias tardio não mescla ocorrências incompletas:** conferência final encontrou que reconciliação atribuía chave lógica comum a dois itens sem ID/JID. A asserção de regressão executou e falhou2 versus3; itens incompletos passaram a ser excluídos da união por identidade, conservando referências próprias. Os22 testes passaram após correção em `7db33a7`.
 
 **Ajuste obrigatório de aceite:** requisitos globais continuam Pending, conforme AGENTS.md e autorização do orquestrador. `requirements-supported` registra os oito contratos avançados; `requirements-completed` permanece vazio porque conta real, anexos reais e leitura em VPS ainda não foram comprovados.
 
@@ -126,4 +131,4 @@ Nenhuma configuração externa requerida neste plano. Não houve sessão WhatsAp
 
 ## Self-Check: PASSED
 
-Seis arquivos de produto/teste existem. Os quatro commits acima são alcançáveis em HEAD. Verificações automatizadas de ambos os tasks e do plano foram executadas, sem testes omitidos. Arquivo SUMMARY salvo antes da atualização canônica.
+Seis arquivos de produto/teste existem. Os oito commits medidos acima são alcançáveis em HEAD. Verificações automatizadas de ambos os tasks e do plano foram executadas, sem testes omitidos. Arquivo SUMMARY salvo antes da atualização canônica; correção final registrada em revisão do próprio resumo.
