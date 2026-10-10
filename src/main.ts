@@ -8,7 +8,7 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
-import { startMediaWorker, openVerifiedAttachment } from './media.js';
+import { startMediaWorker, openVerifiedAttachment, reconcileMedia } from './media.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -34,6 +34,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   let auth: ReturnType<typeof createWebAuth>;
   try {
   archive = openArchive(dataDir); archiveDb = archive.db; opened.push(archiveDb);
+  reconcileMedia(archive, mediaDir);
   authDb = new Database(join(dataDir, 'auth.sqlite')); opened.push(authDb);
   for (const db of [archiveDb, authDb]) db.pragma('foreign_keys = ON');
   auth = createWebAuth(authDb);
@@ -64,14 +65,14 @@ export function createService({ dataDir }: { dataDir: string }) {
     let start = 0, end = file.size - 1;
     if (req.headers.range) {
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
-      if (!range || !range[1] && !range[2]) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
+      if (!range || !range[1] && !range[2] || [range[1], range[2]].some(n => n && !Number.isSafeInteger(Number(n)))) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
       if (!range[1]) { const tail = Number(range[2]); start = Math.max(0, file.size - tail); if (!tail) start = file.size; }
       else { start = Number(range[1]); if (range[2]) end = Math.min(end, Number(range[2])); }
       if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start < 0 || start >= file.size) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
       res.status(206).set('Content-Range', `bytes ${start}-${end}/${file.size}`);
     }
     const name = (file.attachment.name ?? 'original').replace(/[\u0000-\u001f\u007f/\\]/g, '_').slice(0, 180);
-    const encoded = encodeURIComponent(name).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
+    const encoded = encodeURIComponent(Buffer.from(name).toString('utf8')).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
     res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
     if (req.method === 'HEAD' || file.size === 0) { closeSync(file.fd); res.end(); return; }
     const stream = createReadStream('', { fd: file.fd, autoClose: true, start, end });
@@ -132,7 +133,8 @@ export function createService({ dataDir }: { dataDir: string }) {
     startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
       lock.assert(); if (collector) throw Error('Coletor já ativo');
       collector = createCollector({ authDb, archive, lock, ...options });
-      mediaWorker = startMediaWorker({ archive, mediaDir, online: () => collector?.snapshot().connection === 'connected', downloadOriginal: (job, signal) => collector!.downloadOriginal(job, signal) });
+      try { mediaWorker = startMediaWorker({ archive, mediaDir, online: () => collector?.snapshot().connection === 'connected', downloadOriginal: (job, signal) => collector!.downloadOriginal(job, signal) }); }
+      catch (error) { void collector.stop(); collector = undefined; throw error; }
       return collector;
     },
     close() {

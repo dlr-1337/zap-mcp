@@ -105,11 +105,12 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
   if (!socketFactory) throw Error('Coleta real bloqueada: cópia privada e restauração conferidas são obrigatórias');
   lock.claimCollector();
   let socket: Socket | undefined, generation = 0, stopped = false, state: CollectorState = 'connecting', diagnostic: string | null = null;
+  let downloads = new AbortController();
   let qr: { value: string; expiresAt: number; generation: number } | undefined;
   let expiry: ReturnType<typeof setTimeout> | undefined, retry: ReturnType<typeof setTimeout> | undefined, stable: ReturnType<typeof setTimeout> | undefined, connecting: ReturnType<typeof setTimeout> | undefined;
   let retryAttempt = 0, retryAt: number | null = null, restarted = false;
   const clearQr = () => { qr = undefined; if (expiry) clock.clearTimeout(expiry); expiry = undefined; };
-  const retire = () => { generation++; clearQr(); for (const timer of [retry, stable, connecting]) if (timer) clock.clearTimeout(timer); retry = stable = connecting = undefined; retryAt = null; const prior = socket; socket = undefined; prior?.end(undefined); };
+  const retire = () => { generation++; downloads.abort(); downloads = new AbortController(); clearQr(); for (const timer of [retry, stable, connecting]) if (timer) clock.clearTimeout(timer); retry = stable = connecting = undefined; retryAt = null; const prior = socket; socket = undefined; prior?.end(undefined); };
   const fail = () => { state = 'disconnected'; diagnostic = 'Falha de persistência; coleta suspensa'; stopped = true; retire(); onStatus(); };
   let auth: ReturnType<typeof createAuthState>;
   try { auth = createAuthState(authDb, { newProfile, onFailure: fail }); } catch (error) { lock.releaseCollector(); throw error; }
@@ -179,8 +180,11 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
     async downloadOriginal(job: MediaJob, signal: AbortSignal) {
       const current = socket, token = generation;
       if (!current || stopped || state !== 'connected') throw Error('Coletor desconectado');
+      if (job.descriptor.viewOnce === true || job.message.key.isViewOnce === true || !['imageMessage','audioMessage','videoMessage','documentMessage'].includes(job.type)) throw Error('Mídia restrita');
+      const transport = new AbortController();
+      signal = AbortSignal.any([signal, downloads.signal, transport.signal]);
       const message = { ...job.message, message: { [job.type]: { ...job.descriptor, url: job.descriptor.url ?? 'https://mmg.whatsapp.net' } } } as unknown as WAMessage;
-      const options = { options: { signal, dispatcher: mediaDispatcher(signal) } as RequestInit };
+      const options = { options: { signal, dispatcher: mediaDispatcher(signal, undefined, () => transport.abort()) } as RequestInit };
       const renew = async (value: WAMessage) => {
         signal.throwIfAborted();
         if (!current.updateMediaMessage || current !== socket || token !== generation || state !== 'connected') throw Error('Renovação indisponível');
@@ -188,10 +192,20 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
         if (current !== socket || token !== generation) throw Error('Conexão mudou');
         // Copy only refreshed locators; restrictions and integrity stay pinned to the stored descriptor.
         const node = renewed.message?.[job.type as 'imageMessage'] as { url?: string | null; directPath?: string | null } | undefined;
+        if ((node as { viewOnce?: boolean } | undefined)?.viewOnce) throw Error('Mídia restrita');
         return { ...message, message: { [job.type]: { ...job.descriptor, url: node?.url ?? message.message?.[job.type as 'imageMessage']?.url, directPath: node?.directPath ?? job.descriptor.directPath } } } as WAMessage;
       };
-      const stream = await downloadMediaMessage(message, 'stream', options, { logger: silent, reuploadRequest: renew });
+      let stream;
+      try { stream = await downloadMediaMessage(message, 'stream', options, { logger: silent, reuploadRequest: renew }); }
+      catch (error) {
+        // rc14's fetch throws Boom.output.statusCode; its helper only checks error.status.
+        const status = (error as { output?: { statusCode?: number } }).output?.statusCode;
+        if (![404, 410].includes(status ?? 0) || signal.aborted) throw Error('Original indisponível nesta tentativa');
+        stream = await downloadMediaMessage(await renew(message), 'stream', options);
+      }
       if (current !== socket || token !== generation || signal.aborted) { stream.on('error', () => {}); stream.destroy(); throw Error('Conexão mudou'); }
+      const abort = () => stream.destroy(Error('Conexão interrompida'));
+      signal.addEventListener('abort', abort, { once: true }); stream.once('close', () => signal.removeEventListener('abort', abort));
       return stream;
     },
     async pairing() {

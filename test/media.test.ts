@@ -3,24 +3,28 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, createCipheriv } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { getMediaKeys } from '@whiskeysockets/baileys';
+import type { MediaJob } from '../src/media.js';
+import { serialize } from 'node:v8';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 
-export const bytes = Buffer.from('original sintético\0🧪');
-export const hash = createHash('sha256').update(bytes).digest();
-export function media(id: string, type = 'imageMessage', node: Record<string, unknown> = {}) {
+const bytes = Buffer.from('original sintético\0🧪');
+const hash = createHash('sha256').update(bytes).digest();
+function media(id: string, type = 'imageMessage', node: Record<string, unknown> = {}) {
   return { key: { remoteJid: '1@s.whatsapp.net', id, fromMe: false }, messageTimestamp: 1700000000,
     message: { [type]: { url: 'https://mmg.whatsapp.net/original', mediaKey: Buffer.alloc(32, 1), fileLength: bytes.length, fileSha256: hash, caption: 'legenda', fileName: '../../original\r\n.svg', ...node } } };
 }
-export function fixture(t: { after(fn: () => unknown): void }) {
+function fixture(t: { after(fn: () => unknown): void }) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-media-')), service = createService({ dataDir: dir });
   t.after(async () => { await service.close(); rmSync(dir, { recursive: true }); });
   return { dir, service, archive: service.archive };
 }
-export async function moduleMedia() { const path = '../src/media.js'; return import(path); }
+async function moduleMedia() { const path = '../src/media.js'; return import(path); }
 
 test('thumbnail-only nunca cria job nem satisfaz original disponível', t => {
   const { archive } = fixture(t); const message = media('thumbnail', 'imageMessage', { url: undefined, mediaKey: undefined, thumbnailDirectPath: '/thumb' });
@@ -28,6 +32,13 @@ test('thumbnail-only nunca cria job nem satisfaz original disponível', t => {
   const attachment = (archive.readStoredMessage(message.key) as any).attachments[0];
   assert.equal(attachment.state, 'unavailable', 'miniatura não é original');
   assert.equal((archive.db.prepare('SELECT count(*) n FROM media_jobs').get() as any).n, 0);
+});
+
+test('fila legada sem original é reclassificada antes do downloader', async t => {
+  const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia(); const message = media('legacy'); archive.ingestUpsert({ messages: [message], type: 'notify' });
+  archive.db.prepare('UPDATE attachments SET descriptor=?').run(serialize({ thumbnailDirectPath: '/thumb', mediaKey: Buffer.alloc(32) })); let called = 0;
+  const worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async () => { called++; return Readable.from([bytes]); } }); await worker.drain(); await worker.stop();
+  assert.equal(called, 0); assert.equal((archive.readStoredMessage(message.key) as any).attachments[0].state, 'unavailable');
 });
 
 test('quatro originais têm bytes conferidos e download HTTP autenticado offline', async t => {
@@ -79,4 +90,37 @@ test('dispatcher bloqueia URL interna, redirect host e DNS privado antes de cone
   const dispatcher = mediaDispatcher(new AbortController().signal, async () => { dns++; return [{ address: '127.0.0.1', family: 4 }]; });
   for (const url of ['http://mmg.whatsapp.net/file', 'https://127.0.0.1/file', 'https://mmg.whatsapp.net.evil.test/file', 'https://mmg.whatsapp.net:444/file', 'https://user@mmg.whatsapp.net/file', 'https://mmg.whatsapp.net/file']) await assert.rejects(fetch(url, { dispatcher } as any));
   assert.equal(dns, 1, 'só host permitido consulta DNS, endereço interno não conecta');
+  let first = true;
+  const redirect = { dispatch(options: any, handler: any) {
+    if (!first) return dispatcher.dispatch(options, handler);
+    first = false; queueMicrotask(() => { handler.onConnect(() => {}); handler.onHeaders(302, [Buffer.from('location'), Buffer.from('https://127.0.0.1/private')], () => {}, 'Found'); handler.onComplete([]); }); return true;
+  } };
+  await assert.rejects(fetch('https://mmg.whatsapp.net/redirect', { dispatcher: redirect } as any)); assert.equal(dns, 1, 'redirect interno é recusado antes de DNS/conexão');
+});
+
+test('adapter Baileys fixado entrega plaintext original e renova 404 com locator privado', async t => {
+  const { service } = fixture(t), events = new EventEmitter(), key = Buffer.alloc(32, 1);
+  const keys = await getMediaKeys(key, 'image'); const cipher = createCipheriv('aes-256-cbc', keys.cipherKey, keys.iv);
+  const encrypted = Buffer.concat([cipher.update(bytes), cipher.final(), Buffer.alloc(10)]);
+  let fetches = 0, renewed = 0; const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(typeof (options as any).dispatcher.dispatch, 'function'); fetches++;
+    return fetches === 1 ? new Response(null, { status: 404 }) : new Response(encrypted);
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const collector = service.startCollector({ newProfile: true, socketFactory: () => ({ ev: events, end() {}, async updateMediaMessage(message: any) { renewed++; return { ...message, message: { imageMessage: { ...message.message.imageMessage, url: 'https://mmg.whatsapp.net/refreshed' } } }; } }) as any });
+  events.emit('connection.update', { connection: 'open' });
+  const message = media('adapter'), descriptor = message.message.imageMessage;
+  const job = { id: 'internal', type: 'imageMessage', descriptor, message, attempts: 1, generation: 'synthetic' } as unknown as MediaJob;
+  const stream = await collector.downloadOriginal(job, new AbortController().signal), chunks = [];
+  for await (const chunk of stream) chunks.push(chunk); assert.deepEqual(Buffer.concat(chunks), bytes); assert.equal(renewed, 1); assert.equal(fetches, 2);
+  await assert.rejects(collector.downloadOriginal({ ...job, descriptor: { ...descriptor, viewOnce: true } }, new AbortController().signal)); assert.equal(fetches, 2);
+});
+
+test('conteúdo vazio só é disponível quando comprimento zero é confirmado pela origem', async t => {
+  const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia();
+  const known = media('zero', 'documentMessage', { fileLength: 0, fileSha256: createHash('sha256').digest() }), unknown = media('unknown-zero', 'audioMessage', { fileLength: undefined, fileSha256: undefined });
+  archive.ingestUpsert({ messages: [known, unknown], type: 'notify' });
+  const worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([]) }); await worker.drain(); await worker.stop();
+  assert.equal((archive.readStoredMessage(known.key) as any).attachments[0].state, 'available'); assert.notEqual((archive.readStoredMessage(unknown.key) as any).attachments[0].state, 'available');
 });

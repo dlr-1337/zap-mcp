@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -63,10 +63,30 @@ test('crash após job/part/publicação/beforeAvailable recupera sem apagar acer
   }
 });
 
-test('reconcile conserve órfãos inconnus, erreur SQL et génération expirée refusent available', async t => {
+test('reconcile conserva órfãos desconhecidos e falha SQL nunca confirma available', async t => {
   const f = setup(t), message = media('sql'); f.service.archive.ingestUpsert({ messages: [message], type: 'notify' });
   f.service.archive.db.exec("CREATE TRIGGER media_fault BEFORE UPDATE OF state ON attachments WHEN NEW.state='available' BEGIN SELECT RAISE(ABORT,'injected'); END");
   const worker = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   const id = idOf(f.service, message); assert.notEqual(f.service.archive.getAttachment(id)!.state, 'available'); assert.deepEqual(readFileSync(join(f.dir, 'media', id + '.bin')), bytes);
   f.service.archive.db.exec('DROP TRIGGER media_fault'); writeFileSync(join(f.dir, 'media', 'unknown.bin'), 'unknown'); f.reopen(); f.reopen(); assert.equal(f.service.archive.getAttachment(id)!.state, 'available'); assert.equal(readFileSync(join(f.dir, 'media', 'unknown.bin'), 'utf8'), 'unknown');
+});
+
+test('lease vencida e stream tardio após stop jamais publicam available', async t => {
+  const f = setup(t), message = media('lease'); f.service.archive.ingestUpsert({ messages: [message], type: 'notify' }); const id = idOf(f.service, message);
+  const worker = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from((async function* () {
+    yield bytes.subarray(0, 2); f.service.archive.db.prepare("UPDATE media_jobs SET generation='retired' WHERE attachment_id=?").run(id); yield bytes.subarray(2);
+  })()) }); await worker.drain(); await worker.stop(); assert.notEqual(f.service.archive.getAttachment(id)!.state, 'available'); assert.equal(existsSync(join(f.dir, 'media', id + '.bin')), false);
+  f.reopen();
+  let accept!: (value: Readable) => void, started!: () => void; const begun = new Promise<void>(r => { started = r; });
+  const late = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => { started(); return new Promise<Readable>(r => { accept = r; }); } });
+  await begun; await late.stop(); const stream = Readable.from([bytes]); accept(stream); await new Promise(r => setImmediate(r)); assert.equal(stream.destroyed, true); assert.notEqual(f.service.archive.getAttachment(id)!.state, 'available');
+});
+
+test('original ausente e espaço desconhecido esgotado ficam explícitos sem apagar acervo', async t => {
+  const f = setup(t), message = media('missing'); f.service.archive.ingestUpsert({ messages: [message], type: 'notify' });
+  let worker = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop(); const id = idOf(f.service, message); rmSync(join(f.dir, 'media', id + '.bin')); f.reopen(); assert.equal(f.service.archive.getAttachment(id)!.state, 'retry_wait');
+  const unknown = media('unknown', { fileLength: undefined, fileSha256: undefined }); f.service.archive.ingestUpsert({ messages: [unknown], type: 'notify' });
+  f.service.archive.db.prepare("UPDATE media_jobs SET attempts=5,state='unavailable' WHERE attachment_id=?").run(id);
+  worker = startMediaWorker({ archive: f.service.archive, mediaDir: join(f.dir, 'media'), diskSpace: () => ({ free: 256n * 1024n * 1024n + 2n, total: 1n << 30n }), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
+  assert.equal(f.service.archive.getCoverage().uniqueMessages, 2); assert.equal(f.service.archive.getAttachment(idOf(f.service, unknown))!.attempts, 1); assert.notEqual(f.service.archive.getAttachment(idOf(f.service, unknown))!.state, 'available'); assert.equal(worker.snapshot().paused, true);
 });
