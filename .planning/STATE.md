@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 Phase: 1 of 4 (Arquivo privado com mensagens e mídias reais)
 Plan: 0 of 0 in current phase (não planejado)
 Status: Ready to plan
-Last activity: 2026-10-10 — Roadmap inicial gravado; 32/32 requisitos mapeados, nenhum implementado ou verificado.
+Last activity: 2026-10-10 — Configuração interativa salva no projeto e nos padrões globais; 32/32 requisitos mapeados, nenhum implementado ou verificado.
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -53,7 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 Decisões completas em PROJECT.md, seção Key Decisions.
 
-- Quatro capacidades em modo mvp/coarse; todas as fases e requisitos começam pendentes.
+- Quatro capacidades em modo mvp/coarse, modelo herdado e avanço automático; fases/requisitos pendentes. Nyquist, TDD, pesquisa antes das perguntas e worktrees habilitados; sem tags automáticas.
 - Dispositivo vinculado por QR sem navegador; uma conta, um proprietário, um coletor e nenhuma escrita/confirmação de leitura no WhatsApp.
 - Captura de bytes começa junto da ingestão na Phase 1; acervo, proveniência e faltantes permanecem consultáveis offline.
 - Privacidade desde a primeira exposição e snapshot recuperável antes do piloto; backup contínuo fora da VPS e restore têm responsabilidade final na Phase 4.
@@ -80,6 +80,6 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-10 15:58 -03:00
-Stopped at: Roadmap e estado inicial criados; Phase 1 pronta para planejamento, sem planos ou código de produto.
+Last session: 2026-10-10 16:51 -03:00
+Stopped at: GSD configurado interativamente, com padrões globais salvos; Phase 1 pronta para planejamento, sem planos ou código de produto.
 Resume file: None

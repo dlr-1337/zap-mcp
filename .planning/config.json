@@ -12,7 +12,7 @@
   "jina": false,
   "git": {
     "branching_strategy": "none",
-    "create_tag": true,
+    "create_tag": false,
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
@@ -21,8 +21,8 @@
     "research": true,
     "plan_check": true,
     "verifier": true,
-    "nyquist_validation": false,
-    "auto_advance": false,
+    "nyquist_validation": true,
+    "auto_advance": true,
     "node_repair": true,
     "node_repair_budget": 2,
     "ui_phase": true,
@@ -33,7 +33,7 @@
     "context_guard_mode": "warn",
     "text_mode": false,
     "compact_content": false,
-    "research_before_questions": false,
+    "research_before_questions": true,
     "discuss_mode": "discuss",
     "skip_discuss": false,
     "code_review": true,
@@ -47,7 +47,10 @@
     "post_planning_gaps": true,
     "security_enforcement": true,
     "security_asvs_level": 1,
-    "security_block_on": "high"
+    "security_block_on": "high",
+    "tdd_mode": true,
+    "ui_review": true,
+    "use_worktrees": true
   },
   "ship": {
     "pr_body_sections": []
@@ -66,5 +69,11 @@
   "resolve_model_ids": "omit",
   "mode": "yolo",
   "granularity": "coarse",
-  "response_language": "pt-BR"
+  "response_language": "pt-BR",
+  "intel": {
+    "enabled": false
+  },
+  "graphify": {
+    "enabled": false
+  }
 }

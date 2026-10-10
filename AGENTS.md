@@ -76,7 +76,9 @@ A inicialização usa `gsd-new-project`. Seguir o estado de [.planning/STATE.md]
 
 ## GSD Workflow
 
-Configuração: execução autônoma (`yolo`), fases `coarse` em modo `mvp`, modelo herdado, pesquisa e verificações habilitadas. Documentos de planejamento são versionados; caches locais de pesquisa são ignorados.
+Configuração: execução autônoma (`yolo`) com avanço automático entre etapas, fases `coarse` em modo `mvp` e modelo herdado. Pesquisa antes dos planos e das perguntas, verificação dos planos/entregas, cobertura automatizada (Nyquist), TDD nas tarefas adequadas, revisão padrão de código e controles visuais estão habilitados.
+
+Manter a discussão das fases, instruções completas e avisos de contexto. Executores paralelos usam worktrees; a integração final fica no ramo atual. Documentos de planejamento são versionados; caches locais de pesquisa são ignorados. Não criar tags automaticamente; Intel e Graphify ficam desligados. As escolhas também foram salvas como padrões dos próximos projetos.
 
 - `$gsd-plan-phase 1`: planejar a primeira capacidade antes da implementação.
 - `$gsd-execute-phase N`: executar planos da fase correspondente e atualizar as evidências.
