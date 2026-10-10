@@ -88,15 +88,49 @@ Na implementação, testes de replay, reconexão, autenticação, fuso/paginaç�
 
 ## Traceability
 
-O roadmap preencherá o mapeamento de cada requisito v1 para exatamente uma fase responsável. Requisitos transversais são verificados novamente nas integrações sem duplicar responsabilidade.
+Cada requisito v1 pertence a exatamente uma fase responsável. Requisitos transversais são verificados novamente nas integrações sem duplicar responsabilidade; privacidade e somente leitura valem desde a primeira exposição, e a cópia recuperável anterior ao piloto antecipa a proteção de OPS-02, cuja responsabilidade final é da Phase 4. Planejamento não conclui requisitos.
 
 | Requirement | Phase | Status |
 |---|---|---|
+| PRIV-01 | Phase 1 | Pending |
+| PRIV-02 | Phase 1 | Pending |
+| PRIV-03 | Phase 1 | Pending |
+| SYNC-01 | Phase 1 | Pending |
+| SYNC-02 | Phase 1 | Pending |
+| SYNC-03 | Phase 1 | Pending |
+| SYNC-04 | Phase 1 | Pending |
+| SYNC-05 | Phase 1 | Pending |
+| SYNC-06 | Phase 1 | Pending |
+| SYNC-07 | Phase 1 | Pending |
+| EVID-01 | Phase 1 | Pending |
+| EVID-02 | Phase 2 | Pending |
+| MEDIA-01 | Phase 1 | Pending |
+| MEDIA-02 | Phase 1 | Pending |
+| MEDIA-03 | Phase 1 | Pending |
+| WEB-01 | Phase 1 | Pending |
+| WEB-02 | Phase 2 | Pending |
+| WEB-03 | Phase 2 | Pending |
+| WEB-04 | Phase 2 | Pending |
+| WEB-05 | Phase 2 | Pending |
+| EXP-01 | Phase 2 | Pending |
+| EXP-02 | Phase 2 | Pending |
+| EXP-03 | Phase 2 | Pending |
+| MCP-01 | Phase 3 | Pending |
+| MCP-02 | Phase 3 | Pending |
+| MCP-03 | Phase 3 | Pending |
+| MCP-04 | Phase 3 | Pending |
+| MCP-05 | Phase 3 | Pending |
+| OPS-01 | Phase 4 | Pending |
+| OPS-02 | Phase 4 | Pending |
+| OPS-03 | Phase 4 | Pending |
+| OPS-04 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 32 total
-- Mapped to phases: 0, aguardando criação do roadmap
-- Unmapped: 32, aguardando criação do roadmap
+- Mapped to phases: 32/32 (100%)
+- Unmapped: 0
+- Duplicate phase assignments: 0
+- Requirement status: 32 Pending; nenhum implementado ou verificado
 
 ---
 *Requirements defined: 2026-10-10*

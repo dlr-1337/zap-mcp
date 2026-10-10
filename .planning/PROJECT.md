@@ -73,7 +73,7 @@ Nenhum requisito de produto validado ainda; a pasta começou sem código e sem a
 | Uma conta e um proprietário no v1 | Menor solução completa para o uso pessoal descrito | Padrão assumido; revisável |
 | Anexos binários persistidos com estado de disponibilidade | Links de mídia podem expirar e não equivalem a guardar o arquivo | Pendente de implementação |
 | Análise feita pela IA cliente | Dispensa provedor de IA e custos adicionais dentro do site | Padrão assumido; revisável |
-| Fases que entregam capacidades utilizáveis de ponta a ponta | Valida cedo a integração real e evita construir a interface sobre uma recuperação inviável | Pendente de roadmap |
+| Fases que entregam capacidades utilizáveis de ponta a ponta | Valida cedo a integração real e evita construir a interface sobre uma recuperação inviável | Definidas em quatro fases no roadmap; execução pendente |
 | Um serviço Node.js/TypeScript ESM, Express, SQLite FTS5 e arquivos locais | Pesquisa convergiu para a menor arquitetura que atende arquivo, site e MCP na mesma VPS | Direção técnica; build e operação não validados |
 | Baileys 7.0.0-rc14 fixado para o piloto | Integração direta sem navegador; versão pesquisada continua não oficial e candidata a lançamento | Revalidar release e correções antes da instalação; piloto obrigatório |
 | Downloads começam junto da ingestão | Uma mídia recuperável hoje pode não estar acessível ao terminar a interface | Decisão de ordem de implementação |
