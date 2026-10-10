@@ -113,7 +113,7 @@ Todos os15 requisitos/20 decisões/24 grupos de pesquisa/Goal e5 critérios est�
 | 01-03 | 3 | 01-02 + src/main.ts | src/whatsapp.ts, test/auth-state.test.ts, test/collector.test.ts, test/readonly.test.ts | não |
 | 01-04 | 4 | 01-03 + src/main.ts | src/media.ts, test/media.test.ts, test/recovery.test.ts | não |
 | 01-05 | 5 | 01-04 + src/main.ts | public/index.html, public/app.js, public/style.css, test/http.test.ts, test/security.test.ts | não |
-| 01-06 | 6 | 01-05 + src/main.ts | src/backup.ts, test/backup.test.ts, README.md | não |
+| 01-06 | 6 | 01-05 + src/main.ts | src/backup.ts, test/backup.test.ts, README.md, .env.example | não |
 | 01-07 | 7 | 01-06 + src/main.ts | README.md, src/main.ts | QR e comparação no celular |
 
 src/main.ts é compartilhado e precisa evoluir em sequência. Nenhum plano na mesma wave compartilha arquivo; sete waves evitam falso paralelismo e merges artificiais. Todo arquivo de teste é criado pela tarefa que primeiro o usa; nenhuma dependência de test file futuro. Ativos novos são propostas até execução; fontes existentes estão em git ls-files. Estimativa factor1/confidence low/sample_count0 foi obtida por estimate-calibration; projeção não é medição.

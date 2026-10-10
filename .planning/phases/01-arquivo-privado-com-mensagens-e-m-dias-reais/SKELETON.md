@@ -28,7 +28,7 @@ Capacidade a provar no plano01-01: proprietário entra na interface privada, abr
 - [ ] Routing: login/logout, status/QR, lista/leitor e original por ID privados.
 - [ ] Database: write/read reais no tracer e ingestão por mesma API privada.
 - [ ] UI: login e link para conversa funcionam no navegador; nenhum conteúdo recebido executado.
-- [ ] Local full-stack: npm ci; npm --prefix . run build; node dist/src/main.js owner-set (stdin); npm start serve; ZAP_DATA_DIR fora do checkout. Comandos finais documentados pelo executor no README, sem senha/caminho real.
+- [ ] Local full-stack: npm ci; npm --prefix . run build; node dist/src/main.js owner-set (stdin); npm start serve; ZAP_DATA_DIR fora do checkout. Tracer/auth são verificados em test/tracer.test.ts e test/auth.test.ts no plano01-01; test/http.test.ts é criado no plano01-05. Comandos finais e .env.example documentados pelo executor no plano01-06, sem senha/caminho real.
 - [ ] Pré-piloto: parar serviço, backup/verify-backup e preflight antes de serve --collect; quatro originais reais só no plano07.
 
 ## Out of Scope (Deferred to Later Slices)
