@@ -222,7 +222,7 @@ export function preflight(dataDir: string) {
   // Read-only preflight never claims/removes a lock; normal startup recovers an orphan safely.
   if (existsSync(join(source, 'service.lock'))) throw Error('Pare o serviço e aguarde encerramento antes do preflight');
   const archive = openDb(join(source, 'archive.sqlite')); let auth: Database.Database | undefined;
-  try { auth = openDb(join(source, 'auth.sqlite')); evidence(archive); evidence(auth); checkSpace(source, 0n); assertCollectorReady(source, auth); }
+  try { auth = openDb(join(source, 'auth.sqlite')); evidence(archive); evidence(auth); if (!auth.prepare('SELECT id FROM web_owner WHERE id=1').get()) throw Error('Configure owner-set por stdin antes do piloto'); checkSpace(source, 0n); assertCollectorReady(source, auth); }
   finally { archive.close(); auth?.close(); }
   return { ready: true, accountValidated: false };
 }

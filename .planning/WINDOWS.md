@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 0
 waived_count: 0
-fixed_count: 5
+fixed_count: 6
 total_count: 6
-last_updated: 2026-10-10T22:20:11.110Z
+last_updated: 2026-10-10T22:23:17.496Z
 ---
 
 # Broken Windows Ledger
@@ -20,7 +20,7 @@ last_updated: 2026-10-10T22:20:11.110Z
 | 3 | 1 | deviation | test/archive.test.ts |  | Assert de versão atual ajustado de4 para5 após migração aditiva de mídia; teste de preservação passou | fixed |  | 2026-10-10T21:45:19.585Z | 2026-10-10T21:45:19.683Z |
 | 4 | 1 | deviation | src/auth.ts |  | QR assíncrono revalida TTL e revogação pelo SQLiteStore antes de responder; teste HTTP passou | fixed |  | 2026-10-10T22:01:44.544Z | 2026-10-10T22:01:44.736Z |
 | 5 | 1 | deviation | src/main.ts |  | DTO da lista preserva proteção de identificadores legados privados e expõe somente PN/LID/grupo recebido; teste antigo passou | fixed |  | 2026-10-10T22:01:44.911Z | 2026-10-10T22:01:45.042Z |
-| 6 | 1 | deviation | src/media.ts |  | Suite paralela apresentou retry_wait inesperado em original válido (58/59); reserva de job com tamanho desconhecido sob filesystem compartilhado requer revisão fora de01-06. | open |  | 2026-10-10T22:20:11.110Z |  |
+| 6 | 1 | deviation | src/media.ts |  | Suite paralela apresentou retry_wait inesperado em original válido (58/59); reserva de job com tamanho desconhecido sob filesystem compartilhado requer revisão fora de01-06. | fixed |  | 2026-10-10T22:20:11.110Z | 2026-10-10T22:23:17.496Z |
 
 ````json
 [
@@ -96,10 +96,10 @@ last_updated: 2026-10-10T22:20:11.110Z
     "file": "src/media.ts",
     "line": null,
     "description": "Suite paralela apresentou retry_wait inesperado em original válido (58/59); reserva de job com tamanho desconhecido sob filesystem compartilhado requer revisão fora de01-06.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-10T22:20:11.110Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T22:23:17.496Z",
     "milestone": null
   }
 ]

@@ -115,6 +115,8 @@ test('gate exige restore autenticado do mesmo perfil e restauração nunca habil
   s = createService({ dataDir: source }); assert.throws(() => m.assertCollectorReady(source, s.authDb)); await s.close();
   const verified = await m.verifyBackup({ dataDir: source, snapshotDir: snapshot, destination: join(base, 'checked') }); assert.equal(verified.messages, 4);
   s = createService({ dataDir: source }); assert.doesNotThrow(() => m.assertCollectorReady(source, s.authDb)); await s.close();
+  assert.throws(() => m.preflight(source), /owner-set/);
+  s = createService({ dataDir: source }); await s.setPassword('senha sintética do proprietário'); await s.close(); assert.doesNotThrow(() => m.preflight(source));
   const receipt = readFileSync(join(source, 'backup-receipt.json'));
   const restored = createService({ dataDir: join(base, 'checked') });
   try { assert.throws(() => m.assertCollectorReady(join(base, 'checked'), restored.authDb), /restaurad|offline/); assert.equal(existsSync(join(base, 'checked', 'backup-receipt.json')), false); } finally { await restored.close(); }
