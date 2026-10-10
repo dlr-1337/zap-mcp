@@ -1,6 +1,6 @@
 import { BufferJSON, initAuthCreds, proto, makeWASocket, Browsers, type AuthenticationState, type SignalDataSet, type SignalDataTypeMap, type BaileysEventMap, type BaileysEventEmitter, type SocketConfig } from '@whiskeysockets/baileys';
 import type Database from 'better-sqlite3';
-import { mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, lstatSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, lstatSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Archive } from './archive.js';
@@ -105,25 +105,47 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
   lock.claimCollector();
   let socket: Socket | undefined, generation = 0, stopped = false, state: CollectorState = 'connecting', diagnostic: string | null = null;
   let qr: { value: string; expiresAt: number; generation: number } | undefined;
-  let expiry: ReturnType<typeof setTimeout> | undefined;
+  let expiry: ReturnType<typeof setTimeout> | undefined, retry: ReturnType<typeof setTimeout> | undefined, stable: ReturnType<typeof setTimeout> | undefined, connecting: ReturnType<typeof setTimeout> | undefined;
+  let retryAttempt = 0, retryAt: number | null = null, restarted = false;
   const clearQr = () => { qr = undefined; if (expiry) clock.clearTimeout(expiry); expiry = undefined; };
-  const retire = () => { generation++; clearQr(); const prior = socket; socket = undefined; prior?.end(undefined); };
+  const retire = () => { generation++; clearQr(); for (const timer of [retry, stable, connecting]) if (timer) clock.clearTimeout(timer); retry = stable = connecting = undefined; retryAt = null; const prior = socket; socket = undefined; prior?.end(undefined); };
   const fail = () => { state = 'disconnected'; diagnostic = 'Falha de persistência; coleta suspensa'; stopped = true; retire(); onStatus(); };
   let auth: ReturnType<typeof createAuthState>;
   try { auth = createAuthState(authDb, { newProfile, onFailure: fail }); } catch (error) { lock.releaseCollector(); throw error; }
-  const snapshot = () => ({ connection: state, collectorEnabled: !stopped, pairingAvailable: Boolean(qr && qr.expiresAt > clock.now()), qrExpiresAt: qr && qr.expiresAt > clock.now() ? new Date(qr.expiresAt).toISOString() : null, generation, diagnostic, retryAttempt: 0, retryAt: null as string | null });
+  const snapshot = () => ({ connection: state, collectorEnabled: !stopped, pairingAvailable: Boolean(qr && qr.expiresAt > clock.now()), qrExpiresAt: qr && qr.expiresAt > clock.now() ? new Date(qr.expiresAt).toISOString() : null, generation, diagnostic, retryAttempt, retryAt: retryAt === null ? null : new Date(retryAt).toISOString() });
+  function disconnect(code: number) {
+    auth.saveCreds(); retire();
+    if (code === 401) { state = 'invalid-session'; stopped = true; diagnostic = 'Sessão inválida; novo vínculo necessário. Acervo preservado'; }
+    else if ([440, 403, 411, 500].includes(code)) {
+      state = 'disconnected'; stopped = true; diagnostic = code === 440 ? 'Conexão substituída; conferir coletor concorrente' : `Conexão recusada (${code}); sessão e acervo preservados`;
+    } else if (![515, 408, 428, 503].includes(code) || retryAttempt >= 6 || (code === 515 && restarted)) {
+      state = 'disconnected'; stopped = true; diagnostic = 'Reconexão interrompida; limite atingido ou falha sem recuperação automática';
+    } else {
+      if (code === 515) restarted = true;
+      retryAttempt++; state = 'reconnecting'; diagnostic = 'Aguardando tentativa limitada de reconexão';
+      const wait = Math.min(60_000, 1000 * 2 ** (retryAttempt - 1) * (1 + clock.random() * 0.5));
+      retryAt = clock.now() + wait;
+      retry = clock.setTimeout(() => {
+        retry = undefined; retryAt = null;
+        if (stopped) return;
+        try { connect(); } catch { try { disconnect(503); } catch { fail(); } }
+      }, wait);
+    }
+    onStatus();
+  }
   function connect() {
     const current = ++generation; clearQr(); state = 'connecting';
-    const config: Parameters<typeof makeWASocket>[0] = { auth: { creds: auth.state.creds, keys: {
+    const config: Parameters<typeof makeWASocket>[0] = { auth: { creds: JSON.parse(JSON.stringify(auth.state.creds, BufferJSON.replacer), BufferJSON.reviver), keys: {
       get: (type, ids) => { if (current !== generation || stopped) throw Error('Socket expirado'); return auth.state.keys.get(type, ids); },
       set: data => { if (current !== generation || stopped) throw Error('Socket expirado'); return auth.state.keys.set(data); }
     } }, logger: silent, browser: Browsers.macOS('Desktop'), syncFullHistory: true, shouldSyncHistoryMessage: () => true, markOnlineOnConnect: false, qrTimeout: 20_000, connectTimeoutMs: 20_000,
       getMessage: async key => archive.readPrivateMessage(key)?.message as proto.IMessage | undefined };
     socket = socketFactory!(config);
+    connecting = clock.setTimeout(() => { if (current !== generation || stopped || state !== 'connecting') return; try { disconnect(408); } catch { fail(); } }, config.connectTimeoutMs!);
     function on<K extends keyof BaileysEventMap>(name: K, fn: (event: BaileysEventMap[K]) => void) {
       socket!.ev.on(name, event => { if (current !== generation || stopped) return; try { fn(event); } catch { fail(); } });
     }
-    on('creds.update', auth.saveCreds);
+    on('creds.update', event => { Object.assign(config.auth.creds, event); auth.saveCreds(config.auth.creds); });
     on('messaging-history.set', event => { archive.ingestHistory(event); });
     on('messaging-history.status', event => archive.ingestHistoryStatus(event));
     on('messages.upsert', event => { archive.ingestUpsert(event); });
@@ -138,10 +160,14 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
     on('groups.upsert', event => archive.ingestGroups(event)); on('groups.update', event => archive.ingestGroups(event));
     on('group-participants.update', event => archive.ingestContacts(event.participants));
     on('connection.update', event => {
-      if (Object.hasOwn(event, 'qr')) { clearQr(); if (event.qr) { qr = { value: event.qr, expiresAt: clock.now() + config.qrTimeout!, generation: current }; state = 'awaiting-pairing'; expiry = clock.setTimeout(() => { clearQr(); onStatus(); }, config.qrTimeout!); } }
-      if (event.connection === 'open') { clearQr(); state = 'connected'; }
+      if (Object.hasOwn(event, 'qr')) { clearQr(); if (event.qr) { if (connecting) clock.clearTimeout(connecting); connecting = undefined; qr = { value: event.qr, expiresAt: clock.now() + config.qrTimeout!, generation: current }; state = 'awaiting-pairing'; expiry = clock.setTimeout(() => { clearQr(); onStatus(); }, config.qrTimeout!); } }
+      if (event.connection === 'open') {
+        clearQr(); if (connecting) clock.clearTimeout(connecting); connecting = undefined; state = 'connected'; diagnostic = null;
+        if (stable) clock.clearTimeout(stable);
+        stable = clock.setTimeout(() => { if (current === generation && !stopped && state === 'connected') { retryAttempt = 0; restarted = false; onStatus(); } }, 60_000);
+      }
       if (event.connection === 'connecting') { clearQr(); state = 'connecting'; }
-      if (event.connection === 'close') { retire(); state = 'disconnected'; }
+      if (event.connection === 'close') { const error = event.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined; disconnect(error?.output?.statusCode ?? 0); }
       onStatus();
     });
     onStatus();
