@@ -85,3 +85,46 @@ test('falha de keys.set ou creds.update interrompe coletor sem payload em diagn�
     } finally {await service.close();rmSync(dir,{recursive:true});}
   }
 });
+
+test('reconexão tem seis retries, teto60s e geração velha nunca modifica nova conexão', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'zap-retry-'));const service=createService({dataDir:dir});const timer=fakeClock();const sockets: ReturnType<typeof fakeSocket>[]=[];const configs: Parameters<SocketFactory>[0][]=[];
+  try {
+    const collector=service.startCollector({newProfile:true,clock:timer.clock,socketFactory: config=>{configs.push(config);const socket=fakeSocket();sockets.push(socket);return socket as unknown as ReturnType<SocketFactory>;}});
+    const close=(socket:ReturnType<typeof fakeSocket>,code=408)=>socket.ev.emit('connection.update',{connection:'close',lastDisconnect:{error:{output:{statusCode:code},message:'private-body-error'}}});
+    close(sockets[0]); assert.equal(collector.snapshot().connection,'reconnecting');assert.equal(collector.snapshot().retryAttempt,1);
+    timer.advance(60_000); assert.equal(sockets.length,2);sockets[1].ev.emit('connection.update',{connection:'open'});
+    sockets[0].ev.emit('connection.update',{qr:'stale-qr',connection:'close'});sockets[0].ev.emit('creds.update',{platform:'stale'});
+    assert.equal(collector.snapshot().connection,'connected');assert.equal(await collector.pairing(),null);assert.throws(()=>configs[0].auth.keys.set({session:{stale:Buffer.from([1])}}),/expirado/);
+    assert.notEqual(JSON.parse((service.authDb.prepare('SELECT creds FROM whatsapp_profile').get() as {creds:string}).creds).platform,'stale');
+    // Short-lived opens do not reset the retry budget.
+    for(let n=1;n<=6;n++){close(sockets.at(-1)!);const snapshot=collector.snapshot();if(n<6){assert.equal(snapshot.connection,'reconnecting');assert.ok(Date.parse(snapshot.retryAt!)-timer.clock.now()<=60_000);timer.advance(60_000);sockets.at(-1)!.ev.emit('connection.update',{connection:'open'});}else assert.equal(snapshot.connection,'disconnected');}
+    const count=sockets.length;timer.advance(1_000_000);assert.equal(sockets.length,count);assert.equal(count,7);assert.equal(collector.snapshot().retryAttempt,6);assert.ok(!JSON.stringify(collector.snapshot()).includes('private-body-error'));
+  } finally {await service.close();rmSync(dir,{recursive:true});}
+});
+
+test('códigos401/440/515/408/428/503/403/411/500 preservam auth e arquivo', async () => {
+  for(const code of [401,440,515,408,428,503,403,411,500]) {
+    const dir=mkdtempSync(join(tmpdir(),'zap-codes-'));const service=createService({dataDir:dir});const timer=fakeClock();const sockets:ReturnType<typeof fakeSocket>[]=[];
+    try {
+      service.writeMessage({reference:'keep',conversationId:'local',conversationName:null,text:'preservado',originalTimestamp:'2026-10-10T00:00:00Z'});
+      const collector=service.startCollector({newProfile:true,clock:timer.clock,socketFactory:()=>{const s=fakeSocket();sockets.push(s);return s as unknown as ReturnType<SocketFactory>;}});
+      sockets[0].ev.emit('creds.update',{registered:true,platform:'preserved'});const before=service.authDb.prepare('SELECT creds FROM whatsapp_profile').get();
+      sockets[0].ev.emit('connection.update',{qr:'private-qr'});sockets[0].ev.emit('connection.update',{connection:'close',lastDisconnect:{error:{output:{statusCode:code}}}});
+      assert.equal(await collector.pairing(),null);assert.equal(collector.snapshot().connection,code===401?'invalid-session':[515,408,428,503].includes(code)?'reconnecting':'disconnected');
+      timer.advance(60_000);assert.equal(sockets.length,[515,408,428,503].includes(code)?2:1);
+      assert.deepEqual(service.authDb.prepare('SELECT creds FROM whatsapp_profile').get(),before);assert.equal(service.archive.getCoverage().uniqueMessages,1);
+      if(code===515){sockets[1].ev.emit('connection.update',{connection:'close',lastDisconnect:{error:{output:{statusCode:515}}}});timer.advance(60_000);assert.equal(sockets.length,2);assert.equal(collector.snapshot().connection,'disconnected');}
+      await collector.stop();const count=sockets.length;timer.advance(600_000);assert.equal(sockets.length,count);assert.ok(sockets.every(s=>s.ends===1));
+    } finally {await service.close();rmSync(dir,{recursive:true});}
+  }
+});
+
+test('budget só reseta após60s estável e conectando sem progresso tem timeout', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'zap-stability-'));const service=createService({dataDir:dir});const timer=fakeClock();const sockets:ReturnType<typeof fakeSocket>[]=[];
+  try {
+    const collector=service.startCollector({newProfile:true,clock:timer.clock,socketFactory:()=>{const s=fakeSocket();sockets.push(s);return s as unknown as ReturnType<SocketFactory>;}});
+    timer.advance(20_000);assert.equal(collector.snapshot().connection,'reconnecting');timer.advance(2000);sockets.at(-1)!.ev.emit('connection.update',{connection:'open'});
+    assert.equal(collector.snapshot().retryAttempt,1);timer.advance(59_999);assert.equal(collector.snapshot().retryAttempt,1);timer.advance(1);assert.equal(collector.snapshot().retryAttempt,0);
+    sockets.at(-1)!.ev.emit('connection.update',{connection:'close',lastDisconnect:{error:{output:{statusCode:428}}}});assert.equal(collector.snapshot().retryAttempt,1);await collector.stop();timer.advance(500_000);assert.equal(sockets.length,2);
+  }finally{await service.close();rmSync(dir,{recursive:true});}
+});
