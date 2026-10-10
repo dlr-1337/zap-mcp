@@ -1,2 +1,24 @@
 # Evidências e respostas temporárias da pesquisa GSD; os documentos finais são versionados.
 .planning/research/.cache/
+
+# Dependências e arquivos gerados.
+node_modules/
+/dist/
+*.log
+
+# Configuração privada; somente o exemplo pode ser publicado.
+.env
+.env.*
+!.env.example
+
+# Acervo WhatsApp, sessões e exportações ficam fora do repositório público.
+/data/
+/storage/
+/auth/
+/sessions/
+/media/
+/exports/
+/backups/
+*.sqlite*
+*.db
+*.db-*
