@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { createService } from '../src/main.js';
 import { spawnSync, spawn } from 'node:child_process';
 import { once, EventEmitter } from 'node:events';
+import type { Clock, SocketFactory } from '../src/whatsapp.js';
 
 test('trava recupera PID reutilizado sem abrir dois escritores', () => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-lock-')); mkdirSync(join(dir, 'service.lock'));
@@ -21,12 +22,12 @@ test('trava recupera PID reutilizado sem abrir dois escritores', () => {
 
 test('processos disputam writer e morte abrupta permite retomar auth persistida', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-process-'));
-  const child = spawn(process.execPath, ['--input-type=module', '-e', "import {createService} from './dist/src/main.js'; const s=createService({dataDir:process.env.ZAP_DATA_DIR}); s.authDb.exec(\"CREATE TABLE crash_state(value TEXT); INSERT INTO crash_state VALUES('committed')\"); console.log('ready'); setInterval(()=>{},1000);"], { env: { ...process.env, ZAP_DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import {createService} from './dist/src/main.js'; import {createAuthState} from './dist/src/whatsapp.js'; const s=createService({dataDir:process.env.ZAP_DATA_DIR});const a=createAuthState(s.authDb,{newProfile:true});a.state.keys.set({'identity-key':{id:Buffer.from([1,2,3])}}); a.saveCreds({platform:'committed'}); console.log('ready'); setInterval(()=>{},1000);"], { env: { ...process.env, ZAP_DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'] });
   try {
     await once(child.stdout, 'data');
     const second = spawnSync(process.execPath, ['dist/src/main.js', 'owner-set'], { env: { ...process.env, ZAP_DATA_DIR: dir }, input: 'synthetic\n', encoding: 'utf8' }); assert.notEqual(second.status, 0); assert.match(second.stderr, /ativo/);
     child.kill('SIGKILL'); await once(child, 'exit'); const service = createService({ dataDir: dir });
-    try { assert.deepEqual(service.authDb.prepare('SELECT value FROM crash_state').all(), [{ value: 'committed' }]); } finally { service.close(); }
+    try { const {createAuthState} = await import('../src/whatsapp.js'); const restored=createAuthState(service.authDb); assert.equal(restored.state.creds.platform,'committed'); assert.deepEqual((await restored.state.keys.get('identity-key',['id'])).id,Buffer.from([1,2,3])); } finally { service.close(); }
   } finally { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); rmSync(dir, { recursive: true }); }
 });
 
@@ -44,3 +45,43 @@ export function fakeSocket() {
   const forbidden = () => { throw Error('operação remota proibida'); };
   return { ev, end() { ends++; }, get ends() { return ends; }, sendMessage: forbidden, chatModify: forbidden, readMessages: forbidden, sendReceipt: forbidden, sendPresenceUpdate: forbidden, logout: forbidden };
 }
+
+function fakeClock() {
+  let time = 1_800_000_000_000, id = 0; const timers = new Map<number, { fn: () => void; at: number }>();
+  const clock: Clock = { now: () => time, random: () => 0.5, setTimeout(fn, ms) { const n = ++id; timers.set(n, { fn, at: time + ms }); return n as unknown as ReturnType<typeof setTimeout>; }, clearTimeout(n) { timers.delete(n as unknown as number); } };
+  return { clock, advance(ms: number) { const end = time + ms; for (;;) { const next = [...timers].sort((a,b) => a[1].at-b[1].at).find(([,t]) => t.at<=end); if (!next) break; time=next[1].at; timers.delete(next[0]); next[1].fn(); } time=end; } };
+}
+
+test('QR atual expira sem extensão, FULL e eventos persistem sem expor sessão', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'zap-qr-')); const service=createService({dataDir:dir}); const fake=fakeSocket(); const timer=fakeClock(); let config: Parameters<SocketFactory>[0] | undefined, sockets=0;
+  try {
+    const collector=service.startCollector({newProfile:true,clock:timer.clock,socketFactory: cfg => {config=cfg;sockets++;return fake as unknown as ReturnType<SocketFactory>;}});
+    assert.throws(()=>service.startCollector({socketFactory:()=>fake as unknown as ReturnType<SocketFactory>}),/ativo/);
+    assert.equal(config!.syncFullHistory,true); assert.equal(config!.shouldSyncHistoryMessage!({syncType:2}),true); assert.equal(config!.markOnlineOnConnect,false); assert.deepEqual(config!.browser?.slice(0,2),['Mac OS','Desktop']);
+    fake.ev.emit('connection.update',{qr:'synthetic-qr-private'}); const expires=collector.snapshot().qrExpiresAt;
+    const pairs=await Promise.all(Array.from({length:4},()=>collector.pairing())); assert.ok(pairs.every(p=>p?.expiresAt===expires && p.image.startsWith('data:image/png;base64,'))); assert.equal(sockets,1);
+    assert.ok(!JSON.stringify(collector.snapshot()).includes('synthetic-qr-private')); timer.advance(20_000); assert.equal(await collector.pairing(),null);
+    fake.ev.emit('connection.update',{qr:'synthetic-next'}); fake.ev.emit('connection.update',{connection:'open'}); assert.equal(await collector.pairing(),null); assert.equal(collector.snapshot().connection,'connected');
+    const message={key:{remoteJid:'a@lid',id:'m',fromMe:false},messageTimestamp:123,message:{conversation:'sintético'}};
+    fake.ev.emit('messaging-history.set',{messages:[message],contacts:[],chats:[],syncType:2});
+    fake.ev.emit('messaging-history.status',{syncType:2,status:'complete',explicit:true}); fake.ev.emit('messages.upsert',{messages:[message],type:'append'});
+    fake.ev.emit('lid-mapping.update',{lid:'a@lid',pn:'a@s.whatsapp.net'}); fake.ev.emit('contacts.update',[{id:'a@lid',name:'Contato'}]);
+    fake.ev.emit('messages.update',[{key:message.key,update:{message:{conversation:'edit'},messageTimestamp:124}}]); await collector.drain();
+    assert.equal(service.archive.getCoverage().uniqueMessages,1); assert.equal(service.archive.getCoverage().historyStatuses.length,1); assert.equal(service.archive.readStoredMessage(message.key)?.text,'edit');
+    assert.deepEqual(await config!.getMessage!(message.key),{conversation:'edit'});
+    fake.ev.emit('messages.delete',{keys:[message.key]}); assert.equal(service.archive.readStoredMessage(message.key)?.revoked,true);
+    await collector.stop(); fake.ev.emit('messages.upsert',{messages:[{...message,key:{...message.key,id:'stale'}}],type:'notify'}); assert.equal(service.archive.getCoverage().uniqueMessages,1); assert.equal(sockets,1);
+  } finally { await service.close(); rmSync(dir,{recursive:true}); }
+});
+
+test('falha de keys.set ou creds.update interrompe coletor sem payload em diagnóstico', async () => {
+  for (const keyFailure of [true,false]) {
+    const dir=mkdtempSync(join(tmpdir(),'zap-auth-fault-'));const service=createService({dataDir:dir});const fake=fakeSocket(); let config: Parameters<SocketFactory>[0] | undefined;
+    try {
+      const collector=service.startCollector({newProfile:true,socketFactory: cfg => {config=cfg;return fake as unknown as ReturnType<SocketFactory>;}});
+      if(keyFailure) {service.authDb.exec("CREATE TRIGGER failure BEFORE INSERT ON whatsapp_keys BEGIN SELECT RAISE(ABORT,'private-secret'); END");assert.throws(()=>config!.auth.keys.set({session:{id:Buffer.from('private-secret')}}));}
+      else {service.authDb.exec("CREATE TRIGGER failure BEFORE UPDATE ON whatsapp_profile BEGIN SELECT RAISE(ABORT,'private-secret'); END");fake.ev.emit('creds.update',{platform:'private-secret'});}
+      assert.equal(collector.snapshot().connection,'disconnected'); assert.ok(!JSON.stringify(collector.snapshot()).includes('private-secret'));assert.equal(fake.ends,1);
+    } finally {await service.close();rmSync(dir,{recursive:true});}
+  }
+});

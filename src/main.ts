@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
+import { acquireServiceLock, createCollector, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -23,18 +24,8 @@ export function createService({ dataDir }: { dataDir: string }) {
     const path = join(dataDir, name);
     if (existsSync(path) && (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink())) throw Error('Arquivo privado inválido');
   }
-  const lockDir = join(dataDir, 'service.lock');
-  try { mkdirSync(lockDir, { mode: 0o700 }); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    let pid: number;
-    try { pid = Number(readFileSync(join(lockDir, 'pid'), 'utf8')); } catch { throw Error('Serviço já ativo ou trava incompleta'); }
-    if (!Number.isSafeInteger(pid) || pid <= 0) throw Error('Trava inválida');
-    try { process.kill(pid, 0); throw Error('Serviço já ativo'); }
-    catch (probe) { if ((probe as NodeJS.ErrnoException).code !== 'ESRCH') throw probe; }
-    rmSync(lockDir, { recursive: true }); mkdirSync(lockDir, { mode: 0o700 });
-  }
-  writeFileSync(join(lockDir, 'pid'), String(process.pid), { mode: 0o600 });
+  const lock = acquireServiceLock(dataDir);
+  let collector: Collector | undefined;
   let archiveDb: Database.Database, authDb: Database.Database, archive: Archive;
   const opened: Database.Database[] = [];
   let auth: ReturnType<typeof createWebAuth>;
@@ -44,7 +35,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   for (const db of [archiveDb, authDb]) db.pragma('foreign_keys = ON');
   auth = createWebAuth(authDb);
   for (const name of ['archive.sqlite', 'auth.sqlite']) chmodSync(join(dataDir, name), 0o600);
-  } catch (error) { for (const db of opened) db.close(); rmSync(lockDir, { recursive: true }); throw error; }
+  } catch (error) { for (const db of opened) db.close(); lock.release(); throw error; }
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -59,10 +50,17 @@ export function createService({ dataDir }: { dataDir: string }) {
   const requireOwner = auth.requireOwner;
   app.get('/api/session', auth.sessionInfo);
   app.post('/login', auth.csrf, auth.login);
-  app.post('/logout', auth.csrf, auth.logout);
+  app.post('/logout', auth.csrf, async (req, res) => { await auth.logout(req, res); collector?.hidePairing(); });
   app.use('/api/status', requireOwner);
+  app.use('/api/qr', requireOwner);
   app.use('/api/conversations', requireOwner);
-  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, lastIngestion: coverage.lastIngestion, coverage }); });
+  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), lastIngestion: coverage.lastIngestion, coverage }); });
+  app.get('/api/qr', async (req, res) => {
+    const pairing = await collector?.pairing();
+    if (!req.session.owner || !authDb.prepare('SELECT 1 FROM web_sessions WHERE id=?').get(req.sessionID)) { res.status(401).json({ error: 'Autenticação necessária' }); return; }
+    if (!pairing) { res.status(409).json({ error: 'QR vigente não disponível' }); return; }
+    res.json(pairing);
+  });
   const signingKey = (authDb.prepare('SELECT value FROM web_config WHERE key = ?').get('signing-secret') as { value: string }).value;
   const encodeCursor = (parts: string[]) => {
     const body = Buffer.from(JSON.stringify(parts)).toString('base64url');
@@ -108,13 +106,19 @@ export function createService({ dataDir }: { dataDir: string }) {
       return id;
     }),
     setPassword(password: string) { return setOwnerPassword(authDb, password); },
-    close() { archiveDb.close(); authDb.close(); rmSync(lockDir, { recursive: true }); }
+    startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) { lock.assert(); if (collector) throw Error('Coletor já ativo'); collector = createCollector({ authDb, archive, lock, ...options }); return collector; },
+    close() {
+      const finish = () => { archiveDb.close(); authDb.close(); lock.release(); };
+      if (collector) return collector.stop().then(finish);
+      finish();
+    }
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
+  if (process.argv.includes('--collect')) throw Error('Coleta real bloqueada: cópia privada e restauração conferidas são obrigatórias');
   const service = createService({ dataDir });
   if (process.argv[2] === 'owner-set') {
     try {
@@ -123,6 +127,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     } finally { service.close(); }
   } else if (process.argv[2] === 'serve') {
     const server = service.app.listen(Number(process.env.PORT ?? 3000), '127.0.0.1');
-    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => server.close(() => { service.close(); }));
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => server.close(() => { void service.close(); }));
   } else { service.close(); throw Error('Comando inválido'); }
 }
