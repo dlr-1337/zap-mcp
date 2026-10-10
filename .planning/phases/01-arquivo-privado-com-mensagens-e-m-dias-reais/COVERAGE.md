@@ -108,7 +108,7 @@ Todos os15 requisitos/20 decisões/24 grupos de pesquisa/Goal e5 critérios est�
 
 | Plan | Wave | Needs | Creates | Checkpoint |
 |---|---|---|---|---|
-| 01-01 | 1 | docs rastreados; nenhum código | package.json, src/main.ts, src/auth.ts, test/tracer.test.ts, public/index.html | não |
+| 01-01 | 1 | docs rastreados; nenhum código | package.json, src/main.ts, src/auth.ts, test/auth.test.ts, public/index.html | não |
 | 01-02 | 2 | 01-01 + src/main.ts | src/archive.ts, test/archive.test.ts, test/revisions.test.ts, test/coverage.test.ts | não |
 | 01-03 | 3 | 01-02 + src/main.ts | src/whatsapp.ts, test/auth-state.test.ts, test/collector.test.ts, test/readonly.test.ts | não |
 | 01-04 | 4 | 01-03 + src/main.ts | src/media.ts, test/media.test.ts, test/recovery.test.ts | não |
