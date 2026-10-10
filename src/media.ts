@@ -153,12 +153,16 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
   reconcileMedia(archive, mediaDir); running.add(archive);
   const dir = mediaDirectory(archive, mediaDir), active = new Map<string, { controller: AbortController; promise: Promise<void> }>();
   const reserved = new Map<string, bigint>();
+  const unknownSize = new Set<string>();
   let stopped = false, diskPaused = false, pauseUntil = 0, diagnostic: string | null = null;
   const space = diskSpace ?? (() => { const s = statfsSync(dir, { bigint: true }); return { free: s.bavail * s.bsize, total: s.blocks * s.bsize }; });
   function budget(except?: string) {
     const { free, total } = space();
     if (typeof free !== 'bigint' || typeof total !== 'bigint' || free < 0n || total <= 0n || free > total) throw Error('Medição de espaço inválida');
     const floor = 256n * 1024n * 1024n, reserve = total / 20n > floor ? total / 20n : floor;
+    // Unknown length claims only current spare capacity, after known commitments and block allocation.
+    let spare = free - reserve - [...reserved].reduce((sum, [id, n]) => sum + (unknownSize.has(id) ? 0n : n), 0n);
+    for (const id of unknownSize) { const prior = reserved.get(id) ?? 0n, current = spare <= 0n ? 0n : prior < spare ? prior : spare; reserved.set(id, current); spare -= current; }
     return free - reserve - [...reserved].reduce((sum, [id, n]) => sum + (id === except ? 0n : n), 0n);
   }
   const noSpace = () => Object.assign(Error('Espaço insuficiente; downloads pausados'), { code: 'ENOSPC' });
@@ -174,6 +178,7 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
       const free = budget();
       if (free <= 0n || size !== null && size > free) { diskPaused = true; diagnostic = 'Espaço insuficiente; downloads pausados, acervo preservado'; onStatus(); return null; }
       reserved.set(row.id, size ?? free);
+      if (size === null) unknownSize.add(row.id);
       archive.db.prepare("UPDATE media_jobs SET state='downloading',attempts=attempts+1,generation=?,lease_until=? WHERE attachment_id=?").run(generation, now() + 120_000, row.id);
       archive.db.prepare("UPDATE attachments SET state='downloading',reason=NULL WHERE id=?").run(row.id);
       return { id: row.id, type: row.type, descriptor, message: { key: stored.key, message: { [row.type]: descriptor } }, attempts: row.attempts + 1, generation };
@@ -236,7 +241,7 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
       if (full) { diskPaused = true; pauseUntil = now() + 5000; diagnostic = 'Espaço insuficiente; downloads pausados, acervo preservado'; for (const a of active.values()) a.controller.abort(); }
       try { failure(archive, job.id, full ? diagnostic! : signal.aborted ? 'Download interrompido; retomada integral pendente' : 'Falha ao obter ou verificar original', job.generation, now() + Math.min(60_000, 1000 * 2 ** (job.attempts - 1))); }
       catch { diagnostic = 'Falha de persistência; mídia não confirmada'; stopped = true; for (const a of active.values()) a.controller.abort(); }
-    } finally { clearTimeout(timeout); if (input && !input.destroyed) { input.on('error', () => {}); input.destroy(); } reserved.delete(job.id); onStatus(); }
+    } finally { clearTimeout(timeout); if (input && !input.destroyed) { input.on('error', () => {}); input.destroy(); } reserved.delete(job.id); unknownSize.delete(job.id); onStatus(); }
   }
   function tick() {
     if (stopped || !online()) return;
