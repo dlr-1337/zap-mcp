@@ -75,6 +75,6 @@ test('migração v2 conserva UUID, referência e texto existentes', t => {
   const db = new Database(join(dir, 'archive.sqlite'));
   db.exec("CREATE TABLE conversations(id TEXT PRIMARY KEY,name TEXT,source_id TEXT); CREATE UNIQUE INDEX conversation_source ON conversations(source_id); CREATE TABLE messages(reference TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),text TEXT NOT NULL,original_timestamp TEXT NOT NULL); CREATE INDEX message_window ON messages(conversation_id,original_timestamp,reference); PRAGMA user_version=2; INSERT INTO conversations VALUES('old-uuid','nome','source'); INSERT INTO messages VALUES('old-ref','old-uuid','texto','2020-01-01T00:00:00.000Z')"); db.close();
   const s = createService({ dataDir: dir }); t.after(() => { s.close(); rmSync(dir, { recursive: true }); });
-  assert.equal(s.archiveDb.pragma('user_version', { simple: true }), 3);
+  assert.equal(s.archiveDb.pragma('user_version', { simple: true }), 4);
   assert.deepEqual(s.archiveDb.prepare('SELECT reference,conversation_id,text FROM messages').get(), { reference: 'old-ref', conversation_id: 'old-uuid', text: 'texto' });
 });

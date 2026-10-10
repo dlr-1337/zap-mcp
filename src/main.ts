@@ -62,7 +62,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.post('/logout', auth.csrf, auth.logout);
   app.use('/api/status', requireOwner);
   app.use('/api/conversations', requireOwner);
-  app.get('/api/status', (_req, res) => res.json({ connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, lastIngestion: null }));
+  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, lastIngestion: coverage.lastIngestion, coverage }); });
   const signingKey = (authDb.prepare('SELECT value FROM web_config WHERE key = ?').get('signing-secret') as { value: string }).value;
   const encodeCursor = (parts: string[]) => {
     const body = Buffer.from(JSON.stringify(parts)).toString('base64url');

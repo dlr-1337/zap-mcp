@@ -7,6 +7,8 @@ function signedOut(message = '') {
   ++readVersion; ++navigationVersion; selected = undefined; listCursor = undefined; messageCursor = undefined;
   $('archive').hidden = true; $('login-panel').hidden = false;
   $('conversations').replaceChildren(); $('messages').replaceChildren();
+  document.getElementById('coverage-batches')?.remove();
+  $('connection').parentElement.querySelector('dl').replaceChildren();
   $('message-title').textContent = 'Mensagens arquivadas';
   $('login-error').textContent = message; $('password').value = '';
   $('password').focus();
@@ -60,12 +62,27 @@ async function openConversation(id, append = false) {
     for (const message of data.messages) {
       const li = document.createElement('li'); const article = document.createElement('article'); li.append(article);
       const header = document.createElement('header'); article.append(header);
-      addText(header, 'p', 'Autor não informado pela origem · Direção não informada pela origem', 'meta');
-      const time = addText(header, 'time', date(message.originalTimestamp), 'meta'); time.dateTime = message.originalTimestamp;
-      const text = addText(article, 'p', message.text); text.dir = 'auto';
-      addText(article, 'p', 'Referência: ' + message.reference + ' · Tipo não informado pela origem', 'meta');
+      addText(header, 'p', (message.author ?? 'Autor não informado pela origem') + ' · ' + (message.fromMe === true ? 'Enviada pelo celular' : message.fromMe === false ? 'Recebida' : 'Direção não informada pela origem'), 'meta');
+      const time = addText(header, 'time', date(message.originalTimestamp), 'meta'); if (message.originalTimestamp) time.dateTime = message.originalTimestamp;
+      const text = addText(article, 'p', message.restricted ? 'Conteúdo restrito — visualização única. Somente metadados foram arquivados.' : message.revoked ? 'Revogação observada. O conteúdo permitido capturado está no histórico abaixo.' : message.orderUncertain ? 'Ordem das alterações incerta. Confira o histórico recebido.' : message.text ?? 'Conteúdo não informado pela origem'); text.dir = 'auto';
+      addText(article, 'p', 'Referência: ' + message.reference + ' · Tipo: ' + (message.type === 'unknown' ? 'Não informado pela origem' : message.type), 'meta');
+      if (message.quote) {
+        addText(article, 'blockquote', message.quote.restricted ? 'Citação restrita — somente metadados.' : message.quote.text ?? 'Mensagem citada não encontrada no acervo.');
+        addText(article, 'p', 'Citação: ' + (message.quote.id ?? 'ID não recebido') + ' · Autor: ' + (message.quote.author ?? 'Não informado pela origem'), 'meta');
+      }
+      for (const attachment of message.attachments ?? []) addText(article, 'p', 'Anexo: ' + (attachment.name ?? 'Nome não informado pela origem') + ' · ' + (attachment.state === 'pending' ? 'Aguardando captura' : attachment.state), 'meta');
       const details = document.createElement('details'); article.append(details);
-      addText(details, 'summary', 'Detalhes da evidência'); addText(details, 'p', 'Instante original: ' + message.originalTimestamp); addText(details, 'p', 'Chave e autoria: Não informado pela origem');
+      addText(details, 'summary', 'Detalhes da evidência'); addText(details, 'p', 'Instante original: ' + (message.originalTimestamp ?? 'Não informado pela origem'));
+      addText(details, 'p', 'Chaves originais recebidas: ' + (message.origins?.length ? JSON.stringify(message.origins) : 'Não informado pela origem'));
+      if (message.identityMappings?.length) addText(details, 'p', 'Mapeamentos recebidos PN/LID: ' + JSON.stringify(message.identityMappings));
+      if (message.expirationSeconds !== null && message.expirationSeconds !== undefined) addText(details, 'p', 'Expiração recebida: ' + message.expirationSeconds + ' segundos. Conteúdo permitido retido no arquivo.');
+      if (message.revisions?.length) {
+        addText(details, 'h3', 'Histórico observado');
+        for (const revision of message.revisions) {
+          addText(details, 'p', revision.kind + ' · Observada em ' + date(revision.observedAt) + ' · Instante da origem: ' + (revision.sourceTimestamp ?? 'Não informado pela origem'), 'meta');
+          addText(details, 'p', revision.restricted ? 'Conteúdo restrito — somente metadados.' : revision.text ?? 'Sem corpo recebido nesta alteração.');
+        }
+      }
       fragment.append(li);
     }
     if (append) $('messages').prepend(fragment); else $('messages').append(fragment);
@@ -85,9 +102,27 @@ function back() {
   link?.focus({ preventScroll: true }); window.scrollTo(0, listPosition); selected = undefined;
 }
 async function enter() {
+  const version = readVersion;
   $('login-panel').hidden = true; $('archive').hidden = false; $('archive-error').textContent = ''; $('retry').hidden = true;
   const response = await request('/api/status'); if (!response.ok) throw Error('server');
-  const data = await response.json(); $('connection').textContent = data.connection === 'disconnected' ? 'WhatsApp desconectado. Você pode consultar o material já arquivado.' : 'Estado recebido: ' + data.connection;
+  const data = await response.json(); if (version !== readVersion) return; $('connection').textContent = data.connection === 'disconnected' ? 'WhatsApp desconectado. Você pode consultar o material já arquivado.' : 'Estado recebido: ' + data.connection;
+  const coverage = data.coverage;
+  if (coverage) {
+    const section = $('connection').parentElement;
+    const dl = section.querySelector('dl'); dl.replaceChildren();
+    addText(dl, 'dt', 'Última ingestão confirmada — America/Sao_Paulo'); addText(dl, 'dd', coverage.lastIngestion ? date(coverage.lastIngestion) : 'Nenhuma ingestão confirmada ainda.');
+    addText(dl, 'dt', 'Intervalo observado — America/Sao_Paulo'); addText(dl, 'dd', coverage.interval.oldest ? date(coverage.interval.oldest) + ' até ' + date(coverage.interval.newest) : 'Intervalo observado ainda desconhecido.');
+    addText(dl, 'dt', 'Mensagens únicas arquivadas'); addText(dl, 'dd', String(coverage.uniqueMessages));
+    let batches = document.getElementById('coverage-batches');
+    if (!batches) { batches = document.createElement('ul'); batches.id = 'coverage-batches'; section.append(batches); } batches.replaceChildren();
+    for (const batch of coverage.batches) {
+      const li = addText(batches, 'li', batch.confirmed + ' de ' + batch.received + ' itens recebidos arquivados neste lote. Falhas: ' + batch.failed + '. Pendentes: ' + batch.pending + '.');
+      if (batch.failed || batch.pending) addText(li, 'p', 'Há itens deste lote ainda não arquivados. Confira as falhas conhecidas.');
+      if (batch.stalled) addText(li, 'p', 'Coleta sem progresso há pelo menos 120 segundos. O acervo anterior permanece disponível.');
+      if (batch.failure) addText(li, 'p', batch.failure);
+    }
+    for (const status of coverage.historyStatuses) addText(batches, 'li', 'Estado recebido do lote: ' + status.status + ' · ' + (status.explicit ? 'Explícito da origem' : 'Inferido por timeout') + '. Não garante histórico integral da conta.');
+  }
   await list(); const id = new URL(location.href).searchParams.get('conversation'); if (id) await openConversation(id);
 }
 $('login-form').addEventListener('submit', async event => {

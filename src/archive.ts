@@ -11,10 +11,10 @@ const bool = (value: unknown) => typeof value === 'boolean' ? value : null;
 const wrappers = ['ephemeralMessage', 'documentWithCaptionMessage', 'editedMessage'];
 const viewWrappers = ['viewOnceMessage', 'viewOnceMessageV2', 'viewOnceMessageV2Extension'];
 const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'];
-type Key = { remoteJid: string | null; id: string | null; fromMe: boolean | null; participant: string | null; remoteJidAlt: string | null; participantAlt: string | null; isViewOnce: boolean | null };
+type Key = { remoteJid: string | null; id: string | null; fromMe: boolean | null; participant: string | null; remoteJidAlt: string | null; participantAlt: string | null; isViewOnce: boolean | null; server_id: string | null; addressingMode: string | null; remoteJidUsername: string | null; participantUsername: string | null };
 function keyOf(input: unknown): Key {
   const k = obj(input);
-  return { remoteJid: str(k.remoteJid), id: str(k.id), fromMe: bool(k.fromMe), participant: str(k.participant), remoteJidAlt: str(k.remoteJidAlt), participantAlt: str(k.participantAlt), isViewOnce: bool(k.isViewOnce) };
+  return { remoteJid: str(k.remoteJid), id: str(k.id), fromMe: bool(k.fromMe), participant: str(k.participant), remoteJidAlt: str(k.remoteJidAlt), participantAlt: str(k.participantAlt), isViewOnce: bool(k.isViewOnce), server_id: str(k.server_id), addressingMode: str(k.addressingMode), remoteJidUsername: str(k.remoteJidUsername), participantUsername: str(k.participantUsername) };
 }
 function seconds(value: unknown): bigint | null {
   try {
@@ -35,10 +35,11 @@ function timestamp(value: unknown, milliseconds = false) {
   const ms = milliseconds ? n : n * 1000n;
   return ms <= 8640000000000000n ? new Date(Number(ms)).toISOString() : null;
 }
-function restricted(input: unknown): boolean {
+function restricted(input: unknown, depth = 0): boolean {
   const m = obj(input);
+  if (m.restricted === true || depth >= 40) return true;
   if (viewWrappers.some(k => m[k] != null) || mediaTypes.some(k => obj(m[k]).viewOnce === true)) return true;
-  return wrappers.some(k => m[k] != null && restricted(obj(m[k]).message));
+  return wrappers.some(k => m[k] != null && restricted(obj(m[k]).message, depth + 1));
 }
 function content(input: unknown): Obj {
   let m = obj(input);
@@ -89,7 +90,7 @@ export function openArchive(dataDir: string) {
   try {
     db.transaction(() => {
       let version = db.pragma('user_version', { simple: true }) as number;
-      if (version > 3) throw Error('Versão do arquivo não suportada');
+      if (version > 4) throw Error('Versão do arquivo não suportada');
       if (version === 0) {
         db.exec('CREATE TABLE conversations(id TEXT PRIMARY KEY,name TEXT,source_id TEXT); CREATE UNIQUE INDEX conversation_source ON conversations(source_id); CREATE TABLE messages(reference TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),text TEXT NOT NULL,original_timestamp TEXT NOT NULL); PRAGMA user_version=2'); version = 2;
       }
@@ -118,6 +119,7 @@ export function openArchive(dataDir: string) {
         CREATE TABLE batch_items(batch_id TEXT NOT NULL REFERENCES batches(id),position INTEGER NOT NULL,payload BLOB NOT NULL,state TEXT NOT NULL DEFAULT 'pending',PRIMARY KEY(batch_id,position));
         PRAGMA user_version=3;
       `);
+      if (version <= 3) db.exec('CREATE TABLE history_statuses(sync_type INTEGER NOT NULL,status TEXT NOT NULL,explicit INTEGER NOT NULL,observed_at TEXT NOT NULL,PRIMARY KEY(sync_type,status,explicit)); PRAGMA user_version=4');
     })();
     if (db.pragma('integrity_check', { simple: true }) !== 'ok' || (db.pragma('foreign_key_check') as unknown[]).length) throw Error('Arquivo inconsistente');
   } catch (error) { db.close(); throw error; }
@@ -239,8 +241,14 @@ export function openArchive(dataDir: string) {
         db.prepare('INSERT INTO batch_items(batch_id,position,payload) VALUES(?,?,?)').run(id, i, serialize(safe));
       });
     })();
-    messages.forEach((input, i) => {
+    processBatch(id, kind);
+    return id;
+  }
+  function processBatch(id: string, kind: string) {
+    const items = db.prepare("SELECT position,payload FROM batch_items WHERE batch_id=? AND state='pending' ORDER BY position").all(id) as { position: number; payload: Buffer }[];
+    items.forEach(({ position: i, payload }) => {
       try { db.transaction(() => {
+        const input = deserialize(payload) as unknown;
         if (kind === 'update') {
           const e = obj(input), update = obj(e.update);
           const updated = Object.hasOwn(update, 'message');
@@ -252,7 +260,6 @@ export function openArchive(dataDir: string) {
       catch { db.transaction(() => { db.prepare("UPDATE batch_items SET state='failed' WHERE batch_id=? AND position=?").run(id, i); db.prepare("UPDATE batches SET failed=failed+1,failure='Falha de persistência do item' WHERE id=?").run(id); })(); }
     });
     db.prepare('UPDATE batches SET completed_at=? WHERE id=?').run(now(), id);
-    return id;
   }
   function resolveConversation(id: string) { return (db.prepare('SELECT target_id FROM conversation_redirects WHERE old_id=?').get(id) as { target_id: string } | undefined)?.target_id ?? id; }
   function dto(reference: string) {
@@ -262,8 +269,10 @@ export function openArchive(dataDir: string) {
     const evidence = row.evidence ? JSON.parse(row.evidence) as Obj : { type: 'unknown', text: row.text };
     const origins = (db.prepare('SELECT key_json FROM origins WHERE reference=? ORDER BY rowid').all(redirected) as { key_json: string }[]).map(o => JSON.parse(o.key_json) as Key);
     const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => ({ kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at, ...JSON.parse(r.evidence) as Obj }));
+    const identities = new Set(origins.flatMap(k => [k.remoteJid, k.participant, k.remoteJidAlt, k.participantAlt]).filter(k => k !== null));
+    const identityMappings = (db.prepare('SELECT jid,alternate FROM identity_evidence').all() as { jid: string; alternate: string }[]).filter(m => identities.has(m.jid) || identities.has(m.alternate));
     const attachments = db.prepare('SELECT id,type,name,mime_type AS mimeType,state FROM attachments WHERE reference=? ORDER BY rowid').all(redirected);
-    return { ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments };
+    return { ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments };
   }
   function locate(input: unknown) {
     if (typeof input === 'string') return input;
@@ -272,12 +281,16 @@ export function openArchive(dataDir: string) {
   }
   function getCoverage() {
     return db.transaction(() => {
-      const span = db.prepare('SELECT count(*) AS uniqueMessages,min(original_timestamp) AS oldestTimestamp,max(original_timestamp) AS newestTimestamp FROM messages').get() as Obj;
+      const span = db.prepare('SELECT count(*) AS uniqueMessages,min(original_timestamp) AS oldestTimestamp,max(original_timestamp) AS newestTimestamp FROM messages').get() as { uniqueMessages: number; oldestTimestamp: string | null; newestTimestamp: string | null };
       const last = db.prepare('SELECT max(last_progress) AS value FROM batches WHERE confirmed>0').get() as { value: string | null };
       const batches = db.prepare('SELECT id,kind,received,confirmed,failed,received-confirmed-failed AS pending,received_at AS receivedAt,last_progress AS lastProgress,completed_at AS completedAt,is_latest AS isLatest,metadata,failure FROM batches ORDER BY rowid').all() as Obj[];
-      return { ...span, lastIngestion: last.value, batches, completeAccount: false };
+      const safeBatches = batches.map(b => ({ ...b, isLatest: b.isLatest === null ? null : Boolean(b.isLatest), metadata: JSON.parse(b.metadata as string) as Obj, stalled: b.completedAt === null && Date.now() - Date.parse((b.lastProgress ?? b.receivedAt) as string) >= 120_000 }));
+      const statuses = db.prepare('SELECT sync_type AS syncType,status,explicit,observed_at AS observedAt FROM history_statuses ORDER BY observed_at,rowid').all() as Obj[];
+      return { ...span, interval: { oldest: span.oldestTimestamp, newest: span.newestTimestamp }, lastIngestion: last.value, batches: safeBatches, historyStatuses: statuses.map(s => ({ ...s, explicit: Boolean(s.explicit) })), completeAccount: false, watchdogSeconds: 120 };
     })();
   }
+  try { for (const batch of db.prepare('SELECT id,kind FROM batches WHERE completed_at IS NULL ORDER BY rowid').all() as { id: string; kind: string }[]) processBatch(batch.id, batch.kind); }
+  catch (error) { db.close(); throw error; }
   return {
     db,
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
@@ -286,6 +299,10 @@ export function openArchive(dataDir: string) {
     },
     ingestUpsert(event: { messages: readonly unknown[]; type: string }) { return ingestBatch(event.type, event.messages); },
     ingestUpdates(event: readonly unknown[]) { return ingestBatch('update', event); },
+    ingestHistoryStatus(event: { syncType: number; status: 'complete' | 'paused'; explicit: boolean }) {
+      if (!Number.isSafeInteger(event.syncType) || !['complete', 'paused'].includes(event.status) || typeof event.explicit !== 'boolean') throw Error('Estado de lote inválido');
+      db.prepare('INSERT OR IGNORE INTO history_statuses VALUES(?,?,?,?)').run(event.syncType, event.status, Number(event.explicit), now());
+    },
     ingestContacts: db.transaction((event: readonly unknown[] | Obj) => { for (const c of Array.isArray(event) ? event : [event]) ingestIdentity(c); }),
     ingestGroups: db.transaction((event: readonly unknown[]) => { for (const c of event) ingestIdentity(c, true); }),
     readStoredMessage(input: unknown) { const ref = locate(input); return ref ? dto(ref) : null; },
