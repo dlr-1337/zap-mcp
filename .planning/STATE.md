@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Arquivo privado com mensagens e mídias reais
 status: executing
-stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-10-10T20:51:13.105Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-10T21:07:50.859Z"
 last_activity: 2026-10-10
-last_activity_desc: Repositório público github.com/dlr-1337/zap-mcp criado e publicado em main; planejamento e configuração salvos, nenhum requisito implementado.
-state_head: 067b99fe5c0deb7d2c6576363c45fa9775359c12
+last_activity_desc: Phase 1 execution started
+state_head: e8ed1a41416e1bf2c47d30ade06b9398cc35bc50
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 7
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-10)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase 1 — Arquivo privado com mensagens e mídias reais.
+**Current focus:** Phase 1 — Arquivo privado com mensagens e mídias reais
 
 ## Current Position
 
-Phase: 1 (Arquivo privado com mensagens e mídias reais) — READY TO EXECUTE
-Plan: 0 of 0 in current phase (não planejado)
+Phase: 1 (Arquivo privado com mensagens e mídias reais) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-10-10 — Repositório público github.com/dlr-1337/zap-mcp criado e publicado em main; planejamento e configuração salvos, nenhum requisito implementado.
+Last activity: 2026-10-10 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -54,6 +54,12 @@ Progress: [░░░░░░░░░░] 0%
 - Last 5 plans: Nenhum plano executado
 - Trend: Ainda não mensurada
 
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 12min | 3 tasks | 10 files |
+
 ## Accumulated Context
 
 ### Decisions
@@ -65,6 +71,8 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - Captura de bytes começa junto da ingestão na Phase 1; acervo, proveniência e faltantes permanecem consultáveis offline.
 - Privacidade desde a primeira exposição e snapshot recuperável antes do piloto; backup contínuo fora da VPS e restore têm responsabilidade final na Phase 4.
 - Cliente obrigatório: Codex do usuário, bearer revogável e arquivo conferido por bytes/hash; Baileys fixado prerelease e SDK MCP v2 pesquisados exigem revalidação/compatibilidade real.
+- [Phase 01]: Node24.21.0 isolado via mise exec; Node global26 inalterado, todos comandos de produto exigem runtime24.
+- [Phase 01]: Plano01-01 comprovado por nove testes HTTP/SQLite e QA browser sintético; requisitos v1 permanecem pendentes até integrações e conta real.
 
 ### Pending Todos
 
@@ -87,6 +95,6 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-10T20:22:09.783Z
-Stopped at: Phase 1 UI-SPEC approved
-Resume file: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-UI-SPEC.md
+Last session: 2026-10-10T21:07:50.835Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None

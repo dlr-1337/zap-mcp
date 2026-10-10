@@ -28,6 +28,14 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 5. O proprietário vê última sincronização, intervalo observado, falhas, edições/revogações com momento de observação e o conteúdo anteriormente capturado identificado como histórico; tipos desconhecidos e conteúdo temporário não recuperado permanecem explícitos. A comparação com o celular registra a cobertura realmente observada, e ausência é descrita como “não encontrado no acervo”, sem promessa de histórico integral.
 
 **Plans**: 0 (não planejados)
+- [x] 01-01-PLAN.md
+- [ ] 01-02-PLAN.md
+- [ ] 01-03-PLAN.md
+- [ ] 01-04-PLAN.md
+- [ ] 01-05-PLAN.md
+- [ ] 01-06-PLAN.md
+- [ ] 01-07-PLAN.md
+
 **UI hint**: yes
 
 **Condições do piloto:** Preparar e conferir uma cópia privada recuperável antes de vincular a conta ou acumular dados reais, antecipando a proteção de OPS-02 sem duplicar sua responsabilidade final. O pareamento exige o celular do usuário para ler o QR. Fixtures não substituem a conversa e as mídias reais conhecidas; uma lacuna essencial deve ser registrada e ter sua viabilidade resolvida antes de avançar à interface completa. Revalidar a tag/release Baileys recomendada, `7.0.0-rc14` fixada e ainda prerelease, suas correções, persistência de todas as chaves, PN/LID e semântica dos eventos antes de instalar e pilotar. Definir a retenção de alterações e conteúdo temporário antes da ingestão; visualização única ou material indisponível não será contornado.
@@ -101,7 +109,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Arquivo privado com mensagens e mídias reais | 0/0 | Not started | - |
+| 1. Arquivo privado com mensagens e mídias reais | 1/7 | In Progress | - |
 | 2. Busca, contexto, abas e exportação no site | 0/0 | Not started | - |
 | 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
