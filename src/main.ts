@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createWebAuth, setOwnerPassword } from './auth.js';
+import { openArchive, type Archive } from './archive.js';
 import Database from 'better-sqlite3';
 import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -34,28 +35,13 @@ export function createService({ dataDir }: { dataDir: string }) {
     rmSync(lockDir, { recursive: true }); mkdirSync(lockDir, { mode: 0o700 });
   }
   writeFileSync(join(lockDir, 'pid'), String(process.pid), { mode: 0o600 });
-  let archiveDb: Database.Database, authDb: Database.Database;
+  let archiveDb: Database.Database, authDb: Database.Database, archive: Archive;
   const opened: Database.Database[] = [];
   let auth: ReturnType<typeof createWebAuth>;
   try {
-  archiveDb = new Database(join(dataDir, 'archive.sqlite')); opened.push(archiveDb);
+  archive = openArchive(dataDir); archiveDb = archive.db; opened.push(archiveDb);
   authDb = new Database(join(dataDir, 'auth.sqlite')); opened.push(authDb);
   for (const db of [archiveDb, authDb]) db.pragma('foreign_keys = ON');
-  archiveDb.transaction(() => {
-    if (archiveDb.pragma('user_version', { simple: true }) === 0) {
-      archiveDb.exec('CREATE TABLE conversations(id TEXT PRIMARY KEY, name TEXT); CREATE TABLE messages(reference TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), text TEXT NOT NULL, original_timestamp TEXT NOT NULL); PRAGMA user_version = 1');
-    }
-    if ((archiveDb.pragma('user_version', { simple: true }) as number) < 2) {
-      archiveDb.exec('ALTER TABLE conversations ADD COLUMN source_id TEXT; CREATE UNIQUE INDEX conversation_source ON conversations(source_id); PRAGMA defer_foreign_keys = ON');
-      const prior = archiveDb.prepare('SELECT id FROM conversations').all() as { id: string }[];
-      for (const row of prior) {
-        const id = randomUUID();
-        archiveDb.prepare('UPDATE conversations SET id = ?, source_id = ? WHERE id = ?').run(id, row.id, row.id);
-        archiveDb.prepare('UPDATE messages SET conversation_id = ? WHERE conversation_id = ?').run(id, row.id);
-      }
-      archiveDb.exec('CREATE INDEX message_window ON messages(conversation_id, original_timestamp, reference); PRAGMA user_version = 2');
-    }
-  })();
   auth = createWebAuth(authDb);
   for (const name of ['archive.sqlite', 'auth.sqlite']) chmodSync(join(dataDir, name), 0o600);
   } catch (error) { for (const db of opened) db.close(); rmSync(lockDir, { recursive: true }); throw error; }
@@ -96,19 +82,15 @@ export function createService({ dataDir }: { dataDir: string }) {
   };
   app.get('/api/conversations', (req, res) => {
     const cursor = decodeCursor(req.query.cursor, 'conversations', '');
-    const rows = archiveDb.prepare('SELECT c.id, c.name, (SELECT max(original_timestamp) FROM messages WHERE conversation_id = c.id) AS lastTimestamp FROM conversations c WHERE c.id > ? ORDER BY c.id LIMIT 51').all(cursor?.[2] ?? '') as { id: string; name: string | null; lastTimestamp: string | null }[];
-    const conversations = rows.slice(0, 50);
-    res.json({ conversations, nextCursor: rows.length > 50 ? encodeCursor(['conversations', '', conversations.at(-1)!.id]) : null });
+    const page = archive.listConversations({ cursor: cursor?.[2] });
+    res.json({ conversations: page.conversations, nextCursor: page.nextCursor ? encodeCursor(['conversations', '', page.nextCursor]) : null });
   });
   app.get('/api/conversations/:id/messages', (req, res) => {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
-    const conversation = archiveDb.prepare('SELECT id, name FROM conversations WHERE id = ?').get(req.params.id);
-    if (!conversation) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
     const cursor = decodeCursor(req.query.cursor, 'messages', req.params.id);
-    const rows = archiveDb.prepare('SELECT reference, text, original_timestamp AS originalTimestamp FROM messages WHERE conversation_id = ? AND (? IS NULL OR (original_timestamp, reference) < (?, ?)) ORDER BY original_timestamp DESC, reference DESC LIMIT 101').all(req.params.id, cursor?.[2] ?? null, cursor?.[2] ?? '', cursor?.[3] ?? '') as { reference: string; text: string; originalTimestamp: string }[];
-    const page = rows.slice(0, 100);
-    const oldest = page.at(-1);
-    res.json({ conversation, messages: page.reverse(), nextCursor: rows.length > 100 ? encodeCursor(['messages', req.params.id, oldest!.originalTimestamp, oldest!.reference]) : null });
+    const page = archive.readConversation(req.params.id, { cursor: cursor ? { timestamp: cursor[2], reference: cursor[3] } : undefined });
+    if (!page) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
+    res.json({ ...page, nextCursor: page.nextCursor ? encodeCursor(['messages', req.params.id, page.nextCursor.timestamp, page.nextCursor.reference]) : null });
   });
   const publicDir = fileURLToPath(new URL('../../public/', import.meta.url));
   for (const [route, filename] of [['/', 'index.html'], ['/app.js', 'app.js'], ['/style.css', 'style.css']]) {
@@ -116,13 +98,13 @@ export function createService({ dataDir }: { dataDir: string }) {
   }
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => { const status = (error as { status?: number }).status; res.status(status === 413 ? 413 : status === 400 ? 400 : 500).json({ error: 'Solicitação não concluída' }); });
   return {
-    app, archiveDb, authDb,
+    app, archiveDb, archive, authDb,
     writeMessage: archiveDb.transaction((message: StoredMessage) => {
       if (typeof message.text !== 'string' || !message.reference || !message.conversationId || !Number.isFinite(Date.parse(message.originalTimestamp))) throw Error('Mensagem inválida');
       const existing = archiveDb.prepare('SELECT id FROM conversations WHERE source_id = ?').get(message.conversationId) as { id: string } | undefined;
       const id = existing?.id ?? randomUUID();
       archiveDb.prepare('INSERT INTO conversations(id, name, source_id) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET name = excluded.name').run(id, message.conversationName, message.conversationId);
-      archiveDb.prepare('INSERT INTO messages VALUES (?, ?, ?, ?) ON CONFLICT(reference) DO NOTHING').run(message.reference, id, message.text, message.originalTimestamp);
+      archiveDb.prepare('INSERT INTO messages(reference,conversation_id,text,original_timestamp) VALUES (?, ?, ?, ?) ON CONFLICT(reference) DO NOTHING').run(message.reference, id, message.text, message.originalTimestamp);
       return id;
     }),
     setPassword(password: string) { return setOwnerPassword(authDb, password); },
