@@ -2,12 +2,13 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { createWebAuth, setOwnerPassword } from './auth.js';
 import { openArchive, type Archive } from './archive.js';
 import Database from 'better-sqlite3';
-import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync, createReadStream } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
+import { startMediaWorker, openVerifiedAttachment } from './media.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -26,6 +27,8 @@ export function createService({ dataDir }: { dataDir: string }) {
   }
   const lock = acquireServiceLock(dataDir);
   let collector: Collector | undefined;
+  let mediaWorker: ReturnType<typeof startMediaWorker> | undefined;
+  const mediaDir = join(dataDir, 'media');
   let archiveDb: Database.Database, authDb: Database.Database, archive: Archive;
   const opened: Database.Database[] = [];
   let auth: ReturnType<typeof createWebAuth>;
@@ -54,7 +57,27 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.use('/api/status', requireOwner);
   app.use('/api/qr', requireOwner);
   app.use('/api/conversations', requireOwner);
-  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), lastIngestion: coverage.lastIngestion, coverage }); });
+  app.use('/api/attachments', requireOwner);
+  app.get('/api/attachments/:id', (req, res, next) => {
+    const file = openVerifiedAttachment(archive, mediaDir, req.params.id);
+    if (!file) { res.status(404).json({ error: 'Original disponível não encontrado no acervo' }); return; }
+    let start = 0, end = file.size - 1;
+    if (req.headers.range) {
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+      if (!range || !range[1] && !range[2]) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
+      if (!range[1]) { const tail = Number(range[2]); start = Math.max(0, file.size - tail); if (!tail) start = file.size; }
+      else { start = Number(range[1]); if (range[2]) end = Math.min(end, Number(range[2])); }
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start < 0 || start >= file.size) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
+      res.status(206).set('Content-Range', `bytes ${start}-${end}/${file.size}`);
+    }
+    const name = (file.attachment.name ?? 'original').replace(/[\u0000-\u001f\u007f/\\]/g, '_').slice(0, 180);
+    const encoded = encodeURIComponent(name).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
+    res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
+    if (req.method === 'HEAD' || file.size === 0) { closeSync(file.fd); res.end(); return; }
+    const stream = createReadStream('', { fd: file.fd, autoClose: true, start, end });
+    res.on('close', () => stream.destroy()); stream.on('error', error => { if (res.headersSent) res.destroy(); else next(error); }); stream.pipe(res);
+  });
+  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });
   app.get('/api/qr', async (req, res) => {
     const pairing = await collector?.pairing();
     if (!req.session.owner || !authDb.prepare('SELECT 1 FROM web_sessions WHERE id=?').get(req.sessionID)) { res.status(401).json({ error: 'Autenticação necessária' }); return; }
@@ -106,10 +129,15 @@ export function createService({ dataDir }: { dataDir: string }) {
       return id;
     }),
     setPassword(password: string) { return setOwnerPassword(authDb, password); },
-    startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) { lock.assert(); if (collector) throw Error('Coletor já ativo'); collector = createCollector({ authDb, archive, lock, ...options }); return collector; },
+    startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
+      lock.assert(); if (collector) throw Error('Coletor já ativo');
+      collector = createCollector({ authDb, archive, lock, ...options });
+      mediaWorker = startMediaWorker({ archive, mediaDir, online: () => collector?.snapshot().connection === 'connected', downloadOriginal: (job, signal) => collector!.downloadOriginal(job, signal) });
+      return collector;
+    },
     close() {
       const finish = () => { archiveDb.close(); authDb.close(); lock.release(); };
-      if (collector) return collector.stop().then(finish);
+      if (collector) return mediaWorker!.stop().then(() => collector!.stop()).then(finish);
       finish();
     }
   };

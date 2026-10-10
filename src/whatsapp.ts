@@ -1,10 +1,11 @@
-import { BufferJSON, initAuthCreds, proto, makeWASocket, Browsers, type AuthenticationState, type SignalDataSet, type SignalDataTypeMap, type BaileysEventMap, type BaileysEventEmitter, type SocketConfig } from '@whiskeysockets/baileys';
+import { BufferJSON, initAuthCreds, proto, makeWASocket, Browsers, downloadMediaMessage, type WAMessage, type AuthenticationState, type SignalDataSet, type SignalDataTypeMap, type BaileysEventMap, type BaileysEventEmitter, type SocketConfig } from '@whiskeysockets/baileys';
 import type Database from 'better-sqlite3';
 import { mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, lstatSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Archive } from './archive.js';
 import QRCode from 'qrcode';
+import { mediaDispatcher, type MediaJob } from './media.js';
 
 function processStart(pid: number) {
   const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
@@ -90,7 +91,7 @@ export function createAuthState(db: Database.Database, { newProfile = false, onF
   } };
 }
 
-type Socket = { ev: BaileysEventEmitter; end(error: Error | undefined): void };
+type Socket = { ev: BaileysEventEmitter; end(error: Error | undefined): void; updateMediaMessage?: (message: WAMessage) => Promise<WAMessage> };
 export type SocketFactory = (config: Parameters<typeof makeWASocket>[0]) => Socket;
 export type CollectorState = 'awaiting-pairing' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'invalid-session';
 export type Clock = { now(): number; setTimeout(fn: () => void, ms: number): ReturnType<typeof setTimeout>; clearTimeout(id: ReturnType<typeof setTimeout>): void; random(): number };
@@ -175,6 +176,24 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
   try { connect(); } catch (error) { stopped = true; retire(); lock.releaseCollector(); throw Error('Não foi possível iniciar coletor'); }
   return {
     snapshot,
+    async downloadOriginal(job: MediaJob, signal: AbortSignal) {
+      const current = socket, token = generation;
+      if (!current || stopped || state !== 'connected') throw Error('Coletor desconectado');
+      const message = { ...job.message, message: { [job.type]: { ...job.descriptor, url: job.descriptor.url ?? 'https://mmg.whatsapp.net' } } } as unknown as WAMessage;
+      const options = { options: { signal, dispatcher: mediaDispatcher(signal) } as RequestInit };
+      const renew = async (value: WAMessage) => {
+        signal.throwIfAborted();
+        if (!current.updateMediaMessage || current !== socket || token !== generation || state !== 'connected') throw Error('Renovação indisponível');
+        const renewed = await current.updateMediaMessage(value);
+        if (current !== socket || token !== generation) throw Error('Conexão mudou');
+        // Copy only refreshed locators; restrictions and integrity stay pinned to the stored descriptor.
+        const node = renewed.message?.[job.type as 'imageMessage'] as { url?: string | null; directPath?: string | null } | undefined;
+        return { ...message, message: { [job.type]: { ...job.descriptor, url: node?.url ?? message.message?.[job.type as 'imageMessage']?.url, directPath: node?.directPath ?? job.descriptor.directPath } } } as WAMessage;
+      };
+      const stream = await downloadMediaMessage(message, 'stream', options, { logger: silent, reuploadRequest: renew });
+      if (current !== socket || token !== generation || signal.aborted) { stream.on('error', () => {}); stream.destroy(); throw Error('Conexão mudou'); }
+      return stream;
+    },
     async pairing() {
       const current = qr; if (!current || current.expiresAt <= clock.now()) return null;
       const image = await QRCode.toDataURL(current.value);

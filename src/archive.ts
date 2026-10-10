@@ -5,6 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { serialize, deserialize } from 'node:v8';
 
 type Obj = Record<string, unknown>;
+export type Attachment = { id: string; reference: string; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
 const obj = (value: unknown): Obj => value && typeof value === 'object' && !Array.isArray(value) ? value as Obj : {};
 const str = (value: unknown) => typeof value === 'string' && value.length ? value : null;
 const bool = (value: unknown) => typeof value === 'boolean' ? value : null;
@@ -90,7 +91,7 @@ export function openArchive(dataDir: string) {
   try {
     db.transaction(() => {
       let version = db.pragma('user_version', { simple: true }) as number;
-      if (version > 4) throw Error('Versão do arquivo não suportada');
+      if (version > 5) throw Error('Versão do arquivo não suportada');
       if (version === 0) {
         db.exec('CREATE TABLE conversations(id TEXT PRIMARY KEY,name TEXT,source_id TEXT); CREATE UNIQUE INDEX conversation_source ON conversations(source_id); CREATE TABLE messages(reference TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),text TEXT NOT NULL,original_timestamp TEXT NOT NULL); PRAGMA user_version=2'); version = 2;
       }
@@ -120,6 +121,16 @@ export function openArchive(dataDir: string) {
         PRAGMA user_version=3;
       `);
       if (version <= 3) db.exec('CREATE TABLE history_statuses(sync_type INTEGER NOT NULL,status TEXT NOT NULL,explicit INTEGER NOT NULL,observed_at TEXT NOT NULL,PRIMARY KEY(sync_type,status,explicit)); PRAGMA user_version=4');
+      if (version <= 4) db.exec(`
+        ALTER TABLE attachments ADD COLUMN reason TEXT;
+        ALTER TABLE attachments ADD COLUMN size INTEGER;
+        ALTER TABLE attachments ADD COLUMN sha256 TEXT;
+        ALTER TABLE attachments ADD COLUMN source_hash_verified INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE media_jobs ADD COLUMN generation TEXT;
+        ALTER TABLE media_jobs ADD COLUMN lease_until INTEGER;
+        ALTER TABLE media_jobs ADD COLUMN retry_at INTEGER NOT NULL DEFAULT 0;
+        PRAGMA user_version=5;
+      `);
     })();
     if (db.pragma('integrity_check', { simple: true }) !== 'ok' || (db.pragma('foreign_key_check') as unknown[]).length) throw Error('Arquivo inconsistente');
   } catch (error) { db.close(); throw error; }
@@ -226,8 +237,9 @@ export function openArchive(dataDir: string) {
       const m = content(source.message), type = mediaTypes.find(k => m[k] != null);
       if (type) {
         const id = randomUUID(), node = obj(m[type]);
-        db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?,?,?,?)').run(id, reference, inserted.lastInsertRowid, type, str(node.fileName), str(node.mimetype), 'pending', serialize(permitted(node)));
-        db.prepare('INSERT INTO media_jobs(id,attachment_id) VALUES(?,?)').run(randomUUID(), id);
+        const eligible = Boolean((str(node.url) || str(node.directPath)) && (node.mediaKey instanceof Uint8Array) && node.mediaKey.length === 32);
+        db.prepare('INSERT INTO attachments(id,reference,revision_id,type,name,mime_type,state,descriptor,reason) VALUES(?,?,?,?,?,?,?,?,?)').run(id, reference, inserted.lastInsertRowid, type, str(node.fileName), str(node.mimetype), eligible ? 'pending' : 'unavailable', serialize(permitted(node)), eligible ? null : 'Original não recebido; miniatura não satisfaz anexo');
+        if (eligible) db.prepare('INSERT INTO media_jobs(id,attachment_id) VALUES(?,?)').run(randomUUID(), id);
       }
     }
     project(reference);
@@ -273,7 +285,7 @@ export function openArchive(dataDir: string) {
     const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => ({ kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at, ...JSON.parse(r.evidence) as Obj }));
     const identities = new Set(origins.flatMap(k => [k.remoteJid, k.participant, k.remoteJidAlt, k.participantAlt]).filter(k => k !== null));
     const identityMappings = (db.prepare('SELECT jid,alternate FROM identity_evidence').all() as { jid: string; alternate: string }[]).filter(m => identities.has(m.jid) || identities.has(m.alternate));
-    const attachments = db.prepare('SELECT id,type,name,mime_type AS mimeType,state FROM attachments WHERE reference=? ORDER BY rowid').all(redirected);
+    const attachments = (db.prepare('SELECT id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string }[]).map(a => getAttachment(a.id));
     return { ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments };
   }
   function locate(input: unknown) {
@@ -293,6 +305,11 @@ export function openArchive(dataDir: string) {
   }
   try { for (const batch of db.prepare('SELECT id,kind FROM batches WHERE completed_at IS NULL ORDER BY rowid').all() as { id: string; kind: string }[]) processBatch(batch.id, batch.kind); }
   catch (error) { db.close(); throw error; }
+  function getAttachment(id: string): Attachment | null {
+    const row = db.prepare('SELECT a.id,a.reference,a.type,a.name,a.mime_type AS mimeType,a.state,a.reason,a.size,a.sha256,a.source_hash_verified AS verified,coalesce(j.attempts,0) AS attempts FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.id=?').get(id) as (Omit<Attachment, 'sourceHashVerified'> & { verified: number }) | undefined;
+    if (!row) return null;
+    const { verified, ...safe } = row; return { ...safe, sourceHashVerified: Boolean(verified) };
+  }
   return {
     db,
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
@@ -327,7 +344,7 @@ export function openArchive(dataDir: string) {
       const page = rows.slice(0, size), oldest = page.at(-1);
       return { conversation, messages: page.reverse().map(m => dto(m.reference)), nextCursor: rows.length > size ? { timestamp: oldest!.original_timestamp ?? '', reference: oldest!.reference } : null };
     },
-    getAttachment(id: string) { return db.prepare('SELECT id,reference,type,name,mime_type AS mimeType,state FROM attachments WHERE id=?').get(id) ?? null; },
+    getAttachment,
     getCoverage,
     close() { db.close(); }
   };
