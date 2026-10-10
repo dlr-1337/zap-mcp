@@ -87,7 +87,7 @@ function messageItem(message) {
   if (message.expirationSeconds != null) addText(article, 'p', 'Mensagem temporária; conteúdo capturado enquanto disponível.');
   if (message.quote) {
     const quote = addText(article, 'blockquote', message.quote.restricted ? 'Visualização única — conteúdo indisponível; somente metadados recebidos.' : message.quote.text ?? unknown); quote.dir = 'auto';
-    detail(quote, 'Autor recebido', message.quote.author); detail(quote, 'Referência recebida', message.quote.id); addText(quote, 'p', 'Citação recebida; original não encontrado no acervo.');
+    detail(quote, 'Autor recebido', message.quote.author); detail(quote, 'Referência recebida', message.quote.id); addText(quote, 'p', 'Citação recebida; original ainda não relacionado/conferido.');
   }
   for (const attachment of message.attachments ?? []) if (attachment) attachmentBlock(article, attachment);
   evidence(article, message); return li;

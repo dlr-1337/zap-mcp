@@ -146,7 +146,7 @@ Accent reserved for: botão “Entrar no acervo”, link “Baixar original”, 
 | Direções conhecidas | Recebida / Enviada pelo celular |
 | Direção desconhecida | Direção não informada pela origem |
 | Tipo desconhecido | Tipo não reconhecido; conteúdo disponível limitado aos campos recebidos. |
-| Citação incompleta | Citação recebida; original não encontrado no acervo. |
+| Citação incompleta | Citação recebida; original ainda não relacionado/conferido. |
 | Mensagem editada | Editada; alteração observada em {data}. |
 | Mensagem revogada | Revogada no WhatsApp; revogação observada em {data}. |
 | Histórico de alterações | Ver histórico recebido |
