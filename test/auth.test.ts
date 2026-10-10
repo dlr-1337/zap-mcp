@@ -76,3 +76,78 @@ test('autentica e reabre mensagem persistida', async () => {
     assert.equal((await fetch(service.base + '/ingest', { method: 'POST' })).status, 404);
   } finally { await service.stop(); rmSync(dir, { recursive: true }); }
 });
+
+test('logout duplo revoga sessão sem tocar acervo', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-logout-')); const service = await start(dir);
+  try {
+    await service.setPassword(password);
+    service.writeMessage({ reference: 'm', conversationId: 'c', conversationName: null, text: 'preservar', originalTimestamp: '2026-10-10T00:00:00.000Z' });
+    const auth = await login(service.base); const challenge = await form(service.base, auth.cookie);
+    const request = () => fetch(service.base + '/logout', { method: 'POST', headers: { Cookie: auth.cookie, Origin: service.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ csrfToken: challenge.token }) });
+    const result = await request(); assert.equal(result.status, 200, 'logout deve destruir a sessão');
+    assert.match(result.headers.get('set-cookie')!, /Expires=Thu, 01 Jan 1970/);
+    assert.equal((await request()).status, 403);
+    const reads = await Promise.all(Array.from({ length: 4 }, () => fetch(service.base + '/api/conversations/c/messages', { headers: { Cookie: auth.cookie } })));
+    assert.ok(reads.every(r => r.status === 401));
+    assert.equal((service.archiveDb.prepare('SELECT text FROM messages').get() as { text: string }).text, 'preservar');
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('login concorrente e cinco tentativas por janela são limitados', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-limits-')); let service = await start(dir);
+  try {
+    await service.setPassword(password);
+    const challenges = await Promise.all(Array.from({ length: 6 }, () => form(service.base)));
+    const results = await Promise.all(challenges.map(c => fetch(service.base + '/login', { method: 'POST', headers: { Cookie: c.cookie, Origin: service.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password, csrfToken: c.token }) })));
+    assert.ok(results.filter(r => r.status === 200).length <= 2, 'no máximo duas derivações simultâneas');
+    assert.ok(results.some(r => r.status === 429));
+    for (const response of results.filter(r => r.status === 429)) assert.ok(Number(response.headers.get('Retry-After')) > 0);
+    await service.stop(); service = await start(dir);
+    for (let n = 0; n < 6; n++) {
+      const r = await login(service.base, 'errada');
+      if (n === 5) assert.equal(r.response.status, 429, 'janela persiste após restart');
+    }
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('reset revoga IDs e preserva acervo e auth WhatsApp; Unicode exato', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-reset-')); const service = await start(dir);
+  try {
+    await service.setPassword(password);
+    service.authDb.exec('CREATE TABLE whatsapp_fixture(value TEXT); INSERT INTO whatsapp_fixture VALUES (\'synthetic-state\')');
+    service.writeMessage({ reference: 'm-reset', conversationId: 'c-reset', conversationName: null, text: 'intacto', originalTimestamp: '2026-10-10T00:00:00.000Z' });
+    const before = service.archiveDb.prepare('SELECT * FROM messages').all();
+    const first = await login(service.base); const second = await login(service.base, password, first.cookie);
+    assert.equal(second.response.status, 200); assert.notEqual(second.cookie, first.cookie);
+    assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: first.cookie } })).status, 401);
+    await service.setPassword('é exato ');
+    assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: second.cookie } })).status, 401);
+    assert.equal((await login(service.base, 'e\u0301 exato ')).response.status, 401);
+    assert.equal((await login(service.base, 'é exato')).response.status, 401);
+    assert.equal((await login(service.base, 'é exato ')).response.status, 200);
+    await assert.rejects(service.setPassword(''));
+    assert.deepEqual(service.archiveDb.prepare('SELECT * FROM messages').all(), before);
+    assert.deepEqual(service.authDb.prepare('SELECT * FROM whatsapp_fixture').all(), [{ value: 'synthetic-state' }]);
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('TTL idle/absoluto, Origin e CSRF são impostos pelo servidor', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-expiry-')); const service = await start(dir);
+  try {
+    await service.setPassword(password);
+    const c = await form(service.base);
+    for (const origin of ['', 'https://evil.example']) {
+      const r = await fetch(service.base + '/login', { method: 'POST', headers: { Cookie: c.cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ password, csrfToken: c.token }) }); assert.equal(r.status, 403);
+    }
+    const noToken = await fetch(service.base + '/login', { method: 'POST', headers: { Cookie: c.cookie, Origin: service.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }); assert.equal(noToken.status, 403);
+    const huge = await fetch(service.base + '/login', { method: 'POST', headers: { Origin: service.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'x'.repeat(5000) }) }); assert.equal(huge.status, 413);
+    const auth = await login(service.base);
+    service.authDb.prepare('UPDATE web_sessions SET touched_at = ?').run(Date.now() - 30 * 60_000);
+    assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: auth.cookie } })).status, 401);
+    const absolute = await login(service.base);
+    const row = service.authDb.prepare("SELECT id, data FROM web_sessions WHERE json_extract(data, '$.owner') = 1").get() as { id: string; data: string };
+    const data = JSON.parse(row.data); data.authenticatedAt = Date.now() - 8 * 60 * 60_000;
+    service.authDb.prepare('UPDATE web_sessions SET data = ? WHERE id = ?').run(JSON.stringify(data), row.id);
+    assert.equal((await fetch(service.base + '/api/status', { headers: { Cookie: absolute.cookie } })).status, 401);
+  } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
