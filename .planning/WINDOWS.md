@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 3
-total_count: 3
-last_updated: 2026-10-10T21:45:19.683Z
+fixed_count: 5
+total_count: 5
+last_updated: 2026-10-10T22:01:45.042Z
 ---
 
 # Broken Windows Ledger
@@ -18,6 +18,8 @@ last_updated: 2026-10-10T21:45:19.683Z
 | 1 | 1 | deviation | src/media.ts |  | Publicação exclusiva por hardlink/unlink substitui rename que pode sobrescrever final; verificado por crash e hashes | fixed |  | 2026-10-10T21:45:03.523Z | 2026-10-10T21:45:19.278Z |
 | 2 | 1 | deviation | src/whatsapp.ts |  | rc14 ignora AbortSignal e não renova Boom404; dispatcher privado e fallback seguro são necessários e testados | fixed |  | 2026-10-10T21:45:19.375Z | 2026-10-10T21:45:19.485Z |
 | 3 | 1 | deviation | test/archive.test.ts |  | Assert de versão atual ajustado de4 para5 após migração aditiva de mídia; teste de preservação passou | fixed |  | 2026-10-10T21:45:19.585Z | 2026-10-10T21:45:19.683Z |
+| 4 | 1 | deviation | src/auth.ts |  | QR assíncrono revalida TTL e revogação pelo SQLiteStore antes de responder; teste HTTP passou | fixed |  | 2026-10-10T22:01:44.544Z | 2026-10-10T22:01:44.736Z |
+| 5 | 1 | deviation | src/main.ts |  | DTO da lista preserva proteção de identificadores legados privados e expõe somente PN/LID/grupo recebido; teste antigo passou | fixed |  | 2026-10-10T22:01:44.911Z | 2026-10-10T22:01:45.042Z |
 
 ````json
 [
@@ -58,6 +60,32 @@ last_updated: 2026-10-10T21:45:19.683Z
     "reason": "",
     "recorded_at": "2026-10-10T21:45:19.585Z",
     "resolved_at": "2026-10-10T21:45:19.683Z",
+    "milestone": null
+  },
+  {
+    "id": 4,
+    "kind": "deviation",
+    "phase": "1",
+    "file": "src/auth.ts",
+    "line": null,
+    "description": "QR assíncrono revalida TTL e revogação pelo SQLiteStore antes de responder; teste HTTP passou",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-10T22:01:44.544Z",
+    "resolved_at": "2026-10-10T22:01:44.736Z",
+    "milestone": null
+  },
+  {
+    "id": 5,
+    "kind": "deviation",
+    "phase": "1",
+    "file": "src/main.ts",
+    "line": null,
+    "description": "DTO da lista preserva proteção de identificadores legados privados e expõe somente PN/LID/grupo recebido; teste antigo passou",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-10T22:01:44.911Z",
+    "resolved_at": "2026-10-10T22:01:45.042Z",
     "milestone": null
   }
 ]
