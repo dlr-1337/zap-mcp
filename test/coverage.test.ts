@@ -64,10 +64,10 @@ test('alias tardio redireciona ambas referências e edições antigas não subst
   const dir = mkdtempSync(join(tmpdir(), 'zap-alias-')); const s = createService({ dataDir: dir });
   t.after(() => { s.close(); rmSync(dir, { recursive: true }); });
   const a = s.archive, pn = { remoteJid: '1@s.whatsapp.net', id: 'a', fromMe: false }, lid = { ...pn, remoteJid: '9@lid' };
-  a.ingestHistory({ messages: [pn, lid].map(key => ({ key, messageTimestamp: 1700000000, message: { conversation: 'original' } })) });
+  a.ingestHistory({ messages: [...[pn, lid].map(key => ({ key, messageTimestamp: 1700000000, message: { conversation: 'original' } })), {}, {}] });
   const refs = [a.readStoredMessage(pn)!.reference, a.readStoredMessage(lid)!.reference];
   a.ingestContacts({ lid: '9@lid', pn: '1@s.whatsapp.net' });
-  assert.equal((a.getCoverage() as any).uniqueMessages, 1);
+  assert.equal((a.getCoverage() as any).uniqueMessages, 3, 'alias não pode mesclar duas ocorrências sem chave');
   for (const ref of refs) assert.equal(a.readStoredMessage(ref)!.reference, refs[0]);
   assert.equal(a.readStoredMessage(pn)!.orderUncertain, false);
   a.ingestUpdates([{ key: lid, update: { message: { conversation: 'nova' }, messageTimestamp: 1700000030 } }, { key: pn, update: { message: { conversation: 'velha' }, messageTimestamp: 1700000020 } }]);

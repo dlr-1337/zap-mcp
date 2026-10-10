@@ -166,7 +166,9 @@ export function openArchive(dataDir: string) {
     db.exec('UPDATE messages SET logical_key=NULL');
     for (const row of messages) {
       if (!db.prepare('SELECT 1 FROM messages WHERE reference=?').get(row.reference)) continue;
-      const key = JSON.parse(row.key_json) as Key, logical = logicalKey(key);
+      const key = JSON.parse(row.key_json) as Key;
+      if (!key.id || !key.remoteJid) continue;
+      const logical = logicalKey(key);
       const prior = db.prepare('SELECT reference FROM messages WHERE logical_key=?').get(logical) as { reference: string } | undefined;
       if (prior && prior.reference !== row.reference) mergeMessages(prior.reference, row.reference);
       else db.prepare('UPDATE messages SET logical_key=?,author=? WHERE reference=?').run(logical, canonical(key.participant) ?? (key.fromMe === false && !key.remoteJid?.endsWith('@g.us') ? canonical(key.remoteJid) : null), row.reference);
