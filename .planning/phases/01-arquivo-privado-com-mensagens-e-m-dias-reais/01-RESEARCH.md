@@ -461,13 +461,13 @@ Decisões prescritivas dentro da discrição do contexto foram identificadas com
 
 Nenhuma retenção, regra de compliance, SLA, capacidade ou janela de histórico foi inventada. Decisões já aprovadas no contexto não precisam de nova pergunta; suposições de ambiente tornam-se evidência em Wave0/piloto ou permanecem pendentes. Pacotes SUS conservam alerta/revisão documentada; a autorização geral já cobre instalação e decisões de versão.
 
-## Open Questions
+## Open Questions (RESOLVED — disposição de planejamento; provas operacionais pendentes)
 
-1. **Qual cobertura e quais originais a conta entrega?** Não observado nesta pesquisa [ASSUMED A2]. Comparar mensagens de conversa conhecida e quatro tipos, sem enviar pelo serviço. Sem amostra, manter aceite pendente.
-2. **Qual host/capacidade/transporte/destino de cópia está disponível?** A discussão não comprovou VPS/domínio/acesso. Identificar operacionalmente antes de exposição/QR; desenvolvimento e testes locais prosseguem. [CITED: 01-CONTEXT.md Integration Points]
-3. **Build Node24 e instalação transitiva:** engines aceitam, mas import/ABI/WASM/peers não foram exercitados [ASSUMED A3]. Wave0 deve fechar esse ponto antes de criar perfil real.
-4. **Pacotes novos:** legitimidade SUS por idade em Express/typesNode; revalidar release/registry/source/scripts antes da instalação, conforme a autorização vigente. O protocolo genérico sugere checkpoint humano, mas a instrução explícita do usuário dispensa reconfirmações operacionais; não criar aprovação-only. Não rebaixar versão corrigida automaticamente. [CITED: audit acima; AGENTS.md]
-5. **Ordem de updates sem metadado suficiente:** o source não fornece um relógio universal monotônico em todos os eventos. Registrar conflito/incerteza e preservar origens, sem apresentar observação como ordem comprovada. [CITED: Types/Events.ts; process-message.ts]
+1. **RESOLVED — Qual cobertura e quais originais a conta entrega?** Disposição: o plano `01-07-PLAN.md` exige comparação da conversa conhecida e dos quatro tipos, sem enviar pelo serviço. Não observado nesta pesquisa [ASSUMED A2]; sem amostra, aceite continua pendente. A resolução é o procedimento obrigatório, não a cobertura real.
+2. **RESOLVED — Qual host/capacidade/transporte/destino de cópia está disponível?** Disposição: desenvolvimento/testes locais protegidos no plano 01-01; identificação operacional, cópia e gate antes de exposição/QR no plano `01-06-PLAN.md`. VPS/domínio/acesso continuam não comprovados; operação final é fase 4. [CITED: 01-CONTEXT.md Integration Points]
+3. **RESOLVED — Build Node24 e instalação transitiva:** Disposição: smoke de import/ABI/SQLite/FTS5/QR e revisão do lock em `01-01-PLAN.md`, tarefa 01-01-01, antes de perfil real. Engines não provam integração e os checks ainda não foram executados [ASSUMED A3].
+4. **RESOLVED — Pacotes novos:** Disposição: `01-01-PLAN.md`, tarefa 01-01-01, revalida release/registry/source/scripts e versões efetivas do lock antes de instalar. Autorização vigente dispensa reconfirmação operacional; não criar aprovação-only nem rebaixar automaticamente versão corrigida. Verificação operacional ainda pendente. [CITED: audit acima; AGENTS.md]
+5. **RESOLVED — Ordem de updates sem metadado suficiente:** Disposição: `01-02-PLAN.md`, tarefa 01-02-01, conserva eventos, registra conflito/incerteza e testa replay sem regressão. A fonte não fornece relógio universal em todos os eventos; observação não será apresentada como ordem comprovada. Implementação/teste ainda pendentes. [CITED: Types/Events.ts; process-message.ts]
 
 ## Environment Availability
 
