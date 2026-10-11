@@ -31,9 +31,9 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | 02-02-01 | 2 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/search.test.js` | passed —13/13; tracer repetido13/13 |
 | 02-02-02 | 2 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/auth.test.js` | passed —19/19; retençãoA/B/close/logout/bfcache e purgeTTL/reset |
 | 02-02-03 | 2 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/context.test.js` | passed —12/12; teclado3abas,scroll/reflow/auth;full105/105 |
-| 02-03-01 | 3 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/ui.test.js` | pending execution |
-| 02-03-02 | 3 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/security.test.js dist/test/readonly.test.js` | pending execution |
-| 02-03-03 | 3 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/preview.test.js` | pending execution |
+| 02-03-01 | 3 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/ui.test.js` | passed —9/9; tracer repetido9/9, PNG/browser/download hash |
+| 02-03-02 | 3 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/security.test.js dist/test/readonly.test.js` | passed —6/6; MIME/assinatura, auth/Range/HEAD/415/fd/offline |
+| 02-03-03 | 3 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/preview.test.js` | passed —15/15; WAV/WebM nativos, mp4v fallback, lifecycle/reflow; full113/113 |
 | 02-04-01 | 4 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/ui.test.js` | pending execution |
 | 02-04-02 | 4 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/security.test.js dist/test/search.test.js` | pending execution |
 | 02-04-03 | 4 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/readonly.test.js dist/test/export.test.js` | pending execution |
@@ -186,7 +186,7 @@ Sem SPEC, aplicar recall/precision aos requisitos: a evidência não deve se tor
 | P-02-01 | EVID-02 | period/search: null não usa ingestão | enforced — search.test.ts originalnull/DST/Date.max passou |
 | P-02-02 | WEB-02 | search: AND entre versões não corresponde; histórico rotulado | enforced — search.test.ts AND entre versões e ui.test.ts histórico passaram |
 | P-02-03 | WEB-04 | browser races/storage/logout; duas leituras não misturam | enforced — ui.test.ts retençãoA/B/close/logout,bfcache,scroll e storage vazio passaram |
-| P-02-04 | WEB-05 | preview/codec mantém download; miniatura não satisfaz original | flagged-unverified |
+| P-02-04 | WEB-05 | preview/codec mantém download; miniatura não satisfaz original | enforced — preview.test.ts missing404/ativo415; ui.test.ts mp4v sem suporte mantém original/hash, zero binários antes do clique |
 | P-02-05 | EXP-02 | manifest/texto com cobertura parcial, revisões e todos missing | flagged-unverified |
 | P-02-06 | EXP-03 | ZIP fault/crash/CRC/entries impedem ready | flagged-unverified |
 | P-02-07 | EXP-01 | acceptance self-check recusa fixture/truncado como real | flagged-unverified |
@@ -204,6 +204,12 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 - Ondas1→2→3→4→5 por dependência e arquivos compartilhados; nenhuma paralelização falsa. STATE/ROADMAP ficam comorquestrador.
 
 ## Artefatos e símbolos produzidos
+
+### Evidência executada do plano02-03 —2026-10-11
+
+GET/HEAD `/api/attachments/:id/preview` usa o mesmo fd privado verificado do original, leitura explícita de até1445 bytes e MIME canônico após assinatura coerente. PNG/JPEG/GIF/WebP, WAV/MP3(ID3 e duas frames)/Ogg/FLAC e MP4/WebM foram classificados em HTTP; assinatura sintética não afirma codec decodificável. HTML/SVG/PDF/ZIP/mismatch/MIME ausente/vazio/inconclusivo415; original preserva bytes. Missing/symlink/traversal404, cookies inválidos/expirados/revogados401 antes de ID/Range, ranges múltiplos/invertidos/overflow416. HEAD/415/416 e GET abortado fecham fd; troca de pathname não altera inode já aberto. Teste readonly usa socket sintético desligado com contador de métodos proibidos zero.
+
+Browser real sintético: PNG decodificado, WAV PCM reproduzido, WebM VP8 com videoWidth16 e MP4 MPEG-4 Part2 sem suporte no Chromium atual com fallback/download de bytes idênticos. Controls nativos/preload none/sem autoplay; nenhum GET ao listar; HEAD retido não inicia GET após close/switch/logout/expire/pagehide; trocar aba remove src e pausa antigos players. Estado disponível não muda com erro de codec, e pendente/retry_wait/unavailable conservam motivo e mensagem.320/768/1280 e fonte200% sem overflow; capturas ignoradas dist/02-03-ui-*.png inspecionadas. RED HTTP404, ação áudio ausente e GET tardio após switch registrados em dist/02-03-*-red.json e classificados RED_EVIDENCE_OK. Suíte final113/113,0fail/skip/todo,30,942s; evidência em02-03-SUMMARY. WEB-05 global continua pendente de02-05; perfil/coletor reais preservados, sem transcode/OCR/novo pacote.
 
 ### Evidência executada do plano02-02 —2026-10-11
 
