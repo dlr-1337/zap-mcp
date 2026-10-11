@@ -18,6 +18,7 @@ Pareamento realizado pelo humano; HTTP privado conectado, QR409/indisponível e 
 
 - Lote inicial8.924 itens confirmados,0falhas/pendentes após reparo do diário recebido;8.679mensagens distintas.470itens reprocessados com participant explícito do envelope rc14, conservando8.673referências e1.668IDs anteriores. Grupo conhecido indicado pelo humano:486mensagens,426recebidas/60enviadas e3autores recebidos.
 - Quatro originais do grupo disponíveis: áudio62.831B, imagem199.071B, vídeo8.304.865B e documento118.382B. Bytes/tamanho/SHA256 de origem, arquivo local e GET autenticado iguais. GET/HEAD/Range sem sessão401; Rangeautenticado206.
+- Conversa individual conhecida agora indicada pelo proprietário e localizada por correspondência única:270mensagens,192recebidas/78enviadas, sem direção desconhecida nem referências repetidas no recorte percorrido por HTTP. Janela privada autenticada aberta nas100mais recentes; título/identidade/amostra ficam somente na evidência operacional privada.
 - Snapshot privado posterior8.680mensagens/190originais disponíveis restaurado com fonte parada. Mesmos4IDs/referências/bytes/hash e486mensagens conferidos em HTTP offline com collectorEnabledfalse. Clone parado; perfil fonte reconectou sem QR e repetiu4downloads com hashes iguais.
 -82/82 testes, zero failures/skips/todos; build e preflight passaram. Fixes mínimos DNS0315319/6b8337c e envelope8a2fd6f/72ee356, com RED_EVIDENCE_OK.
 - Durante a preparação, navegador privado visível e autenticado apresentou o grupo com100mensagens da página inicial; botão de mensagens anteriores conserva o restante. Detalhes da evidência mostram participante/direção/data/histórico recebido; “Baixar original” oferece os arquivos disponíveis.
@@ -26,7 +27,7 @@ Pareamento realizado pelo humano; HTTP privado conectado, QR409/indisponível e 
 
 **Task 2:** conferir conversa, grupo, direções/autoria e quatro originais conhecidos.
 **Status:** aguardando comparação humana.
-**Blocked by:** humano respondeu “Ainda não consegui comparar”. A indicação do grupo e as provas técnicas não substituem conhecimento do celular. Conversa individual conhecida ainda não identificada/conferida.
+**Blocked by:** humano respondeu “Ainda não consegui comparar”. Grupo e conversa individual conhecida já foram indicados e preparados; indicação e provas técnicas não substituem a conferência das mensagens/autores/direções e originais com o celular.
 
 Ação indispensável, quando disponível: comparar privadamente os itens existentes do grupo aberto com o WhatsApp no celular, indicar divergência/faltantes ou confirmar a correspondência; conferir áudio/imagem/vídeo/documento e uma conversa individual conhecida. Não publicar conteúdo, números ou arquivos no chat público. Nenhuma mensagem precisa ser enviada para fabricar amostra.
 
@@ -43,10 +44,10 @@ Revisão final limpa: teste focado1/1 e quatro mutações rejeitadas (família a
 ## Continuidade
 
 - Fonte local: http://127.0.0.1:3000, `zap-mcp-pilot.service`, mesmo perfil e único coletor.
-- Tela privada: o navegador de apoio `zap-mcp-pilot-browser.service` encerrou normalmente (status0) antes da checagem final desta retomada. O site permanece disponível na fonte local acima; a janela precisa ser reaberta para a comparação. Browser apenas apresenta o site; coletor não executa navegador.
+- Tela privada: após a indicação da conversa individual, `zap-mcp-pilot-browser.service` foi reaberto no mesmo perfil, autenticado e com100mensagens da amostra visíveis. Browser apenas apresenta o site; coletor não executa navegador.
 - Dados, credencial, diário, snapshots e provas ficam privados fora do checkout. Checkpoint operacional persistente registra caminhos/PIDs e provas sem imprimi-los publicamente.
 - SUMMARY mantém `status: halted`, requisitosPending e fase1 aberta. Limites individuais de mídia continuam explícitos; snapshot registra17indisponíveis, não indisponibilidade definitiva da conta. VPS/domínio, backup externo e Codex-MCP ainda não validados.
 
-Checagem final da retomada: fonte HTTP conectada, collectorEnabledtrue, pairingAvailablefalse, consulta sem autenticação401 e serviço coletor ativo. A janela de apoio encerrada não indica perda do vínculo WhatsApp e não exige novo QR.
+Checagem final da retomada: fonte HTTP conectada, collectorEnabledtrue, pairingAvailablefalse, consulta sem autenticação401 e serviço coletor ativo. A preparação da conversa individual confirmou novamente conexão e tela autenticada, sem novo QR.
 
 O SDK conta um SUMMARY `halted` como plano resumido e deriva 7/7 nos contadores, embora reconheça o plano07 como interrompido. Os marcadores locais de conclusão foram corrigidos para6/7, conservando a sessão/decisões atualizadas pelos handlers. Não usar existência do SUMMARY ou esse contador derivado como aceite: o plano07 tem1/3 tarefas concluídas e exige a comparação humana registrada acima.

@@ -50,7 +50,7 @@ coverage:
         ref: HTTP privado do perfil fonte/restaurado e quatro IDs/bytes/SHA256 iguais
         status: pass
     human_judgment: true
-    rationale: Proprietário vinculou o QR e indicou um grupo conhecido; respondeu que ainda não conseguiu comparar os itens com o celular.
+    rationale: Proprietário vinculou o QR, indicou grupo e conversa individual conhecidos, já preparados privadamente; a comparação dos itens com o celular ainda não foi confirmada.
 actuals:
   tokens: 5483
   tasks: 1
