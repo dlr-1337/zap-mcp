@@ -1,6 +1,6 @@
 ---
 phase: 01-arquivo-privado-com-mensagens-e-m-dias-reais
-reviewed: 2026-10-10T22:32:40Z
+reviewed: 2026-10-11T00:43:16Z
 depth: standard
 files_reviewed: 25
 files_reviewed_list:
@@ -30,77 +30,56 @@ files_reviewed_list:
   - test/security.test.ts
   - tsconfig.json
 findings:
-  critical: 3
-  warning: 1
+  critical: 0
+  warning: 0
   info: 0
-  total: 4
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Fase 1: relatório de revisão de código
 
-**Reviewed:** 2026-10-10T22:32:40Z
+**Reviewed:** 2026-10-11T00:43:16Z
 **Depth:** standard
 **Files Reviewed:** 25
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-Revisão dos arquivos explícitos dos planos 01-01 a 01-06, suas interfaces, chamadores e testes. `package-lock.json` foi excluído conforme o filtro de lockfiles. Foram encontrados três bloqueadores de correção/preservação e um aviso de evidência incorreta na UI. Os dois problemas de edição foram reproduzidos usando `processMessage`, `makeEventBuffer` e encode/decode protobuf da rc14 efetivamente instalada, sem socket WhatsApp. A perda de vínculo de mídia foi reproduzida com worker e binário sintéticos locais. Não houve alteração de fonte ou commit.
+Revisão independente da iteração 3 realizada em `b17f210`, dos 25 arquivos exatos de `/tmp/zap-mcp-phase1-rereview-files.json`, seguida de **verificação adicional localizada** da correção CR-03 em `4e739340cf8c54eb332f95e8cabec7858cc060b4`. O complemento conferiu somente o diff de `src/media.ts` e `test/media.test.ts` e o cenário de retry com falha SQL no mesmo processo. A lista de 25 arquivos conserva o escopo da revisão padrão anterior; esses arquivos não foram todos revisados novamente no complemento. Nenhum arquivo desse escopo é ignorado; lockfile, arquivos gerados e planejamento não integram a revisão de fonte. As revisões e relatórios FIX anteriores permanecem preservados. Nenhum prepass estrutural foi fornecido.
 
-O piloto 01-07 permanece pendente. Conta, cobertura, validade remota da sessão, VPS e Codex real não foram validados nesta revisão. Ausência dessas provas é dependência de aceite, não achado de código. A falha terminal de itens de lote foi conferida e não classificada: o SUMMARY 01-02 documenta replay explícito de falhas, e D-16 admite ingestão não confirmada. O problema de falsa falta de espaço já corrigido não foi repetido.
+**Nenhum achado aberto.** O CR-03 foi corrigido: a retomada verifica/adota o final íntegro antes de consumir tentativa ou atribuir nova geração. A reprodução independente agora conserva o original acessível e incluído no backup/restore sem novo download desse anexo. A verificação localizada não comprovou novo defeito do patch. As correções CR-01, CR-02 e WR-01 permanecem respaldadas pela revisão padrão anterior, sem alegação de novo aceite operacional.
+
+Na revisão padrão em `b17f210`, com `mise exec node@24.21.0`: `npm run build` passou; `node --test dist/test/archive.test.js dist/test/revisions.test.js dist/test/media.test.js dist/test/recovery.test.js dist/test/backup.test.js` passou **46/46**, zero falhas/cancelamentos/skips. Essa seleção exercitou protobuf/processMessage/event buffer da rc14 instalada, migração, PN/LID, DTOs HTTP/diretos, locators privados, fencing, reinício e backup/restore.
+
+No complemento em `4e73934`, `mise exec node@24.21.0 -- npm run build` passou. `mise exec node@24.21.0 -- node --test --test-name-pattern='PN/LID preserva original em|retry verifica final publicado' dist/test/media.test.js` passou **9/9**, zero falhas/cancelamentos/skips: merge em published/beforeAvailable, falha SQL persistente, corrupção, final sem metadados, falta de espaço e última tentativa. A suíte completa não foi repetida nem usada como substituto da reprodução independente.
+
+Evidências da revisão padrão anterior, preservadas para rastreabilidade (dados sintéticos, assertivas inline):
+
+- Dois workers publicam bytes diferentes, ambos suspensos em `published` ou `beforeAvailable`. Merge e replay do mapeamento conservam as duas leases e chaves congeladas; depois ambos confirmam, reiniciam disponíveis e os dois IDs/bytes entram em snapshot/restore com download HTTP autenticado offline. Duas chamadas de download em cada cenário.
+- Falha injetada **depois** de executar a reconstrução v6, incluindo DROP/RENAME, reverte versão, schema completo, attachments e jobs para v5. Nova abertura migra para v6 preservando linhas e ativando FKs; `foreign_key_check` vazio.
+- Em `b17f210`, falha SQL na confirmação `available`, seguida de retry antes de reiniciar, reproduziu o CR-03. O backup e `verifyBackup` passavam, mas a cópia restaurada continha zero binários apesar do final anteriormente capturado. Essa evidência anterior está detalhada abaixo; seu resultado mudou após a correção em `4e73934`.
+
+Somente este REVIEW.md foi alterado; nenhuma fonte, teste, snapshot, relatório FIX ou `milestone.lock` foi modificado e nenhum commit foi feito. Fixtures temporárias removidas. Transporte declarado: loopback. Nenhum socket WhatsApp real, QR, conta, credencial real, VPS/produção ou Codex real foi usado. Piloto e cobertura da conta permanecem dependências de aceite. A limitação D-16/replay explícito de itens falhos do SUMMARY 01-02 foi respeitada e não tratada como novo achado.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
+Nenhum BLOCKER ou WARNING aberto após a verificação localizada da correção.
 
-### CR-01: A mesma edição pelos dois eventos da rc14 vira conflito e apaga o texto atual
+## Evidência do CR-03 corrigido
 
-**Classificação:** BLOCKER
-**File:** `/home/otavio/Documents/ChatGPT/zap-mcp 2/src/archive.ts:234-235`
-**Linhas relacionadas:** `src/archive.ts:147-157,211-216,266-269`; `src/whatsapp.ts:153-154`.
-**Issue:** O fingerprint serializa a árvore recebida, enquanto a projeção usa conteúdo desembrulhado. A rc14 emite o protocolo de edição em `messages.upsert` e também um `messages.update` com `{editedMessage:{message:...}}`. `ingestOne` converte o primeiro em `protocol.editedMessage`, mas mantém o wrapper do segundo no fingerprint. Assim, uma única edição produz duas revisões distintas. Quando `timestampMs` é um múltiplo de 1000, os dois instantes coincidem e `project` interpreta as revisões equivalentes como conflito, definindo `order_uncertain=1` e `text=NULL`. Com milissegundos diferentes de zero, ainda duplica a evidência da alteração. `readPrivateMessage` também deixa de entregar conteúdo quando o conflito artificial ocorre.
-**Gatilho:** Original existente seguido por uma única edição, entregue nos formatos normais de upsert e update da rc14.
-**Evidence:** Fixture com original `antes`, edição `depois` e `timestampMs=1700000010000`, processada pelo event buffer e `processMessage` da dependência instalada: `uniqueMessages=1`, `revisions=3`, `text=null`, `orderUncertain=true`. O protocolo e o update têm o mesmo conteúdo e instante, não são duas alterações concorrentes. O código da rc14 em `lib/Socket/chats.js:917-918` emite o upsert; `lib/Utils/process-message.js:364-378` emite o update; o buffer preserva ambos quando o ID do envelope é diferente do alvo.
-**required_property:** SYNC-05 e SYNC-06: replay/eventos equivalentes não criam alterações nem removem uma atualização recebida confiável.
-**Fix:** Normalizar a identidade/conteúdo da revisão entre os dois formatos antes da deduplicação, preservando separadamente a evidência de origem necessária. Não usar o wrapper de transporte como diferença de conteúdo. Conciliar a precisão de segundos do update com o instante em milissegundos do protocolo sem inventar conflito. Acrescentar uma regressão com os eventos reais da rc14, incluindo o instante no segundo exato; deve haver uma alteração efetiva e texto `depois`, sem `orderUncertain`.
+**Resultado atual:** corrigido e verificado localmente em `4e73934`; não é achado aberto.
+**Fonte atual:** `/home/otavio/Documents/ChatGPT/zap-mcp 2/src/media.ts:79` (`adoptFinal`), linhas 79-96, 178-200 e 212-213.
+**Defeito anterior em b17f210:** `run`, nas antigas linhas 198-200, renomeava qualquer `.bin` para `.damaged` antes de verificar sua integridade. Depois da falha SQL de disponibilidade, a nova tentativa substituía a geração e movia o final íntegro; a ausência de outro download deixava bytes fora da consulta e da restauração. A revisão anterior classificou esse comportamento como bloqueador de preservação.
+**Gatilho:** Mesma revisão recebida por PN/LID, dois jobs ativos; primeiro sem bytes; segundo publica final/manifest verificados; chega o mapeamento; confirmação SQL de `available` falha; primeiro falha; passa o retry de um segundo sem reinício; a origem do segundo está indisponível.
+**Evidence anterior:** Reprodução inline com serviço/worker reais, Node24.21.0, relógio injetado e streams sintéticos. Em `fault('published')`, o script aplicava `ingestContacts({lid,pn})` e instalava trigger SQL que abortava somente a confirmação `state='available'`; o hook retornava normalmente. Depois do rollback e falha do primeiro downloader, o segundo ID existia em `retry_wait`, com tamanho correto, SHA-256 igual ao recebido, `sourceHashVerified=true`, `.bin` íntegro e manifest. Removido o trigger, avançado o relógio para 2000 ms e executado `drain`, os dois jobs tentavam novamente; download então falhava. O segundo `.bin` desaparecia e o `.damaged` continha exatamente o original. Após fechar/reabrir, o segundo ID ficava `pending`. `createSnapshot` e `verifyBackup` concluíam com sucesso, inclusive login/consulta HTTP offline, mas a mídia restaurada continha **zero `.bin`**. Quatro chamadas ao downloader no total. Fixture removida; nenhuma fonte/teste alterado. Uma reprodução separada com interrupção explícita no hook produziu o mesmo resultado.
+**required_property:** SYNC-05, MEDIA-02 e MEDIA-03: conciliação e recuperação devem conservar o vínculo dos originais efetivamente capturados, disponibilidade offline e inclusão no backup.
+**Correção conferida:** `adoptFinal` abre o final sem seguir symlink, confere tamanho/SHA-256 persistidos e descriptor, fecha o fd e confirma job/anexo em transação condicionada à geração e estado recebidos. `claim` adota finais antes do orçamento, consumo de tentativa ou troca de geração; somente divergência comprovada permite mover bytes para `.damaged`. Falha SQL mantém o final e a geração intactos e suspende o worker. `run` recusa mover um final que aparecer depois da claim. Reinício reutiliza o mesmo helper.
 
-### CR-02: Chave interna do protocolo cria mensagem fantasma com autoria/direção erradas
-
-**Classificação:** BLOCKER
-**File:** `/home/otavio/Documents/ChatGPT/zap-mcp 2/src/archive.ts:214-219`
-**Linhas relacionadas:** `src/archive.ts:139-140,220-228`; `src/whatsapp.ts:153-154`.
-**Issue:** Para edição/revogação, `ingestOne` substitui a chave normalizada do envelope por `protocol.key`. Essa chave pode estar na perspectiva do remetente. Por exemplo, uma edição recebida tem `raw.key.fromMe=false`, mas `protocol.key.fromMe=true` porque o original foi enviado pelo contato. A rc14 não normaliza a chave do protocolo em `cleanMessage`; seu `processMessage` identifica o alvo com a chave do envelope e o ID do protocolo. O arquivo inclui `fromMe`, conversa e participante na chave lógica, portanto a ingestão direta do protocolo cria outro registro, potencialmente com outra autoria/conversa, enquanto o update da rc14 altera o original correto. O caminho histórico sem update correspondente também pode deixar o original sem a alteração.
-**Gatilho:** Protocolo recebido de um contato com chave do alvo na perspectiva desse contato; a perspectiva é diferente da do proprietário.
-**Evidence:** Fixture encode/decode protobuf com original recebido, envelope da edição `fromMe=false` e alvo interno `fromMe=true`, emitida pelo `processMessage`/buffer da rc14: uma mensagem lógica passa a duas (`uniqueMessages` acumulado passou de 1 para 3 ao acrescentar o segundo original e sua edição); ambas as chaves de direção retornam conteúdo `depois`. A geração de edição da rc14 em `lib/Utils/messages.js:514-520` conserva a chave fornecida pelo remetente; seu processamento usa `{...message.key,id:protocolMsg.key?.id}`.
-**required_property:** SYNC-05 e EVID-01: identidade estável e autoria/direção recebidas não podem ser duplicadas ou invertidas ao aplicar alterações.
-**Fix:** Resolver o alvo do protocolo na perspectiva local usando a evidência do envelope e as identidades já recebidas, em vez de aceitar cegamente a chave interna. No caminho em tempo real, manter coerência com o alvo normalizado do `messages.update`; continuar tratando protocolos históricos sem depender de um update futuro. Cobrir edição/revogação recebidas, enviada pelo proprietário e grupo, sem criar mensagem extra ou misturar outro participante.
-
-### CR-03: Conciliação PN/LID descarta o vínculo do único original já disponível
-
-**Classificação:** BLOCKER
-**File:** `/home/otavio/Documents/ChatGPT/zap-mcp 2/src/archive.ts:164-167`
-**Linhas relacionadas:** `src/archive.ts:175-185,188-204`; `src/backup.ts:97-108`; `src/media.ts:65-74`.
-**Issue:** Quando duas identidades depois comprovadas como PN/LID possuem a mesma revisão, `mergeMessages` mantém a revisão do registro mais antigo e exclui incondicionalmente os attachments e jobs da outra. Não confere se o lado excluído contém o único original `available`, enquanto o mantido está `unavailable` ou ainda pendente. O arquivo final não é apagado do disco, mas perde referência no banco, o download HTTP deixa de encontrá-lo e o backup copia somente anexos ligados e disponíveis. Uma conciliação legítima transforma material já capturado em órfão sem recuperação pelo acervo; após restauração, esses bytes ficam ausentes.
-**Gatilho:** Receber a mesma mídia por PN e LID antes do mapeamento, falhar o download do registro mais antigo e finalizar o download do segundo; depois receber o mapeamento explícito.
-**Evidence:** Fixture com dois registros da mesma mídia e hash, primeiro job em `unavailable/attempts=5` e segundo baixado pelo worker em `available`. Após `ingestContacts({lid,pn})`, a mensagem conciliada só possui o primeiro attachment `unavailable`; `getAttachment(secondId)` retorna `null`, embora o segundo `.bin` continue em disco. O attachment disponível desaparece das consultas e do conjunto selecionado pelo snapshot.
-**required_property:** SYNC-05, MEDIA-02 e MEDIA-03: deduplicação/conciliação deve conservar originais capturados, sua disponibilidade offline e seu vínculo para backup.
-**Fix:** Conciliar a revisão duplicada e seus anexos preservando um original finalizado/verificado quando qualquer lado já o possui. Transferir o attachment/job válido para a revisão e referência mantidas antes de excluir a duplicata, respeitando leases/worker e mantendo o arquivo/manifest associados. Não exigir novo download para um original já salvo. Acrescentar regressão que concilie os dois estados, baixe o original offline e inclua seus bytes em backup/restore.
-
-## Warnings
-
-### WR-01: Toda citação afirma ausência do original sem verificar essa ausência
-
-**Classificação:** WARNING
-**File:** `/home/otavio/Documents/ChatGPT/zap-mcp 2/public/app.js:90`
-**Linhas relacionadas:** `src/archive.ts:74,279-289`.
-**Issue:** A UI sempre escreve “Citação recebida; original não encontrado no acervo.” A projeção fixa `quote.reference=null` e o DTO não tenta resolver a chave citada, então essa frase também aparece quando a mensagem original está efetivamente arquivada na mesma conversa. A ausência de relacionamento implementado não comprova ausência do registro e enfraquece a evidência apresentada ao proprietário.
-**Gatilho/evidência:** Arquivar a mensagem de ID `a` e depois uma mensagem com `contextInfo.stanzaId='a'` e `quotedMessage`; ambas são consultáveis, mas a renderização da segunda executa incondicionalmente a frase de ausência.
-**required_property:** EVID-01 e D-18: apresentar limites conhecidos e não inventar ausência da evidência.
-**Fix:** Para o escopo atual, substituir por indicação precisa de que o original da citação ainda não foi relacionado/conferido. Reservar “não encontrado no acervo” para uma resolução que efetivamente não encontrou a chave. Não é necessário antecipar navegação/contexto da fase 2 para corrigir essa afirmação.
+**Reprodução independente GREEN em 4e73934:** mesmo cenário SQL/PN-LID da prova anterior, com a origem recusando qualquer nova obtenção depois da publicação. Após remover o trigger e avançar para 2000 ms, o segundo ID foi adotado como `available` no mesmo processo; generation, attempts, source_key e bytes do manifest permaneceram idênticos, e nenhum `.damaged` foi criado. Foram três chamadas no total: os dois downloads iniciais e apenas a nova tentativa do primeiro anexo sem binário. **Zero redownload do original preservado.** HTTP negou acesso anônimo (401) e entregou os bytes exatos depois de login (200). Reabertura manteve `available`. `createSnapshot` e `verifyBackup` concluíram com autenticação HTTP offline e a restauração incluiu **um `.bin` idêntico ao original**. Fixture temporária removida; apenas REVIEW.md atualizado, sem commit ou alteração de fonte/teste.
 
 ---
 
-_Reviewed: 2026-10-10T22:32:40Z_
+_Reviewed: 2026-10-11T00:43:16Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
