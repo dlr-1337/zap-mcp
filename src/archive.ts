@@ -234,10 +234,11 @@ export function openArchive(dataDir: string) {
   }
   function ingestOne(input: unknown, kind = 'original') {
     const raw = obj(input), protocol = obj(content(raw.message).protocolMessage);
-    let source = raw;
+    const envelopeKey = keyOf({ ...obj(raw.key), participant: str(obj(raw.key).participant) ?? str(raw.participant) });
+    let source: Obj = { ...raw, key: envelopeKey };
     if (protocol.type === 0 || protocol.type === 14) {
       // The inner key is sender-relative; rc14 targets the local envelope key plus this ID.
-      source = { key: { ...obj(raw.key), id: str(obj(protocol.key).id) }, message: protocol.type === 0 ? null : protocol.editedMessage, revisionTimestamp: protocol.timestampMs, messageTimestamp: protocol.type === 14 ? raw.messageTimestamp : undefined };
+      source = { key: { ...envelopeKey, id: str(obj(protocol.key).id) }, message: protocol.type === 0 ? null : protocol.editedMessage, revisionTimestamp: protocol.timestampMs, messageTimestamp: protocol.type === 14 ? raw.messageTimestamp : undefined };
       kind = protocol.type === 0 ? 'revoke' : 'edit';
     }
     const key = keyOf(source.key);
@@ -247,6 +248,14 @@ export function openArchive(dataDir: string) {
     let row = db.prepare('SELECT reference FROM origins WHERE origin=?').get(originKey(key)) as { reference: string } | undefined;
     if (!key.id || !key.remoteJid) row = undefined;
     row ??= db.prepare('SELECT reference FROM messages WHERE logical_key=?').get(logical) as { reference: string } | undefined;
+    if (!row && key.participant && key.remoteJid?.endsWith('@g.us')) {
+      const legacy = db.prepare('SELECT o.reference,r.payload FROM origins o JOIN revisions r ON r.reference=o.reference WHERE o.origin=? AND r.payload IS NOT NULL ORDER BY r.id LIMIT 1').get(originKey({ ...key, participant: null })) as { reference: string; payload: Buffer } | undefined;
+      if (legacy && canonical(str(obj(deserialize(legacy.payload)).participant)) === canonical(key.participant)) {
+        row = legacy;
+        db.prepare('UPDATE origins SET key_json=? WHERE origin=?').run(JSON.stringify(key), originKey({ ...key, participant: null }));
+        db.prepare('UPDATE messages SET logical_key=?,author=? WHERE reference=?').run(logical, canonical(key.participant), row.reference);
+      }
+    }
     const reference = row?.reference ?? randomUUID();
     const originalTime = kind === 'original' ? timestamp(source.messageTimestamp) : null;
     if (!row) db.prepare('INSERT INTO messages(reference,conversation_id,original_timestamp,logical_key,author,from_me) VALUES(?,?,?,?,?,?)').run(reference, conversation(key.remoteJid), originalTime, logical, canonical(key.participant) ?? (key.fromMe === false && !key.remoteJid?.endsWith('@g.us') ? canonical(key.remoteJid) : null), key.fromMe === null ? null : Number(key.fromMe));
