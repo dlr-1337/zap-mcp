@@ -7,6 +7,8 @@ let readVersion = 0, navigationVersion = 0, statusVersion = 0, qrTimer, lastRefe
 let searchVersion = 0, searchCursor, searchFilters;
 let contactVersion = 0, contactSelection, candidateCursor, candidateQuery;
 const tabs = new Map();
+const pendingContexts = new Map();
+let suspended = false;
 const searchPanel = $('search-panel'), searchForm = $('search-form'), termInput = $('search-terms'), searchButton = $('search-submit');
 const searchStatus = $('search-status'), searchError = $('search-error'), searchScope = $('search-scope'), searchResults = $('search-results');
 const moreResults = $('more-results'), refreshSearch = $('refresh-search');
@@ -89,7 +91,8 @@ function signedOut(message = '') {
   authenticated = reading = false; selected = listCursor = messageCursor = csrfToken = lastReference = attemptsLimit = undefined;
   hideQr();
   $('archive').hidden = true; $('archive').classList.remove('reading'); $('login-panel').hidden = false;
-  for (const tab of tabs.values()) { ++tab.generation; tab.panel.remove(); tab.button.parentElement.remove(); } tabs.clear();
+  pendingContexts.clear(); suspended = false;
+  for (const tab of tabs.values()) { ++tab.generation; releasePanel(tab.panel); tab.panel.remove(); tab.button.parentElement.remove(); } tabs.clear();
   for (const id of ['conversations', 'coverage', 'coverage-batches']) $(id).replaceChildren();
   resetReader();
   for (const id of ['connection', 'qr-status', 'media-status', 'archive-error', 'list-status', 'status-loading']) $(id).textContent = '';
@@ -202,16 +205,20 @@ function createTab(conversation) {
   const panel = document.createElement('section'); panel.id = 'panel-' + conversation.id; panel.hidden = true; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'tab-' + conversation.id); $('conversation-panels').append(panel);
   const holder = document.createElement('div'); $('conversation-tabs').append(holder);
   const button = addText(holder, 'button', conversationLabel(conversation)); button.id = 'tab-' + conversation.id; button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-selected', 'false'); button.tabIndex = -1;
+  const close = addText(holder, 'button', 'Fechar'); close.setAttribute('aria-label', 'Fechar conversa: ' + conversationLabel(conversation));
   const status = addText(panel, 'p', ''); status.setAttribute('role', 'status');
   const messages = addText(panel, 'ol', '');
   const before = addText(panel, 'button', 'Carregar mensagens anteriores'), after = addText(panel, 'button', 'Carregar mensagens posteriores'), refresh = addText(panel, 'button', 'Atualizar conversa'); before.hidden = after.hidden = refresh.hidden = true;
   const tab = { conversation, panel, button, status, messages, before, after, refresh, generation: 0, loading: false, scroll: 0, anchor: null };
   tabs.set(conversation.id, tab); button.addEventListener('click', () => activateTab(tab)); before.addEventListener('click', () => contextPage(tab, 'before')); after.addEventListener('click', () => contextPage(tab, 'after')); refresh.addEventListener('click', () => openContext(tab.requestedReference, undefined, conversation.id));
+  close.addEventListener('click', () => closeTab(tab));
   return tab;
 }
 function activateTab(tab, restore = true) {
+  ++navigationVersion;
   const previous = tabs.get(selected); if (previous && !previous.panel.hidden) previous.scroll = window.scrollY;
   for (const other of tabs.values()) {
+    if (other !== tab) for (const player of other.panel.querySelectorAll('audio,video')) player.pause();
     other.panel.hidden = other !== tab; other.button.setAttribute('aria-selected', String(other === tab)); other.button.tabIndex = other === tab ? 0 : -1;
     for (const el of [other.status, other.messages, other.before, other.after, other.refresh]) el.removeAttribute('id');
   }
@@ -221,6 +228,18 @@ function activateTab(tab, restore = true) {
   for (const link of $('conversations').querySelectorAll('a')) { if (link.dataset.id === selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
   history.replaceState({}, '', '/?conversation=' + encodeURIComponent(selected) + (tab.anchor ? '&reference=' + encodeURIComponent(tab.anchor) : ''));
   if (restore) window.scrollTo(0, tab.scroll);
+}
+function releasePanel(panel) {
+  for (const el of panel.querySelectorAll('audio,video,img,[src]')) { el.pause?.(); el.removeAttribute('src'); el.load?.(); }
+}
+function closeTab(tab) {
+  const order = [...tabs.values()], index = order.indexOf(tab), active = selected === tab.conversation.id;
+  ++tab.generation; pendingContexts.delete(tab.conversation.id); tabs.delete(tab.conversation.id); releasePanel(tab.panel); tab.panel.remove(); tab.button.parentElement.remove();
+  if (active) {
+    const next = order[index + 1] ?? order[index - 1];
+    if (next) { activateTab(next); next.button.focus({ preventScroll: true }); }
+    else { ++navigationVersion; selected = lastReference = undefined; reading = false; resetReader(); $('reader').removeAttribute('aria-busy'); $('message-title').textContent = 'Mensagens arquivadas'; back(); $('conversations').querySelector('a')?.focus({ preventScroll: true }); }
+  }
 }
 function renderContext(tab, data, direction) {
   const anchor = direction ? tab.messages.querySelector('[data-anchor=true]') ?? tab.messages.firstElementChild : null, offset = anchor?.getBoundingClientRect().top;
@@ -243,24 +262,28 @@ function renderContext(tab, data, direction) {
   if (selected === tab.conversation.id) { lastReference = tab.lastReference; if (anchor) window.scrollBy(0, anchor.getBoundingClientRect().top - offset); }
 }
 async function openContext(reference, sourceSnapshotId, conversationId) {
-  if (!authenticated) return;
-  const version = readVersion, navigation = ++navigationVersion; let tab = tabs.get(conversationId);
-  if (tab?.loading) return;
+  if (!authenticated || suspended || pendingContexts.has(conversationId)) return;
+  const version = readVersion, navigation = ++navigationVersion, operation = {}; let tab = tabs.get(conversationId);
+  if (tab?.loading) return; pendingContexts.set(conversationId, operation);
   const ticket = tab ? ++tab.generation : 0;
   if (tab) { tab.loading = true; tab.status.textContent = 'Carregando contexto…'; tab.panel.setAttribute('aria-busy', 'true'); }
   $('reader').setAttribute('aria-busy', 'true');
   try {
     const query = new URLSearchParams(); if (sourceSnapshotId) query.set('sourceSnapshotId', sourceSnapshotId);
     const response = await request('/api/context/' + encodeURIComponent(reference) + '?' + query);
-    if (version !== readVersion || navigation !== navigationVersion || tab && ticket !== tab.generation) return;
-    const data = await response.json(); if (version !== readVersion || navigation !== navigationVersion || tab && ticket !== tab.generation) return;
-    if (!response.ok) { if (tab) tab.status.textContent = response.status === 410 ? data.error : response.status === 404 ? 'Não encontrado no acervo. Volte aos resultados.' : 'Não foi possível carregar o contexto. Tente abrir novamente.'; else $('reader-status').textContent = response.status === 404 ? 'Não encontrado no acervo. Volte aos resultados.' : 'Não foi possível carregar o contexto. Tente abrir novamente.'; return; }
-    tab = tabs.get(data.conversation.id) ?? createTab(data.conversation); renderContext(tab, data); activateTab(tab, false); tab.messages.querySelector('[data-anchor=true]')?.focus();
-  } catch (error) { if (version === readVersion && navigation === navigationVersion) failure(error); }
-  finally { if (version === readVersion && navigation === navigationVersion) { if (tab) { tab.loading = false; tab.panel.removeAttribute('aria-busy'); } reading = false; $('reader').removeAttribute('aria-busy'); } }
+    const valid = () => version === readVersion && authenticated && !suspended && pendingContexts.get(conversationId) === operation && (!tab || ticket === tab.generation && tabs.get(conversationId) === tab);
+    if (!valid()) return;
+    const data = await response.json(); if (!valid()) return;
+    if (!response.ok) { const status = response.status === 410 || [413, 429].includes(response.status) ? data.error : response.status === 404 ? 'Não encontrado no acervo. Volte aos resultados.' : 'Não foi possível carregar o contexto. Tente abrir novamente.'; if (tab) tab.status.textContent = status; else if (navigation === navigationVersion) $('reader-status').textContent = status; return; }
+    const canonical = tabs.get(data.conversation.id);
+    if (tab && tab !== canonical && tab.conversation.id !== data.conversation.id) { const wasActive = selected === tab.conversation.id; ++tab.generation; tabs.delete(tab.conversation.id); releasePanel(tab.panel); tab.panel.remove(); tab.button.parentElement.remove(); if (wasActive) selected = undefined; }
+    tab = canonical ?? createTab(data.conversation); renderContext(tab, data);
+    if (navigation === navigationVersion) { activateTab(tab, false); tab.messages.querySelector('[data-anchor=true]')?.focus(); }
+  } catch (error) { if (version === readVersion && pendingContexts.get(conversationId) === operation) { if (tab && !['stale', 'expired'].includes(error.message)) tab.status.textContent = 'Não foi possível carregar o contexto. Tente abrir novamente.'; if (navigation === navigationVersion) failure(error); } }
+  finally { if (version === readVersion && pendingContexts.get(conversationId) === operation) { pendingContexts.delete(conversationId); if (tab) { tab.loading = false; tab.panel.removeAttribute('aria-busy'); } const active = tabs.get(selected); reading = active?.loading ?? false; $('reader').setAttribute('aria-busy', String(reading)); } }
 }
 async function contextPage(tab, direction) {
-  if (!authenticated || tab.loading) return;
+  if (!authenticated || suspended || tab.loading) return;
   const cursor = direction === 'before' ? tab.previousCursor : tab.nextCursor; if (!cursor) return;
   const version = readVersion, ticket = ++tab.generation; tab.loading = true; tab.panel.setAttribute('aria-busy', 'true'); tab.status.textContent = 'Carregando contexto…'; tab.before.disabled = tab.after.disabled = true;
   try {
@@ -272,7 +295,7 @@ async function contextPage(tab, direction) {
   finally { if (version === readVersion && ticket === tab.generation) { tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; } }
 }
 async function openConversation(id) {
-  if (!authenticated) return;
+  if (!authenticated || suspended) return;
   if (tabs.has(id)) { activateTab(tabs.get(id)); return; }
   const version = readVersion, navigation = ++navigationVersion;
   $('reader').setAttribute('aria-busy', 'true');
@@ -285,12 +308,13 @@ async function openConversation(id) {
   finally { if (version === readVersion) $('reader').removeAttribute('aria-busy'); }
 }
 function back() {
+  ++navigationVersion;
   const tab = tabs.get(selected); if (tab) tab.scroll = window.scrollY;
   $('archive').classList.remove('reading'); $('back').hidden = true;
   const link = [...$('conversations').querySelectorAll('a')].find(item => item.dataset.id === selected); link?.focus({ preventScroll: true }); window.scrollTo(0, listPosition);
 }
 async function refreshStatus() {
-  if (!authenticated) return;
+  if (!authenticated || suspended) return;
   const version = readVersion, ticket = ++statusVersion; $('status-loading').textContent = 'Conferindo estado e cobertura…';
   try {
     const response = await request('/api/status'); if (!response.ok) throw Error('server');
@@ -322,7 +346,7 @@ async function refreshStatus() {
     }
     if (selected && !reading) {
       const id = selected, navigation = navigationVersion, latest = await request('/api/conversations/' + encodeURIComponent(id) + '/messages?limit=1');
-      if (latest.ok) { const page = await latest.json(); if (version === readVersion && ticket === statusVersion && navigation === navigationVersion && selected === id) $('refresh-conversation').hidden = page.messages.at(-1)?.reference === lastReference; }
+      if (latest.ok) { const page = await latest.json(); if (version === readVersion && ticket === statusVersion && navigation === navigationVersion && selected === id && tabs.has(id)) { const tab = tabs.get(id); const changed = page.messages.at(-1)?.reference !== tab.lastReference; tab.refresh.hidden = false; tab.refresh.textContent = changed ? 'Há novas mensagens arquivadas. Atualizar conversa' : 'Atualizar conversa'; } }
     }
     return version === readVersion && ticket === statusVersion;
   } catch (error) { if (version === readVersion && ticket === statusVersion) failure(error); }
@@ -345,6 +369,8 @@ $('login-form').addEventListener('submit', async event => {
   finally { $('password').value = ''; $('login-button').disabled = false; $('login-form').removeAttribute('aria-busy'); $('login-status').textContent = ''; }
 });
 $('logout-button').addEventListener('click', async () => {
+  ++readVersion; ++navigationVersion; pendingContexts.clear();
+  for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; }
   $('logout-button').disabled = true;
   try {
     const response = await request('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrfToken }) });
@@ -363,13 +389,13 @@ window.addEventListener('offline', () => { if (authenticated) failure(new TypeEr
 async function revalidate() {
   if (!authenticated) return; const version = readVersion, wasOffline = $('archive-error').textContent === noServer; hideQr();
   try {
-    const session = await challenge(); if (version !== readVersion) return;
-    if (!session.authenticated) { signedOut(expired); return; } $('archive').hidden = false; $('login-panel').hidden = true;
+    const previousToken = csrfToken, session = await challenge(); if (version !== readVersion) return;
+    if (!session.authenticated || previousToken !== csrfToken) { signedOut(expired); return; } suspended = false; $('archive').hidden = false; $('login-panel').hidden = true;
     if (await refreshStatus() && version === readVersion && wasOffline) $('archive-error').textContent = 'Acesso ao servidor restabelecido. Atualize os dados para conferir o estado atual.';
   }
   catch (error) { failure(error); if ($('archive').hidden && authenticated) { $('login-panel').hidden = false; $('login-error').textContent = noServer; } }
 }
 window.addEventListener('online', revalidate); window.addEventListener('pageshow', event => { if (event.persisted) revalidate(); });
-window.addEventListener('pagehide', () => { hideQr(); if (authenticated) $('archive').hidden = true; });
+window.addEventListener('pagehide', () => { hideQr(); if (authenticated) { suspended = true; ++readVersion; ++navigationVersion; pendingContexts.clear(); for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; for (const player of tab.panel.querySelectorAll('audio,video')) player.pause(); } $('archive').hidden = true; } });
 setInterval(() => { if (authenticated && document.visibilityState === 'visible') refreshStatus(); }, 10_000);
 challenge().then(data => data.authenticated ? enter() : signedOut()).catch(() => { $('login-error').textContent = noServer; });

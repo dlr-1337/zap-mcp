@@ -29,7 +29,10 @@ export class SQLiteStore extends Store {
     } catch (error) { callback?.(error); }
   }
   destroy(id: string, callback?: (error?: unknown) => void) {
-    try { this.db.transaction(() => { this.db.prepare('INSERT OR IGNORE INTO web_revocations VALUES (?, ?)').run(id, Date.now()); this.db.prepare('DELETE FROM web_sessions WHERE id = ?').run(id); })(); callback?.(); } catch (error) { callback?.(error); }
+    try { const row = this.db.prepare('SELECT data FROM web_sessions WHERE id=?').get(id) as { data: string } | undefined;
+      this.db.transaction(() => { this.db.prepare('INSERT OR IGNORE INTO web_revocations VALUES (?, ?)').run(id, Date.now()); this.db.prepare('DELETE FROM web_sessions WHERE id = ?').run(id); })();
+      if (row) this.emit('revoked', id, (JSON.parse(row.data) as SessionData).ownerGeneration); callback?.();
+    } catch (error) { callback?.(error); }
   }
   touch(id: string, _data: SessionData, callback?: (error?: unknown) => void) {
     try { this.db.prepare('UPDATE web_sessions SET touched_at = ? WHERE id = ?').run(Date.now(), id); callback?.(); } catch (error) { callback?.(error); }
@@ -96,5 +99,5 @@ export function createWebAuth(authDb: Database.Database) {
     await new Promise<void>((ok, fail) => req.session.destroy(error => error ? fail(error) : ok()));
     res.clearCookie('zap.sid', { httpOnly: true, sameSite: 'strict', secure: false }); res.json({ authenticated: false });
   };
-  return { middleware, requireOwner, csrf, sessionInfo, login, logout };
+  return { middleware, requireOwner, csrf, sessionInfo, login, logout, store };
 }

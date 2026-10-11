@@ -121,6 +121,11 @@ export function createService({ dataDir }: { dataDir: string }) {
     return { ...conversation, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity?.endsWith('@s.whatsapp.net') || identity?.endsWith('@lid') ? 'individual' : null };
   };
   const searchSession = (req: Request) => createHmac('sha256', signingKey).update(JSON.stringify([req.sessionID, req.session.ownerGeneration])).digest('hex');
+  auth.store.on('revoked', (id: string, generation: string | undefined) => archive.dropQueries(createHmac('sha256', signingKey).update(JSON.stringify([id, generation])).digest('hex')));
+  const querySweep = setInterval(() => {
+    for (const row of authDb.prepare('SELECT id FROM web_sessions').all() as { id: string }[]) auth.store.get(row.id, () => {});
+    archiveDb.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+  }, 60_000); querySweep.unref();
   app.get('/api/context/:reference', (req, res) => {
     if (Object.keys(req.query).some(k => !['sourceSnapshotId', 'limit', 'cursor', 'direction'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(req.params.reference)) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
@@ -187,7 +192,7 @@ export function createService({ dataDir }: { dataDir: string }) {
       archive.indexMessage(message.reference);
       return id;
     }),
-    setPassword(password: string) { return setOwnerPassword(authDb, password); },
+    async setPassword(password: string) { await setOwnerPassword(authDb, password); archiveDb.exec('DELETE FROM query_snapshots'); },
     startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
       lock.assert(); if (collector) throw Error('Coletor já ativo');
       collector = createCollector({ authDb, archive, lock, ...options });
@@ -196,7 +201,7 @@ export function createService({ dataDir }: { dataDir: string }) {
       return collector;
     },
     close() {
-      const finish = () => { archiveDb.close(); authDb.close(); lock.release(); };
+      const finish = () => { clearInterval(querySweep); archiveDb.close(); authDb.close(); lock.release(); };
       if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(finish);
       finish();
     }
