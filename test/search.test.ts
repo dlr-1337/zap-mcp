@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 import { openArchive } from '../src/archive.js';
+import * as archiveModule from '../src/archive.js';
 
 export async function searchFixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-search-')), s = createService({ dataDir: dir });
@@ -76,4 +77,32 @@ test('baseline6 reabre derivados sem alterar entidades nem blobs', t => {
   assert.equal(a.db.pragma('user_version', { simple: true }), 6);
   assert.deepEqual(['messages', 'origins', 'revisions', 'attachments', 'batches'].map(name => a.db.prepare('SELECT * FROM ' + name).all()), entities);
   assert.ok(a.db.prepare("SELECT name FROM sqlite_master WHERE name='search_fts'").get()); a.close();
+});
+
+test('dias inclusivos respeitam23h e25h', async t => {
+  const { s, read } = await searchFixture(t);
+  for (const [day, start, end, hours] of [['2018-11-04', '2018-11-04T03:00:00.000Z', '2018-11-05T02:00:00.000Z', 23], ['2019-02-16', '2019-02-16T02:00:00.000Z', '2019-02-17T03:00:00.000Z', 25]] as const) {
+    for (const [i, ms] of [Date.parse(start) - 1, Date.parse(start), Date.parse(end) - 1, Date.parse(end)].entries()) s.writeMessage({ reference: day + '-' + i, conversationId: day + '@lid', conversationName: day, text: 'data', originalTimestamp: new Date(ms).toISOString() });
+    const data = await read('?from=' + day + '&to=' + day);
+    assert.deepEqual(data.messages.map((m: any) => m.reference).sort(), [day + '-1', day + '-2']);
+    assert.equal(data.effectiveFilters.startUtc, start); assert.equal(data.effectiveFilters.endUtc, end); assert.equal(data.effectiveFilters.zone, 'America/Sao_Paulo');
+    assert.equal((Date.parse(end) - Date.parse(start)) / 3600000, hours);
+  }
+  const parsePeriod = (archiveModule as any).parsePeriod; assert.equal(typeof parsePeriod, 'function');
+  assert.equal(parsePeriod('2018-11-04', '2018-11-04').startUtc, '2018-11-04T03:00:00.000Z');
+});
+
+test('calendário estrito limites abertos original null e Date.max não viram ingestão', async t => {
+  const { s, read, base, headers } = await searchFixture(t);
+  s.archive.ingestHistory({ messages: [{ key, message: { conversation: 'sem relógio' } }, { key: { ...key, id: 'max' }, messageTimestamp: 8640000000000n, message: { conversation: 'Date max' } }, { key: { ...key, id: 'overflow' }, messageTimestamp: 8640000000001n, message: { conversation: 'overflow' } }] });
+  assert.equal((await read()).messages.length, 3);
+  const open = await read('?from=2018-11-04&to='); assert.equal(open.messages.length, 1); assert.equal(open.messages[0].originalTimestamp, '+275760-09-13T00:00:00.000Z');
+  assert.match(open.effectiveFilters.dateUnknownPolicy, /exclu/);
+  assert.equal((await read('?from=&to=2018-11-04')).messages.length, 0);
+  assert.equal((await read('?from=&to=')).messages.filter((m: any) => m.originalTimestamp === null).length, 2);
+  assert.equal((await read('?q=sem')).messages[0].originalTimestamp, null);
+  for (const q of ['from=2018-11-05&to=2018-11-04', 'from=2026-02-30', 'to=2026-13-01', 'from=0000-01-01', 'from=٢٠٢٦-01-01', 'from=+002026-01-01', 'from=2026-1-01', 'from[]=2026-01-01', 'from=2026-01-01&from=2026-01-02']) assert.equal((await fetch(base + '/api/search?' + q, { headers })).status, 400, q);
+  const parsePeriod = (archiveModule as any).parsePeriod;
+  for (const value of [[], {}, 123, '2026-02-30', '0000-01-01']) assert.throws(() => parsePeriod(value, undefined));
+  assert.equal(parsePeriod(null, '').startUtc, null); assert.ok(parsePeriod('0001-01-01', '9999-12-31').endUtc);
 });
