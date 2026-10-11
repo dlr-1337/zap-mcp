@@ -1,7 +1,7 @@
 # Phase 1: Arquivo privado com mensagens e mídias reais - Context
 
 **Gathered:** 2026-10-10
-**Status:** Ready for planning
+**Status:** Execução em andamento; checkpoint 01-07-02 aguardando comparação humana
 **Modo:** `1 --all --auto`; decisões operacionais escolhidas pelo agente conforme a autorização, sem respostas individuais do usuário.
 
 <domain>
@@ -50,7 +50,7 @@ Responsabilidade desta fase: PRIV-01/02/03, SYNC-01 a SYNC-07, EVID-01, MEDIA-01
 - **D-17:** Interface simples com estado de conexão, lista de conversas, uma conversa por vez, mensagens e acesso privado ao original disponível; leitura limitada e ordenada sem carregar todo o acervo.
 - **D-18:** Autor/direção, data original em America/Sao_Paulo, referência, tipo, texto/legenda, citação recebida, alterações e estados de anexo; campos desconhecidos explícitos e homônimos distintos.
 - **D-19:** Só após preparar e conferir cópia privada recuperável e exclusividade do coletor; manter consulta sem coletor para testes e restauração.
-- **D-20:** Comparar conversa conhecida e exemplos reais acessíveis dos quatro tipos com o celular, incluir grupo/direção recebida-enviada, testar leitura offline e reinício; falta de acesso, QR ou amostra mantém aceite pendente.
+- **D-20:** Comparar conversa conhecida e exemplos reais acessíveis dos quatro tipos com o celular, incluir grupo/direção recebida-enviada, testar leitura offline e reinício; falta de acesso, QR ou amostra mantém aceite pendente. O proprietário indicou o grupo conhecido indicado; usar os itens existentes desse grupo, sem enviar mensagens para criar amostras. A comparação com o celular e uma conversa individual conhecida continuam pendentes. `--auto` resolve escolhas operacionais, sem substituir essa evidência humana.
 
 ### Discrição do agente
 - Escolher estrutura de módulos, schema/migrações, biblioteca mínima de sessão/QR, layout e números iniciais de fila/tentativas/reserva de disco com base na pesquisa da versão real e recursos medidos; registrar limites efetivos sem criar telas extras.
@@ -77,6 +77,11 @@ Responsabilidade desta fase: PRIV-01/02/03, SYNC-01 a SYNC-07, EVID-01, MEDIA-01
 - `.planning/research/PITFALLS.md` — cobertura parcial, identidade PN/LID, replay, chaves, privacidade, disco e backup.
 - `.planning/research/FEATURES.md` — capacidades v1 e limites de pesquisa/consulta.
 
+### Execução e continuidade
+- `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md` — contrato do piloto e comparação humana obrigatória.
+- `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md` — preparo concluído, intervenção restante e retomada sem repetir os planos anteriores.
+- `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-SUMMARY.md` — resultados técnicos reais e aceite ainda interrompido.
+
 Não há SPEC/ADR externo específico desta fase. As URLs técnicas citadas na pesquisa exigem consulta à fonte/tag efetiva pelo pesquisador; não são evidência de operação.
 </canonical_refs>
 
@@ -84,9 +89,13 @@ Não há SPEC/ADR externo específico desta fase. As URLs técnicas citadas na p
 ## Existing Code Insights
 
 ### Reusable Assets
-- Ainda não há código, dependências instaladas, testes, componentes, rotas ou maps em `.planning/codebase/`.
+- `src/archive.ts`: `openArchive`, ingestão transacional, identidades/origens, revisões, referências estáveis, consultas e cobertura recebida.
+- `src/whatsapp.ts`: sessão transacional, exclusividade do coletor, QR privado, reconexão e adaptação dos eventos Baileys.
+- `src/media.ts`: fila persistente, download por stream, verificação de originais e reconciliação após interrupção.
+- `src/backup.ts`: snapshot privado, validação, restauração isolada e preflight antes do coletor.
+- `src/main.ts`, `src/auth.ts` e `public/`: serviço HTTP autenticado e leitor básico já implementados; reutilizar os contratos existentes. Não há maps em `.planning/codebase/`.
 - `.gitignore` já exclui dependências, build, configuração privada, banco, mídia, sessão, exportações e backups; novos arquivos privados precisam continuar fora do Git.
-- `README.md`, `AGENTS.md` e os documentos `.planning/` são os ativos existentes, sem produto funcional.
+- `test/` cobre autenticação, ingestão, revisões, sessão, somente leitura, mídia e recuperação. A última execução registrada passou 82 testes; fixtures não comprovam cobertura do celular.
 
 ### Established Patterns
 - Planejamento versionado no ramo `main`; repositório público, dados reais privados.
@@ -94,9 +103,10 @@ Não há SPEC/ADR externo específico desta fase. As URLs técnicas citadas na p
 - Preservar instantes e identidade desde a ingestão; nome exibido não define a identidade. Layout simples com APIs nativas de navegador é a direção pesquisada.
 
 ### Integration Points
-- Novo serviço terá coletor isolado da interface de consulta e download; fases futuras reutilizarão o arquivo e projeção segura.
+- Serviço existente mantém o coletor isolado da interface de consulta e download; fases futuras reutilizarão o arquivo e a projeção segura.
 - Diretório persistente privado e backup pertencem ao ambiente operacional, não ao pacote público de fonte.
-- Nenhum acesso à VPS, domínio ou sessão real foi comprovado por esta discussão; o planejador deve tornar essas dependências explícitas.
+- Piloto local conectado e autenticado, com quatro originais reais e restauração/leitura offline/reinício já conferidos. Preservar o perfil e o único coletor; não repetir pareamento válido ou implementação concluída ao retomar.
+- VPS, domínio, backup externo e MCP no Codex permanecem sem validação. A fase 1 continua aberta pela comparação conhecida pendente, sem antecipar capacidades das fases seguintes.
 </code_context>
 
 <specifics>
@@ -104,7 +114,7 @@ Não há SPEC/ADR externo específico desta fase. As URLs técnicas citadas na p
 
 - Uso original: ler conversa com João, localizar orçamento e conferir o combinado; o fluxo completo é aceite posterior, sem antecipar busca/abas/MCP na fase 1.
 - Distinguir conexão, progresso de lote e cobertura observada. Usar “não encontrado no acervo” e nunca “não existiu” ou “histórico completo”.
-- O celular do proprietário é necessário para ler o QR e confirmar uma conversa conhecida. Não enviar mensagens pelo Zap MCP para fabricar evidência de captura.
+- O proprietário já leu o QR; conexão real novamente conferida nesta retomada. O celular ainda é necessário para confirmar uma conversa conhecida. Última resposta: “Ainda não consegui comparar”. Não interpretar nova invocação `--auto` como confirmação dessa comparação.
 - Se a conversa ou mídia essencial não vier da fonte, registrar lacuna e resolver a viabilidade antes de ampliar a interface. Não construir importador preventivo.
 </specifics>
 
