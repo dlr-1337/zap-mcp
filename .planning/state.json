@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Busca, contexto, abas e exportação no site",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -25,9 +25,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 2)",
-    "reason": "Phase 2 of 4 — needs a plan"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-11T04:27:42.527Z"
+  "updated_at": "2026-10-11T23:05:40.594Z"
 }
