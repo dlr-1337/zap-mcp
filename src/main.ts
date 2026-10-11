@@ -43,7 +43,8 @@ export function createService({ dataDir }: { dataDir: string }) {
   for (const name of ['archive.sqlite', 'auth.sqlite']) chmodSync(join(dataDir, name), 0o600);
   } catch (error) { for (const db of opened) db.close(); lock.release(); throw error; }
   const app = express();
-  const exports = createExportManager({ archive, dataDir, mediaDir });
+  let exports: ReturnType<typeof createExportManager>;
+  try { exports = createExportManager({ archive, dataDir, mediaDir }); } catch (e) { for (const db of opened) db.close(); lock.release(); throw e; }
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     if (!/^(127\.0\.0\.1|localhost)(:[0-9]+)?$/.test(req.get('Host') ?? '') || !['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(req.socket.remoteAddress ?? '')) { res.status(403).json({ error: 'Transporte recusado' }); return; } next();

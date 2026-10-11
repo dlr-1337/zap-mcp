@@ -91,6 +91,9 @@ test('manifesto conserva versões Unicode citações faltantes e nomes iguais se
   assert.equal(message.attachments.length, 2); assert.equal(message.attachments[1].capturedState, 'pending'); assert.equal(message.attachments[1].path, null); assert.equal(job.counts.missing, 1);
   assert.equal(manifest.messages.find((m: any) => m.key?.id === 'quote').quote.text, 'citação preservada'); assert.doesNotMatch(zip.get('manifest.json')!.toString(), /PRIVATE_RESTRICTED/);
   assert.equal(spawnSync('unzip', ['-t', path]).status, 0); assert.ok(a.readStoredMessage(f.key)!.revoked);
+  const retry = await (await f.post()).json(), newer = await ready(f, retry.jobId); assert.equal(newer.counts.files, 2); assert.equal(newer.counts.missing, 0);
+  const nextPath = join(f.dir, 'retry.zip'); writeFileSync(nextPath, Buffer.from(await (await fetch(f.base + newer.downloadURL, { headers: f.headers })).arrayBuffer())); const nextZip = await entries(nextPath), next = JSON.parse(nextZip.get('manifest.json')!.toString());
+  const revisions = next.messages.find((m: any) => m.key?.id === 'file'); assert.equal(revisions.revoked, true); assert.equal(revisions.revisions.length, 3); assert.equal(new Set(revisions.attachments.map((a: any) => a.path)).size, 2); assert.equal(spawnSync('unzip', ['-t', nextPath]).status, 0);
 });
 test('período exportado compartilha DST limites inclusivos desconhecido vazio e ordenação', async t => {
   const f = await fixture(t), a = f.s.archive;
@@ -112,14 +115,23 @@ test('verificação ZIP rejeita CRC SHA conjunto duplicata traversal e absoluto'
 test('falhas ENOSPC stream conferência e publicação não anunciam pronto nem apagam acervo', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-export-fault-')), a = openArchive(dir); t.after(() => { a.close(); rmSync(dir, { recursive: true }); });
   const key = { remoteJid: 'fault@lid', id: 'm', fromMe: false }; a.ingestHistory({ messages: [{ key, messageTimestamp: 123, message: { conversation: 'intacto' } }] });
+  const bytes = Buffer.from('original intacto'), mediaKey = { ...key, id: 'file' }; a.ingestHistory({ messages: [{ key: mediaKey, messageTimestamp: 123, message: { documentMessage: { url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32), fileLength: bytes.length } } }] }); const worker = startMediaWorker({ archive: a, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop(); const attachment = a.readStoredMessage(mediaKey)!.attachments[0];
   const id = a.readStoredMessage(key)!.conversationId;
-  for (const point of ['claimed', 'written', 'verified', 'synced', 'published']) {
+  for (const point of ['claimed', 'stream', 'entry', 'written', 'verified', 'synced', 'published']) {
     const m = createExportManager({ archive: a, dataDir: dir, mediaDir: join(dir, 'media'), fault: async (stage, path) => { if (stage === point) { if (point === 'written') writeFileSync(path, 'truncated'); else throw Object.assign(Error('PRIVATE_FAULT'), { code: 'ENOSPC' }); } } });
     const j = m.createExportJob('session', id, '', ''); assert.equal(j.state, 'preparing'); assert.throws(() => m.createExportJob('other', id, '', ''), (e: any) => e.status === 409);
     for (let i = 0; i < 100 && m.getExportJob(j.jobId, 'session').state === 'preparing'; i++) await new Promise(r => setTimeout(r, 5));
     const done = m.getExportJob(j.jobId, 'session'); assert.equal(done.state, 'failed', point); assert.equal('downloadURL' in done, false); assert.doesNotMatch(done.reason!, /PRIVATE_FAULT/); assert.throws(() => m.openExport(j.jobId, 'session'));
-    assert.equal(a.readStoredMessage(key)!.text, 'intacto'); assert.equal(readdirSync(join(dir, 'exports')).some(n => /\.(part|zip)$/.test(n)), false); await m.close();
+    assert.equal(a.readStoredMessage(key)!.text, 'intacto'); assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), bytes); assert.equal(a.getAttachment(attachment.id)!.state, 'available'); assert.equal(readdirSync(join(dir, 'exports')).some(n => /\.(part|zip)$/.test(n)), false); await m.close();
   }
+});
+test('limites de seleção e orçamento recusam explicitamente sem truncar o arquivo', async t => {
+  const f = await fixture(t), a = f.s.archive;
+  const attachment = a.readStoredMessage(f.key)!.attachments[0]; a.db.prepare('UPDATE attachments SET size=? WHERE id=?').run(3 * 1024 ** 3, attachment.id);
+  assert.equal((await f.post()).status, 413); assert.equal(a.getCoverage().uniqueMessages, 162);
+  a.db.prepare('UPDATE attachments SET size=? WHERE id=?').run(f.bytes.length, attachment.id);
+  a.db.prepare("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<50001) INSERT INTO messages(reference,conversation_id,text) SELECT 'excess-'||i,?,'small' FROM n").run(f.conversationId);
+  assert.equal((await f.post()).status, 413); assert.equal(a.getCoverage().uniqueMessages, 50163);
 });
 test('SIGKILL antes e após publicação recupera preparing como failed preservando original', async t => {
   for (const stage of ['claimed', 'verified', 'published']) {

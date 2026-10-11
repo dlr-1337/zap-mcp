@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { closeSync, constants, createReadStream, createWriteStream, existsSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, statfsSync, unlinkSync } from 'node:fs';
+import { chmodSync, closeSync, constants, createReadStream, createWriteStream, existsSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, statfsSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
@@ -52,9 +52,9 @@ export async function buildZip(archive: Archive, mediaDir: string, path: string,
   } });
   const output = createWriteStream(path, { flags: 'wx', mode: 0o600 });
   zip.on('error', e => source.destroy(e));
-  const writing = pipeline(source, bounded, output); void writing.catch(() => {});
+  const writing = pipeline(source, bounded, output); void writing.catch(() => { for (const stream of streams) stream.destroy(); });
   try {
-    const messages = structuredClone(selection.messages).map(m => ({ ...m, originalUtc: m.originalTimestamp, originalLocal: m.originalTimestamp ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'long' }).format(new Date(m.originalTimestamp)) : null, attachments: m.attachments.map(a => ({ ...a, capturedState: a.state, packagingState: 'missing', reason: a.reason ?? 'Original não disponível no instante do recorte', path: null as string | null })) }));
+    const messages = structuredClone(selection.messages).map(m => ({ ...m, originalUtc: m.originalTimestamp, originalLocal: m.originalTimestamp ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'long' }).format(new Date(m.originalTimestamp)) : null, attachments: m.attachments.map(a => ({ ...a, capturedState: a.state, packagingState: 'missing', reason: (a.reason ?? 'Original não disponível no instante do recorte') as string | null, path: null as string | null })) }));
     let files = 0, missing = 0;
     for (const m of messages) for (const a of m.attachments) {
       if (a.capturedState !== 'available') { missing++; continue; }
@@ -63,10 +63,11 @@ export async function buildZip(archive: Archive, mediaDir: string, path: string,
       if (file.size !== a.size || file.sha256 !== a.sha256) { closeSync(file.fd); a.reason = 'Original divergiu do recorte congelado'; missing++; continue; }
       const name = 'arquivos/' + a.id + '.bin';
       if (expected.has(name)) { closeSync(file.fd); throw Error('Anexo duplicado'); }
-      a.path = name; a.packagingState = 'included'; a.reason = null as unknown as string;
+      a.path = name; a.packagingState = 'included'; a.reason = null;
       expected.set(name, { size: file.size, sha256: file.sha256 }); files++;
       const stream = createReadStream('', { fd: file.fd, autoClose: true, start: 0 }); streams.add(stream);
       stream.on('error', e => source.destroy(e));
+      await fault?.('stream', path);
       zip.addReadStreamLazy(name, { size: file.size, mode: 0o100600 }, callback => callback(null, stream));
       await once(stream, 'close'); streams.delete(stream); await fault?.('entry', path);
     }
@@ -84,20 +85,25 @@ export async function buildZip(archive: Archive, mediaDir: string, path: string,
 export function createExportManager({ archive, dataDir, mediaDir, fault }: { archive: Archive; dataDir: string; mediaDir: string; fault?: Fault }) {
   const directory = resolve(dataDir, 'exports'); mkdirSync(directory, { recursive: true, mode: 0o700 });
   if (lstatSync(directory).isSymbolicLink() || realpathSync(directory) !== directory) throw Error('Derivados privados inválidos');
+  chmodSync(directory, 0o700);
   const dbPath = join(directory, 'jobs.sqlite'); if (existsSync(dbPath) && (!lstatSync(dbPath).isFile() || lstatSync(dbPath).isSymbolicLink())) throw Error('Derivados privados inválidos');
   const db = new Database(dbPath); db.pragma('synchronous = FULL');
+  chmodSync(dbPath, 0o600); db.pragma('secure_delete = ON');
   db.exec("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,session TEXT NOT NULL,state TEXT NOT NULL,selection TEXT NOT NULL,expires INTEGER NOT NULL,counts TEXT,reason TEXT); CREATE UNIQUE INDEX IF NOT EXISTS single_export ON jobs(state) WHERE state='preparing'; UPDATE jobs SET state='failed',reason='Preparação interrompida. Gere novamente.' WHERE state='preparing';");
+  db.prepare("UPDATE jobs SET selection='{}',counts=NULL WHERE expires<=?").run(Date.now());
   let active: Promise<void> | undefined, stopped = false;
   const remove = (id: string) => { if (!idPattern.test(id)) return; for (const suffix of ['.part', '.zip']) { const path = join(directory, id + suffix); if (existsSync(path)) unlinkSync(path); } };
+  const expire = (id: string) => { remove(id); db.prepare("UPDATE jobs SET state='failed',selection='{}',counts=NULL,reason='Esta exportação expirou.' WHERE id=?").run(id); };
   for (const name of readdirSync(directory)) if (/^[0-9a-f-]{36}\.(part|zip)$/.test(name)) {
     const id = name.slice(0, 36), row = db.prepare('SELECT state,expires FROM jobs WHERE id=?').get(id) as { state: string; expires: number } | undefined;
-    if (!row || row.state !== 'ready' || row.expires <= Date.now() || name.endsWith('.part')) remove(id);
+    if (row && row.expires <= Date.now()) expire(id);
+    else if (!row || row.state !== 'ready' || name.endsWith('.part')) remove(id);
   }
   const get = (id: string, session: string) => {
     if (!idPattern.test(id)) throw error(404, 'Exportação não encontrada');
     const row = db.prepare('SELECT * FROM jobs WHERE id=? AND session=?').get(id, session) as { id: string; state: string; selection: string; expires: number; counts: string | null; reason: string | null } | undefined;
     if (!row) throw error(404, 'Exportação não encontrada');
-    if (row.expires <= Date.now()) { remove(id); throw error(410, 'Esta exportação expirou. Gere novamente.'); }
+    if (row.expires <= Date.now()) { expire(id); throw error(410, 'Esta exportação expirou. Gere novamente.'); }
     const selection: Selection = JSON.parse(row.selection);
     return { jobId: id, state: row.state, effectiveFilters: selection.effectiveFilters, conversation: selection.conversation, snapshotAt: selection.snapshotAt, expiresAt: new Date(row.expires).toISOString(), counts: row.counts ? JSON.parse(row.counts) : { messages: selection.messages.length, files: null, missing: null }, reason: row.reason, ...(row.state === 'ready' ? { downloadURL: '/api/exports/' + id + '/download' } : {}) };
   };
@@ -133,7 +139,7 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
       try { const stat = fstatSync(fd); if (!stat.isFile()) throw Error('Pacote inválido'); return { fd, size: stat.size }; } catch (e) { closeSync(fd); throw e; }
     },
     dropSession(session: string) { for (const row of db.prepare('SELECT id FROM jobs WHERE session=?').all(session) as { id: string }[]) remove(row.id); db.prepare('DELETE FROM jobs WHERE session=?').run(session); },
-    purge() { for (const row of db.prepare('SELECT id FROM jobs WHERE expires<=?').all(Date.now()) as { id: string }[]) remove(row.id); db.prepare("UPDATE jobs SET state='failed',reason='Esta exportação expirou.' WHERE expires<=?").run(Date.now()); },
+    purge() { for (const row of db.prepare('SELECT id FROM jobs WHERE expires<=?').all(Date.now()) as { id: string }[]) expire(row.id); db.prepare('DELETE FROM jobs WHERE expires<?').run(Date.now() - 24 * 3600_000); },
     async close() { stopped = true; await active; db.close(); }
   };
 }
