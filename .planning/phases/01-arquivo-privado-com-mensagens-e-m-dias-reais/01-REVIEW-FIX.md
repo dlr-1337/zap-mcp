@@ -1,41 +1,89 @@
 ---
 phase: 01-arquivo-privado-com-mensagens-e-m-dias-reais
-fixed_at: 2026-10-11T00:41:43Z
+fixed_at: 2026-10-11T01:47:35Z
 review_path: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-REVIEW.md
-iteration: 3
+fix_scope: critical_warning
+iteration: 1
 findings_in_scope: 1
 fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
-# Fase 1: relatório de correções da revisão
+# Fase 1: relatório de correção WR-02
 
-**Iteração:** 3. **Escopo:** `critical_warning`. **Resumo:** 1 achado corrigido, 0 ignorados.
+**Resumo:** 1 achado em escopo, 1 corrigido, 0 ignorados. Iteração 1 desta revisão incremental. O ledger `01-REVIEW-DISPOSITION.md` e os relatórios anteriores no Git permanecem preservados.
 
 ## Fixed Issues
 
-### CR-03: Retry retira o final íntegro preservado pelo merge antes de tentar outro download
+### WR-02: teste de DNS aceita falha antes de exercitar o lookup
 
-**Disposição:** fixed: requires human verification
-**Arquivos modificados:** `src/media.ts`, `test/media.test.ts`.
-**Commit:** `4e739340cf8c54eb332f95e8cabec7858cc060b4` — `fix(01): CR-03 adopt verified finals before same-process retries`.
+**Status:** fixed
+**Arquivo modificado:** `test/media.test.ts`.
+**Commit:** `f277bdfa2ee07af20307b915a194ff0a637cf141` — `fix(01): make DNS regression deterministic`.
 
-**Correção aplicada:** `adoptFinal` compartilha a leitura/verificação SHA-256/tamanho dos bytes reais e comparação com o descriptor entre a reconciliação de reinício e o claim de retry. A adoção ocorre antes de trocar geração, incrementar tentativa ou reservar espaço; preserva geração de publicação, manifesto e locator. A confirmação SQL tem fencing por geração/estado e fica fora do tratamento de integridade; se falhar, o worker pausa preservando bytes e sem iniciar outro download. Apenas final comprovadamente divergente é movido para `.damaged`; final sem prova é preservado e impede nova obtenção destrutiva. A recuperação também adota um final publicado na última tentativa, sem ultrapassar o limite de downloads.
+**Correção aplicada:** o teste executa um subprocesso Node24, intercepta `node:https.request` antes de importar o dispatcher real e injeta um resolver com IPv4 público sintético. Exige exatamente uma requisição, `options.family=4`, `agent=false`, uma chamada ao resolver e ao lookup fixado e callback `[null, '8.8.8.8', 4]`. O transporte não abre socket: termina com um objeto de erro sintético cuja identidade precisa ser a causa da rejeição do fetch. O subprocesso deve terminar com código zero e marcador exato de sucesso. Timeout, rejeição arbitrária ou saída prematura não satisfazem o contrato. Nenhuma fonte de produção foi modificada.
 
 ## Verificação
 
-- **RED sem alterar fonte:** build passou; 4/4 cenários `published`/`beforeAvailable` × hash isolado no outro attachment falharam na assertiva semântica do retry no mesmo processo: esperado `available`, recebido `retry_wait`.
-- **GREEN no worktree isolado:** `mise exec node@24.21.0 -- npm run build` e seleção de `media`, `recovery`, `backup`, `archive` e `revisions` passaram **51/51**, sem falhas, skips ou cancelamentos; `git diff --check` passou. Dependências reutilizadas por symlink, sem instalação/mutação da árvore de dependências principal.
-- Regressões comprovam merge com dois workers, falha SQL depois da publicação, origem indisponível no retry sem reinício, nenhum novo download do original íntegro, mesma geração/tentativas, locator/manifest/bytes preservados, HTTP offline autenticado, reinício e snapshot/restore com bytes. Os DTOs existentes conservam a allowlist pública v6.
-- Controles específicos comprovam falha SQL na própria adoção sem destruição/download, corrupção de mesmo tamanho detectada por hash e isolada, final sem metadados de prova preservado, recuperação sem orçamento livre e recuperação na quinta tentativa. Os testes existentes de leases/fencing, concorrência, reserva de espaço e interrupção permanecem verdes.
-- Uma edição intermediária produziu erros TypeScript de estrutura; os dois arquivos foram revertidos com `git checkout --`, conferidos idênticos ao HEAD e a mudança foi reaplicada corrigida. A compilação final passou. Uma assertiva intermediária de status foi corrigida para medir `paused` antes de `stop()`; nenhuma falha remanescente.
-- **Gates no checkout principal:** após integração `--ff-only` em `main`, `mise exec node@24.21.0 -- npm test` padrão (inclui build) passou **79/79** em uma única execução, com zero falhas, skips ou cancelamentos. HEAD `4e73934`; remoção transacional do worktree, branch temporário e sentinel concluída, preservando dependências principais e trabalhos/documentos preexistentes. Nenhuma fonte ficou sem commit.
+Todos os comandos usaram `mise exec node@24.21.0`; nenhuma dependência foi instalada ou alterada.
+
+- **Leitura/estrutura:** trecho alterado relido, contexto intacto e `git diff --check` sem erros.
+- **Build no worktree isolado:** `mise exec node@24.21.0 -- npm run build` passou.
+- **GREEN focado no worktree isolado:** `mise exec node@24.21.0 -- node --test --test-name-pattern='dispatcher passa family=4' dist/test/media.test.js`: **1/1**, zero falhas, skips ou cancelamentos.
+- **RED por mutação em memória:** o mesmo script do teste compilado foi executado com `node:module.registerHooks`; apenas a ocorrência `agent: false, family: 4, lookup:` do módulo compilado foi substituída por `agent: false, lookup:` durante a carga, conferindo uma única ocorrência. Sem editar fonte ou artefato, o subprocesso terminou com **código 1**, `AssertionError [ERR_ASSERTION]: request deve fixar family=4`, `undefined !== 4`; o marcador de sucesso não apareceu. O harness exigiu esse código e essa mensagem específicos, terminando com `DNS_FAMILY4_MUTATION_DETECTED_IN_MEMORY`.
+- **Suíte no worktree isolado:** uma execução de `mise exec node@24.21.0 -- npm test` (inclui build) resultou **81/82**, zero skips/cancelamentos; o teste novo passou. Falha em `UI HTTP vazia, texto hostil e janelas com cursor estável sem coletor`: resposta inicial 500 em vez de 200. O caminho do worktree sob `.claude/` é um ancestor oculto recusado pelo `sendFile`; os assets estavam presentes.
+- **Gate no checkout principal:** após integração `--ff-only`, uma execução de `mise exec node@24.21.0 -- npm test` (inclui build) passou **82/82**, zero falhas, skips ou cancelamentos, em **13.716 s**. O teste UI acima passou, confirmando a limitação ambiental do caminho oculto sem mudança de fonte. A repetição foi necessária por essa falha específica de ambiente; não houve repetição ritual da suíte.
+- Worktree, branch temporário e sentinel removidos na ordem transacional após fast-forward. Dependências principais intactas; nenhum symlink ou instalação foi criado.
+
+
+### Reprodução exata da mutação
+
+Após `mise exec node@24.21.0 -- npm run build`, executar da raiz do projeto:
+
+```bash
+mise exec node@24.21.0 -- node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const testUrl = new URL('./dist/test/media.test.js', import.meta.url);
+const text = readFileSync(testUrl, 'utf8');
+const start = text.indexOf('const source = `', text.indexOf("test('dispatcher passa family=4"));
+const end = text.indexOf('\n    const child =', start);
+assert.ok(start >= 0 && end > start);
+const expression = text.slice(start + 'const source = '.length, end).trim().replace(/;$/, '').replaceAll('import.meta.url', JSON.stringify(testUrl.href));
+const contract = eval(expression);
+const target = new URL('./dist/src/media.js', import.meta.url).href;
+const hook = `
+import { registerHooks } from 'node:module';
+registerHooks({ load(url, context, nextLoad) {
+  const result = nextLoad(url, context);
+  if (url !== ${JSON.stringify(target)}) return result;
+  const source = String(result.source);
+  const needle = 'agent: false, family: 4, lookup:';
+  assert.equal(source.split(needle).length, 2, 'mutação única do request');
+  return { ...result, source: source.replace(needle, 'agent: false, lookup:') };
+} });
+`;
+const child = spawnSync(process.execPath, ['--input-type=module', '-e', hook + contract], { encoding: 'utf8' });
+assert.equal(child.error, undefined);
+assert.equal(child.status, 1);
+assert.match(child.stderr, /request deve fixar family=4/);
+assert.match(child.stderr, /undefined !== 4/);
+assert.doesNotMatch(child.stdout, /DNS_LOOKUP_FAMILY4_SEM_REDE_OK/);
+console.log('DNS_FAMILY4_MUTATION_DETECTED_IN_MEMORY');
+console.log(child.stderr);
+JS
+```
+
+Esse harness termina com código zero somente ao confirmar o código 1 e a mensagem da assertiva específica do subprocesso mutado. O código de produção e o arquivo compilado permanecem intactos.
 
 ## Limites
 
-Dados, streams e falhas injetadas são sintéticos; os HTTPs usam loopback. Nenhum socket WhatsApp real, QR, conta real, VPS/produção ou Codex real foi usado. A correção é de lógica e a persona exige revisão humana da disposição antes da verificação da fase; não comprova cobertura/aceite da conta. Não houve migração, nova dependência ou mudança em exportações/configuração/API pública. Relatório não commitado, para o orquestrador; snapshots/relatórios anteriores e `milestone.lock` preservados.
+Esta prova é sintética, sem acesso à conta, rede externa ou serviços privados. A comparação humana com o WhatsApp no celular permanece pendente: conversa individual conhecida, grupo, direções/autoria e quatro originais. Não comprova cobertura da conta, VPS/domínio, backup externo ou MCP no Codex real e não encerra a fase.
+
+Relatório sem commit para o orquestrador. Apenas o teste está no commit; `REVIEW.md`, `STATE.md`, `ROADMAP.md`, ledger, `milestone.lock`, dados e serviços privados não foram modificados.
 
 ---
 _Fixer: gsd-code-fixer_
-_Iteration: 3_
+_Iteration: 1_
