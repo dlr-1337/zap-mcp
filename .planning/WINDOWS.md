@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 6
-total_count: 6
-last_updated: 2026-10-10T22:23:17.496Z
+fixed_count: 7
+total_count: 7
+last_updated: 2026-10-11T23:23:05.093Z
 ---
 
 # Broken Windows Ledger
@@ -21,6 +21,7 @@ last_updated: 2026-10-10T22:23:17.496Z
 | 4 | 1 | deviation | src/auth.ts |  | QR assíncrono revalida TTL e revogação pelo SQLiteStore antes de responder; teste HTTP passou | fixed |  | 2026-10-10T22:01:44.544Z | 2026-10-10T22:01:44.736Z |
 | 5 | 1 | deviation | src/main.ts |  | DTO da lista preserva proteção de identificadores legados privados e expõe somente PN/LID/grupo recebido; teste antigo passou | fixed |  | 2026-10-10T22:01:44.911Z | 2026-10-10T22:01:45.042Z |
 | 6 | 1 | deviation | src/media.ts |  | Suite paralela apresentou retry_wait inesperado em original válido (58/59); reserva de job com tamanho desconhecido sob filesystem compartilhado requer revisão fora de01-06. | fixed |  | 2026-10-10T22:20:11.110Z | 2026-10-10T22:23:17.496Z |
+| 7 | 02 | deviation | test/http.test.ts |  | Fixture preexistente passou a resolver conversa pela origem conhecida; corrigido e verificado105/105. | fixed |  | 2026-10-11T23:21:43.647Z | 2026-10-11T23:23:05.093Z |
 
 ````json
 [
@@ -100,6 +101,19 @@ last_updated: 2026-10-10T22:23:17.496Z
     "reason": "",
     "recorded_at": "2026-10-10T22:20:11.110Z",
     "resolved_at": "2026-10-10T22:23:17.496Z",
+    "milestone": null
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "test/http.test.ts",
+    "line": null,
+    "description": "Fixture preexistente passou a resolver conversa pela origem conhecida; corrigido e verificado105/105.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-11T23:21:43.647Z",
+    "resolved_at": "2026-10-11T23:23:05.093Z",
     "milestone": null
   }
 ]

@@ -28,9 +28,9 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | 02-01-01 | 1 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js dist/test/ui.test.js` | passed — 4/4; tracer repetido 4/4 |
 | 02-01-02 | 1 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js` | passed — 5/5; DST23/25h e originalnull |
 | 02-01-03 | 1 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/search.test.js` | passed — 11/11; DOM real sintético |
-| 02-02-01 | 2 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/search.test.js` | pending execution |
-| 02-02-02 | 2 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/auth.test.js` | pending execution |
-| 02-02-03 | 2 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/context.test.js` | pending execution |
+| 02-02-01 | 2 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/search.test.js` | passed —13/13; tracer repetido13/13 |
+| 02-02-02 | 2 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/auth.test.js` | passed —19/19; retençãoA/B/close/logout/bfcache e purgeTTL/reset |
+| 02-02-03 | 2 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/context.test.js` | passed —12/12; teclado3abas,scroll/reflow/auth;full105/105 |
 | 02-03-01 | 3 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/ui.test.js` | pending execution |
 | 02-03-02 | 3 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/security.test.js dist/test/readonly.test.js` | pending execution |
 | 02-03-03 | 3 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/preview.test.js` | pending execution |
@@ -185,7 +185,7 @@ Sem SPEC, aplicar recall/precision aos requisitos: a evidência não deve se tor
 |---|---|---|---|
 | P-02-01 | EVID-02 | period/search: null não usa ingestão | enforced — search.test.ts originalnull/DST/Date.max passou |
 | P-02-02 | WEB-02 | search: AND entre versões não corresponde; histórico rotulado | enforced — search.test.ts AND entre versões e ui.test.ts histórico passaram |
-| P-02-03 | WEB-04 | browser races/storage/logout; duas leituras não misturam | flagged-unverified |
+| P-02-03 | WEB-04 | browser races/storage/logout; duas leituras não misturam | enforced — ui.test.ts retençãoA/B/close/logout,bfcache,scroll e storage vazio passaram |
 | P-02-04 | WEB-05 | preview/codec mantém download; miniatura não satisfaz original | flagged-unverified |
 | P-02-05 | EXP-02 | manifest/texto com cobertura parcial, revisões e todos missing | flagged-unverified |
 | P-02-06 | EXP-03 | ZIP fault/crash/CRC/entries impedem ready | flagged-unverified |
@@ -204,6 +204,10 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 - Ondas1→2→3→4→5 por dependência e arquivos compartilhados; nenhuma paralelização falsa. STATE/ROADMAP ficam comorquestrador.
 
 ## Artefatos e símbolos produzidos
+
+### Evidência executada do plano02-02 —2026-10-11
+
+Contexto autenticado abre51mensagens emtorno da referência distante, percorre181semduplicação, resolve redirects recebidos e conserva matchedEvidence histórico separado. Snapshot compartilha query_snapshots/query_items semmigração, ordinais ascendentes e cursores por sessão/referência/direção. Empates/null/bordas/uma mensagem, tampering/escopo, cookie antigo/GET/HEAD, TTL/reset/restart e ausência segura passaram. Browser com fixtures comprovou trêsabas, IDsDOMúnicos, retençãoA/B,close/logout,bfcacheexpirada, scroll próprio e compensaçãoapós prepend, refreshBconservandoA, semstorage. Capturas sintéticasdist/02-02-ui-{320,768,1280}.png ezoom200.png inspecionadas; fonte200%, nãozoomnativo. RED HTTP404/âncoraDOM0, purgeTTL1vs0/respostaAativandoA e focoArrowRightfalse foram classificadosRED_EVIDENCE_OK emdist/02-02-*-red.json. Suíte final105/105,0fail/skip/todo,17,323s. FixtureHTTPpreexistente foi corrigida com origemconhecida após falhaaleatória104/105; test/http2/2 e suítefinal105/105 comprovam correção. Requisitos globais permanecempendentes do aceite real02-05; nenhumacesso/coletorreal nesteplano.
 
 ### Evidência executada do plano02-01 — 2026-10-11
 
