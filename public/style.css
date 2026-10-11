@@ -36,6 +36,10 @@ details { font-size: .875rem; margin-bottom: 8px; } summary { cursor: pointer; p
 summary { min-height: 48px; }
 blockquote { margin: 16px 0; padding: 16px; border-left: 1px solid #66717f; white-space: pre-wrap; overflow-wrap: anywhere; }
 .attachment { margin: 16px 0; padding: 16px; border: 1px solid #d7dce1; }
+.attachment h3 { direction: inherit; white-space: pre-wrap; }
+.preview { margin-top: 16px; }
+.preview img, .preview audio, .preview video { display: block; width: 100%; max-width: 100%; margin-bottom: 16px; }
+.preview img, .preview video { height: auto; }
 .download { display: inline-block; min-height: 48px; padding: 8px 16px; border: 1px solid #155e75; border-radius: 4px; color: #155e75; font-weight: 600; }
 #qr { width: 256px; height: auto; max-width: 100%; display: block; margin-bottom: 16px; image-rendering: pixelated; }
 #pairing { margin-top: 24px; }

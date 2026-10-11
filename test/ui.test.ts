@@ -51,7 +51,7 @@ test('players nativos sob ação fallback e estados preservam original UC35 a UC
   await page.getByRole('button', { name: 'Ouvir áudio', exact: true }).click(); const audio = page.locator('#messages audio'); await audio.waitFor();
   assert.equal(await audio.getAttribute('preload'), 'none'); assert.equal(await audio.getAttribute('autoplay'), null); assert.equal(await audio.evaluate((el: any) => el.controls), true);
   await audio.evaluate((el: any) => el.play()); await page.waitForFunction(() => (document.querySelector('#messages audio') as HTMLAudioElement)?.currentTime > 0);
-  await page.locator('#messages .attachment').filter({ has: page.getByRole('heading', { name: /^video שלום/ }) }).getByRole('button', { name: 'Assistir vídeo' }).click(); const video = page.locator('#messages video'); await video.waitFor();
+  await page.locator('#messages .attachment').filter({ has: page.getByRole('heading', { name: /^video שלום/ }) }).getByRole('button', { name: 'Assistir vídeo' }).click(); const video = page.locator('#messages video[aria-label^="video "]'); await video.waitFor();
   assert.equal(await video.getAttribute('preload'), 'none'); assert.equal(await video.getAttribute('autoplay'), null); assert.equal(await video.evaluate((el: any) => el.controls), true);
   await video.evaluate((el: any) => el.play()); await page.waitForFunction(() => (document.querySelector('#messages video') as HTMLVideoElement)?.videoWidth === 16);
   const codec = page.locator('#messages .attachment').filter({ has: page.getByRole('heading', { name: /^codec שלום/ }) });
@@ -65,6 +65,7 @@ test('players nativos sob ação fallback e estados preservam original UC35 a UC
   assert.equal(s.archive.readStoredMessage({ remoteJid: '1@lid', id: 'audio', fromMe: false })!.attachments[0]!.state, 'available');
   for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); await video.scrollIntoViewIfNeeded(); await page.screenshot({ path: 'dist/02-03-ui-' + width + '.png' }); }
   await page.setViewportSize({ width: 320, height: 900 }); await page.evaluate(() => document.documentElement.style.fontSize = '200%'); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); await video.scrollIntoViewIfNeeded(); await page.screenshot({ path: 'dist/02-03-ui-zoom200.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.evaluate(() => { (window as any).oldMedia = [...document.querySelectorAll('#messages audio,#messages video')]; });
   await page.locator('#conversations a').filter({ hasText: /^B/ }).click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('leitura B'));
   assert.ok(await page.evaluate(() => (window as any).oldMedia.every((el: any) => el.paused && !el.hasAttribute('src'))), 'troca de aba libera src/players');

@@ -60,7 +60,7 @@ async function search(append = false) {
     if (version !== readVersion || ticket !== searchVersion) return;
     const data = await response.json(); if (version !== readVersion || ticket !== searchVersion) return;
     if (!response.ok) { searchError.textContent = response.status === 410 ? 'Este recorte expirou. Atualize a busca para criar um novo recorte.' : [413, 429].includes(response.status) ? data.error : response.status === 404 ? 'Não encontrado no acervo. Confira o contato e busque novamente.' : 'Não foi possível buscar mensagens. Tente buscar novamente.'; searchStatus.textContent = searchResults.children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; refreshSearch.hidden = false; return; }
-    if (!append) searchResults.replaceChildren();
+    if (!append) { closePreviews(searchResults); searchResults.replaceChildren(); }
     for (const message of data.messages) {
       const li = messageItem(message), article = li.querySelector('article');
       addText(article, 'p', 'Conversa: ' + (message.conversation?.name ?? unknown) + ' · ' + (message.conversation?.identity ?? unknown) + ' · ' + message.conversationId, 'meta').dir = 'auto';
@@ -86,6 +86,7 @@ async function search(append = false) {
 searchForm.addEventListener('submit', e => { e.preventDefault(); search(); }); moreResults.addEventListener('click', () => search(true)); refreshSearch.addEventListener('click', () => search());
 function hideQr() { clearTimeout(qrTimer); $('qr')?.remove(); $('qr-instruction').hidden = true; }
 function signedOut(message = '') {
+  closePreviews();
   ++readVersion; ++navigationVersion; ++statusVersion; ++searchVersion;
   ++contactVersion; contactSelection = candidateCursor = candidateQuery = undefined; $('contact-candidates').replaceChildren(); $('candidate-status').textContent = $('contact-error').textContent = ''; $('contact-selection').textContent = 'Todo o acervo'; $('more-candidates').hidden = true; $('candidate-panel').removeAttribute('aria-busy'); $('locate-contact').disabled = $('more-candidates').disabled = false;
   searchResults.replaceChildren(); searchForm.reset(); searchCursor = searchFilters = undefined; searchError.textContent = ''; searchStatus.textContent = 'Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.'; searchScope.textContent = 'Todo o acervo'; moreResults.hidden = refreshSearch.hidden = true; $('search-empty').hidden = $('search-utc').hidden = true; $('search-limits').replaceChildren(); searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = refreshSearch.disabled = false;
@@ -140,41 +141,50 @@ function evidence(article, message) {
 }
 function attachmentBlock(article, attachment) {
   const block = document.createElement('section'); block.className = 'attachment'; article.append(block);
-  addText(block, 'h3', attachment.name ?? 'Nome original não informado'); detail(block, 'Tipo recebido', attachment.type); detail(block, 'Tamanho local em bytes', attachment.size);
+  addText(block, 'h3', attachment.name ?? 'Nome original não informado').dir = 'auto'; detail(block, 'Tipo recebido', attachment.type); detail(block, 'MIME recebido', attachment.mimeType); detail(block, 'Tamanho local em bytes', attachment.size);
   detail(block, 'SHA-256 local', attachment.sha256); detail(block, 'Hash de origem', attachment.sourceHashVerified ? 'Conferido com o original preservado' : attachment.state === 'available' ? 'Não informado pela origem' : 'Comparação ainda não confirmada');
   const reason = attachment.reason ?? unknown;
   const state = attachment.state === 'available' ? 'Disponível — arquivo finalizado e verificado.' : attachment.state === 'downloading' ? 'Pendente — download em andamento.' : attachment.state === 'pending' ? 'Pendente — o original ainda não foi preservado.' : attachment.state === 'retry_wait' ? 'Falha recuperável — ' + reason + '. Tentativas: ' + attachment.attempts + '/' + (attemptsLimit ?? unknown) + '.' : 'Indisponível — ' + reason + '. A mensagem permanece no acervo.';
   addText(block, 'p', state); if (attachment.state !== 'available') return;
   const link = addText(block, 'a', 'Baixar original', 'download'); link.href = '/api/attachments/' + encodeURIComponent(attachment.id); link.download = attachment.name ?? 'original';
   const status = addText(block, 'p', '', 'meta'); status.setAttribute('role', 'status');
-  if (attachment.mimeType === 'image/png') {
-    const open = addText(block, 'button', 'Visualizar imagem'); open.type = 'button';
+  const mime = attachment.mimeType?.split(';')[0].trim().toLowerCase();
+  const kind = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mime) ? 'img' : ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/ogg', 'audio/flac', 'audio/x-flac'].includes(mime) ? 'audio' : ['video/mp4', 'video/webm'].includes(mime) ? 'video' : null;
+  if (!kind) addText(block, 'p', 'Sem visualização integrada para este formato. Baixe o original para abrir em outro aplicativo.');
+  else {
+    const open = addText(block, 'button', kind === 'img' ? 'Visualizar imagem' : kind === 'audio' ? 'Ouvir áudio' : 'Assistir vídeo'); open.type = 'button';
     let ticket = 0, preview;
-    const close = (focus = true) => { ++ticket; if (preview) { previews.delete(preview); for (const media of preview.box.querySelectorAll('[src]')) { media.pause?.(); media.removeAttribute('src'); media.load?.(); } preview.box.remove(); preview = undefined; } open.disabled = false; if (focus && block.isConnected) open.focus({ preventScroll: true }); };
+    const close = (focus = true) => { ++ticket; if (preview) { previews.delete(preview); preview.listeners.abort(); for (const media of preview.box.querySelectorAll('[src]')) { media.pause?.(); media.removeAttribute('src'); media.load?.(); } preview.box.remove(); preview = undefined; } open.disabled = false; if (focus && block.isConnected) open.focus({ preventScroll: true }); };
     open.addEventListener('click', async () => {
       if (preview || !authenticated) return;
       const version = readVersion, current = ++ticket;
       const box = addText(block, 'div', '', 'preview'), feedback = addText(box, 'p', 'Carregando visualização…'); feedback.setAttribute('role', 'status'); box.setAttribute('aria-busy', 'true');
       const hide = addText(box, 'button', 'Fechar visualização'); hide.type = 'button'; hide.addEventListener('click', () => close());
-      preview = { block, box, close }; previews.add(preview); open.disabled = true;
+      const listeners = new AbortController(); preview = { block, box, close, listeners }; previews.add(preview); open.disabled = true;
       const valid = () => version === readVersion && current === ticket && authenticated && !suspended && block.isConnected;
       try {
         const path = '/api/attachments/' + encodeURIComponent(attachment.id) + '/preview', response = await request(path, { method: 'HEAD' });
         if (!valid()) return;
         if (!response.ok) { feedback.textContent = response.status === 404 ? 'Original disponível não encontrado no acervo. A mensagem permanece no acervo.' : response.status === 415 ? 'Sem visualização integrada para este formato. Baixe o original para abrir em outro aplicativo.' : 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; box.removeAttribute('aria-busy'); return; }
-        const media = document.createElement('img'); media.alt = attachment.name ?? 'Nome original não informado';
-        media.addEventListener('load', () => { if (valid()) { feedback.textContent = ''; box.removeAttribute('aria-busy'); } });
-        media.addEventListener('error', () => { if (valid()) { feedback.textContent = 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; feedback.setAttribute('role', 'alert'); box.removeAttribute('aria-busy'); } });
+        const media = document.createElement(kind);
+        if (kind === 'img') media.alt = attachment.name ?? 'Nome original não informado';
+        else { media.controls = true; media.preload = 'none'; media.setAttribute('aria-label', attachment.name ?? 'Nome original não informado'); feedback.textContent = 'Use os controles para ' + (kind === 'audio' ? 'ouvir o áudio.' : 'assistir ao vídeo.'); box.removeAttribute('aria-busy'); }
+        media.addEventListener(kind === 'img' ? 'load' : 'loadeddata', () => { if (valid()) { feedback.textContent = ''; box.removeAttribute('aria-busy'); } }, { signal: listeners.signal });
+        media.addEventListener('error', async () => {
+          if (!valid()) return;
+          feedback.textContent = 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; feedback.setAttribute('role', 'alert'); box.removeAttribute('aria-busy'); media.pause?.();
+          try { const previous = csrfToken, session = await challenge(); if (valid() && (!session.authenticated || previous !== csrfToken)) signedOut(expired); } catch (error) { if (valid()) failure(error); }
+        }, { once: true, signal: listeners.signal });
         box.insertBefore(media, hide); media.src = path;
       } catch (error) { if (valid() && !['expired', 'stale'].includes(error.message)) { feedback.textContent = 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; box.removeAttribute('aria-busy'); } }
     });
   }
   link.addEventListener('click', async event => {
     event.preventDefault(); if (link.getAttribute('aria-busy') === 'true') return;
-    const version = readVersion; link.setAttribute('aria-busy', 'true'); status.textContent = 'Carregando original…';
+    const version = readVersion, navigation = navigationVersion; link.setAttribute('aria-busy', 'true'); status.textContent = 'Carregando original…';
     try {
       const response = await request(link.getAttribute('href'), { method: 'HEAD' }); if (!response.ok) throw Error('download');
-      if (version !== readVersion || !authenticated) return;
+      if (version !== readVersion || navigation !== navigationVersion || !authenticated || suspended || !block.isConnected) return;
       const save = document.createElement('a'); save.href = link.href; save.download = ''; document.body.append(save); save.click(); save.remove();
       status.textContent = 'Download solicitado ao navegador. Confira a conclusão nos downloads.';
     } catch (error) { if (version === readVersion && !['expired', 'stale'].includes(error.message)) { status.textContent = 'Não foi possível baixar o original. Confira o estado do anexo e tente novamente se ele estiver disponível.'; if (error instanceof TypeError) failure(error); } }
@@ -251,7 +261,7 @@ function activateTab(tab, restore = true) {
   ++navigationVersion;
   const previous = tabs.get(selected); if (previous && !previous.panel.hidden) previous.scroll = window.scrollY;
   for (const other of tabs.values()) {
-    if (other !== tab) for (const player of other.panel.querySelectorAll('audio,video')) player.pause();
+    if (other !== tab) closePreviews(other.panel);
     other.panel.hidden = other !== tab; other.button.setAttribute('aria-selected', String(other === tab)); other.button.tabIndex = other === tab ? 0 : -1;
     for (const el of [other.status, other.messages, other.before, other.after, other.refresh]) el.removeAttribute('id');
   }
@@ -277,7 +287,7 @@ function closeTab(tab) {
 }
 function renderContext(tab, data, direction) {
   const anchor = direction ? tab.messages.querySelector('[data-anchor=true]') ?? tab.messages.firstElementChild : null, offset = anchor?.getBoundingClientRect().top;
-  if (!direction) { tab.messages.replaceChildren(); tab.references = new Set(); tab.snapshotId = data.snapshotId; tab.anchor = data.anchorReference; tab.requestedReference = data.requestedReference; tab.matchedEvidence = data.matchedEvidence; }
+  if (!direction) { releasePanel(tab.panel); tab.messages.replaceChildren(); tab.references = new Set(); tab.snapshotId = data.snapshotId; tab.anchor = data.anchorReference; tab.requestedReference = data.requestedReference; tab.matchedEvidence = data.matchedEvidence; }
   const fragment = document.createDocumentFragment();
   for (const message of data.messages) {
     if (tab.references.has(message.reference)) continue; tab.references.add(message.reference);
@@ -297,6 +307,7 @@ function renderContext(tab, data, direction) {
 }
 async function openContext(reference, sourceSnapshotId, conversationId) {
   if (!authenticated || suspended || pendingContexts.has(conversationId)) return;
+  closePreviews();
   const version = readVersion, navigation = ++navigationVersion, operation = {}; let tab = tabs.get(conversationId);
   if (tab?.loading) return; pendingContexts.set(conversationId, operation);
   const ticket = tab ? ++tab.generation : 0;
@@ -330,6 +341,7 @@ async function contextPage(tab, direction) {
 }
 async function openConversation(id) {
   if (!authenticated || suspended) return;
+  if (id !== selected) closePreviews();
   if (tabs.has(id)) { activateTab(tabs.get(id)); return; }
   const version = readVersion, navigation = ++navigationVersion;
   $('reader').setAttribute('aria-busy', 'true');
@@ -341,7 +353,7 @@ async function openConversation(id) {
   } catch (error) { if (version === readVersion && navigation === navigationVersion) failure(error); }
   finally { if (version === readVersion) $('reader').removeAttribute('aria-busy'); }
 }
-function back() {
+function back() { closePreviews();
   ++navigationVersion;
   const tab = tabs.get(selected); if (tab) tab.scroll = window.scrollY;
   $('archive').classList.remove('reading'); $('back').hidden = true;
@@ -403,6 +415,7 @@ $('login-form').addEventListener('submit', async event => {
   finally { $('password').value = ''; $('login-button').disabled = false; $('login-form').removeAttribute('aria-busy'); $('login-status').textContent = ''; }
 });
 $('logout-button').addEventListener('click', async () => {
+  closePreviews();
   ++readVersion; ++navigationVersion; pendingContexts.clear();
   for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; }
   $('logout-button').disabled = true;
@@ -430,6 +443,6 @@ async function revalidate() {
   catch (error) { failure(error); if ($('archive').hidden && authenticated) { $('login-panel').hidden = false; $('login-error').textContent = noServer; } }
 }
 window.addEventListener('online', revalidate); window.addEventListener('pageshow', event => { if (event.persisted) revalidate(); });
-window.addEventListener('pagehide', () => { hideQr(); if (authenticated) { suspended = true; ++readVersion; ++navigationVersion; pendingContexts.clear(); for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; for (const player of tab.panel.querySelectorAll('audio,video')) player.pause(); } $('archive').hidden = true; } });
+window.addEventListener('pagehide', () => { closePreviews(); hideQr(); if (authenticated) { suspended = true; ++readVersion; ++navigationVersion; pendingContexts.clear(); for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; for (const player of tab.panel.querySelectorAll('audio,video')) player.pause(); } $('archive').hidden = true; } });
 setInterval(() => { if (authenticated && document.visibilityState === 'visible') refreshStatus(); }, 10_000);
 challenge().then(data => data.authenticated ? enter() : signedOut()).catch(() => { $('login-error').textContent = noServer; });
