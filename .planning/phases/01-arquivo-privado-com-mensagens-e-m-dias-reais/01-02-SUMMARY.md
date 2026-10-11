@@ -51,11 +51,13 @@ actuals:
   tokens: 16080
   tasks: 2
   commits: 8
-plan_head_before: 10c93b445d03534813f11ac35d24d7114544a0c5
-plan_head_after: 7db33a7a6bc901a23492259fb5034d75f0fc6c9a
 duration: 12min
 completed: 2026-10-10
 status: complete
+implementation_history:
+  scope: "histórico local privado anterior à publicação sanitizada"
+  plan_head_before: 10c93b445d03534813f11ac35d24d7114544a0c5
+  plan_head_after: 7db33a7a6bc901a23492259fb5034d75f0fc6c9a
 ---
 
 # Phase 1 Plan 2: Projeção durável dos eventos recebidos com evidência Summary
@@ -133,3 +135,5 @@ Nenhuma configuração externa requerida neste plano. Não houve sessão WhatsAp
 ## Self-Check: PASSED
 
 Seis arquivos de produto/teste existem. Os oito commits medidos acima são alcançáveis em HEAD. Verificações automatizadas de ambos os tasks e do plano foram executadas, sem testes omitidos. Arquivo SUMMARY salvo antes da atualização canônica; correção final registrada em revisão do próprio resumo.
+
+Nota de publicação: contagens/janelas de commits e verificações de ancestralidade acima foram medidas no histórico local de implementação, preservado no checkout original. A publicação usa snapshot sanitizado para manter dados de conversa fora do histórico público; IDs de commits históricos são referências locais, não commits desta branch publicada.

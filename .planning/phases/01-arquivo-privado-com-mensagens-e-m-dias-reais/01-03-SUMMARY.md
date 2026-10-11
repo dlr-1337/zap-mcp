@@ -56,11 +56,13 @@ actuals:
   tokens: 11455
   tasks: 2
   commits: 4
-plan_head_before: ebe3ba14b0784cefca009edd41b870f3b77068ac
-plan_head_after: 83a1c169db5785fd24094d7e570b02a0ed32a514
 duration: 8min
 completed: 2026-10-10
 status: complete
+implementation_history:
+  scope: "histórico local privado anterior à publicação sanitizada"
+  plan_head_before: ebe3ba14b0784cefca009edd41b870f3b77068ac
+  plan_head_after: 83a1c169db5785fd24094d7e570b02a0ed32a514
 ---
 
 # Phase 1 Plan 3: Sessão durável e coletor exclusivo Summary
@@ -135,3 +137,5 @@ Nenhum bloqueio à capacidade deste plano. Trava depende de `/proc` e boot ID no
 ## Self-Check: PASSED
 
 Os cinco arquivos existem; quatro commits de tarefa são ancestrais de HEAD; verification scope resolve01-03; build e34 testes passaram. Nenhuma exclusão de arquivo rastreado ocorreu.
+
+Nota de publicação: contagens/janelas de commits e verificações de ancestralidade acima foram medidas no histórico local de implementação, preservado no checkout original. A publicação usa snapshot sanitizado para manter dados de conversa fora do histórico público; IDs de commits históricos são referências locais, não commits desta branch publicada.

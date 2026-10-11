@@ -59,12 +59,14 @@ actuals:
   tokens: 17216
   tasks: 2
   commits: 7
-commits: 7
-plan_head_before: 6cc3d325be19277cd2424dcc32072126492d90cf
-plan_head_after: c9e2901e9285384960681b48db5867b6f5a4e438
 duration: 15min
 completed: 2026-10-10
 status: complete
+implementation_history:
+  scope: "histórico local privado anterior à publicação sanitizada"
+  commits: 7
+  plan_head_before: 6cc3d325be19277cd2424dcc32072126492d90cf
+  plan_head_after: c9e2901e9285384960681b48db5867b6f5a4e438
 ---
 
 # Phase 1 Plan 6: Cópia consistente e restauração offline antes do QR Summary
@@ -137,3 +139,5 @@ Plano01-07 pode preparar perfil real em diretório persistente privado, definir 
 ## Self-Check: PASSED
 
 Arquivos criados presentes;7 commits de execução ancestrais de HEAD e evaluation-scope confirma escopo. Verificações do plano/suíte padrão sem omissões; dados/manifest/recibo reais fora do checkout. Milestone.lock desconhecido preservado.
+
+Nota de publicação: contagens/janelas de commits e verificações de ancestralidade acima foram medidas no histórico local de implementação, preservado no checkout original. A publicação usa snapshot sanitizado para manter dados de conversa fora do histórico público; IDs de commits históricos são referências locais, não commits desta branch publicada.

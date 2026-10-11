@@ -50,11 +50,13 @@ actuals:
   tokens: 17701
   tasks: 2
   commits: 4
-plan_head_before: f8ea09201f1fb61c8080e4c556b1a5e8b4ebb7e3
-plan_head_after: bbbf8239939f306aec80bd5b381f4bd4a045d0f7
 duration: 14min
 completed: 2026-10-10
 status: complete
+implementation_history:
+  scope: "histórico local privado anterior à publicação sanitizada"
+  plan_head_before: f8ea09201f1fb61c8080e4c556b1a5e8b4ebb7e3
+  plan_head_after: bbbf8239939f306aec80bd5b381f4bd4a045d0f7
 ---
 
 # Phase 1 Plan 4: Originais verificados e recuperação sem perda Summary
@@ -118,3 +120,5 @@ Desvios registrados em WINDOWS.md e marcados fixed; nenhum defeito aberto desta 
 ## Self-Check: PASSED
 
 src/media.ts, test/media.test.ts e test/recovery.test.ts encontrados. Quatro commits acima são ancestrais do HEAD; evaluation-scope01-04 resolveu os quatro commits nesta branch. Suíte49/49 e alvos21/21 conferidos; nenhuma exclusão rastreada.
+
+Nota de publicação: contagens/janelas de commits e verificações de ancestralidade acima foram medidas no histórico local de implementação, preservado no checkout original. A publicação usa snapshot sanitizado para manter dados de conversa fora do histórico público; IDs de commits históricos são referências locais, não commits desta branch publicada.

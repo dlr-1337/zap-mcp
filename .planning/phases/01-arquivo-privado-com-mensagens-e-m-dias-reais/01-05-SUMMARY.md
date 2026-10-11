@@ -58,12 +58,14 @@ actuals:
   tokens: 17523
   tasks: 2
   commits: 7
-commits: 7
-plan_head_before: ae8c910d66066dac463f4034859786ab0946d9d4
-plan_head_after: 373702cf92118eb31b71707ed05de741a446cd98
 duration: 12min
 completed: 2026-10-10
 status: complete
+implementation_history:
+  scope: "histórico local privado anterior à publicação sanitizada"
+  commits: 7
+  plan_head_before: ae8c910d66066dac463f4034859786ab0946d9d4
+  plan_head_after: 373702cf92118eb31b71707ed05de741a446cd98
 ---
 
 # Phase 1 Plan 5: Leitura privada com estados e evidências Summary
@@ -166,3 +168,5 @@ Limites: Chromium local e escala de texto200%, sem certificação de acessibilid
 ## Self-Check: PASSED
 
 Arquivos de produto/teste/evidências presentes; commits anteriores e373702c ancestrais de HEAD, contagem7 medida do ledger ao plan_head_after. Build/testes/sintaxe/diff/browser verdes; nenhum arquivo rastreado removido. WINDOWS sem entradas abertas. Correção nativa verificada antes desta atualização; tracking de fase preservado.
+
+Nota de publicação: contagens/janelas de commits e verificações de ancestralidade acima foram medidas no histórico local de implementação, preservado no checkout original. A publicação usa snapshot sanitizado para manter dados de conversa fora do histórico público; IDs de commits históricos são referências locais, não commits desta branch publicada.

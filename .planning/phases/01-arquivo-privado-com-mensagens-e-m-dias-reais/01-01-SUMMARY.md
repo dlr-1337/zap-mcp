@@ -66,12 +66,14 @@ actuals:
   tokens: 41904
   tasks: 3
   commits: 6
-commits: 6
-plan_head_before: 91a4c80433f1db0125ff3d90d5910b92be03110b
-plan_head_after: d566338a335b32e64d0b58635f83d55c35426f87
 duration: 12min
 completed: 2026-10-10
 status: complete
+implementation_history:
+  scope: "histórico local privado anterior à publicação sanitizada"
+  commits: 6
+  plan_head_before: 91a4c80433f1db0125ff3d90d5910b92be03110b
+  plan_head_after: d566338a335b32e64d0b58635f83d55c35426f87
 ---
 
 # Phase 1 Plan 01: Entrada privada e walking skeleton real Summary
@@ -166,3 +168,5 @@ Nenhuma intervenção humana neste plano. Não houve implantação, QR real ou m
 ## Self-Check: PASSED
 
 Nove arquivos de produto encontrados; os seis commits71b142a/18c311a/7cc8e91/7151189/650e023/d566338 são ancestrais do HEAD atual. Scope canônico resolvido, nenhuma exclusão de arquivo de produto, build e nove testes passados; QA browser e inspeção sintética concluídos.
+
+Nota de publicação: contagens/janelas de commits e verificações de ancestralidade acima foram medidas no histórico local de implementação, preservado no checkout original. A publicação usa snapshot sanitizado para manter dados de conversa fora do histórico público; IDs de commits históricos são referências locais, não commits desta branch publicada.
