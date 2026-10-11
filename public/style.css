@@ -56,6 +56,8 @@ blockquote { margin: 16px 0; padding: 16px; border-left: 1px solid #66717f; whit
 .search-dates > div { flex: 1 1 200px; min-width: 0; }
 #contact-candidates li { padding: 16px 0; border-bottom: 1px solid #d7dce1; }
 #contact-selection { white-space: pre-wrap; }
+.export-form { padding: 16px; margin: 24px 0; border: 1px solid #d7dce1; }
+.export-form input { width: 100%; margin-bottom: 16px; min-width: 0; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 .skip { position: absolute; left: 16px; top: 16px; padding: 8px 16px; background: #fff; transform: translateY(-200%); }
 .skip:focus { transform: none; }

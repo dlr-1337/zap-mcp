@@ -9,6 +9,48 @@ let contactVersion = 0, contactSelection, candidateCursor, candidateQuery;
 const tabs = new Map();
 const pendingContexts = new Map();
 const previews = new Set();
+let exportJob, exportTimer, exportVersion = 0, exportCreating = false;
+function clearExport() { ++exportVersion; clearTimeout(exportTimer); exportJob = undefined; exportCreating = false; }
+function exportView() {
+  for (const tab of tabs.values()) {
+    if (!tab.exportForm) continue;
+    tab.exportSubmit.disabled = exportCreating || exportJob?.state === 'preparing';
+    const box = tab.exportFeedback; box.replaceChildren();
+    if (!exportJob) continue;
+    const f = exportJob.effectiveFilters;
+    addText(box, 'p', 'Recorte congelado: ' + conversationLabel(exportJob.conversation) + '; ' + (f.from ?? 'início aberto') + ' até ' + (f.to ?? 'fim aberto') + '; ' + f.zone).dir = 'auto';
+    addText(box, 'p', 'UTC: ' + (f.startUtc ?? 'início aberto') + ' até ' + (f.endUtc ?? 'fim aberto') + ' (exclusivo).');
+    const status = addText(box, 'p', exportJob.state === 'preparing' ? 'Preparando exportação… Você pode continuar lendo.' : exportJob.state === 'ready' ? 'Exportação pronta e conferida.' : exportJob.reason ?? 'Não foi possível preparar a exportação. Gere novamente.'); status.setAttribute('role', 'status');
+    if (exportJob.state === 'ready') {
+      addText(box, 'p', exportJob.counts.messages + ' mensagens · ' + exportJob.counts.files + ' arquivos · ' + exportJob.counts.missing + ' faltantes. Cobertura observada; não garante histórico integral.');
+      const link = addText(box, 'a', 'Baixar ZIP', 'download'); link.href = exportJob.downloadURL; link.download = '';
+      link.addEventListener('click', async e => { e.preventDefault(); const version = readVersion, ticket = exportVersion, job = exportJob; try { const r = await request(job.downloadURL, { method: 'HEAD' }); if (version !== readVersion || ticket !== exportVersion || !authenticated || suspended) return; if (!r.ok) { status.textContent = r.status === 410 ? 'Esta exportação expirou. Gere novamente.' : 'Download indisponível. Tente conferir novamente.'; return; } const native = document.createElement('a'); native.href = job.downloadURL; native.download = ''; native.click(); status.textContent = 'Download solicitado ao navegador.'; } catch (e) { if (version === readVersion && !['stale', 'expired'].includes(e.message)) status.textContent = 'Não foi possível solicitar o download.'; } });
+    }
+    if (exportJob.pollError) { const alert = addText(box, 'p', 'Não foi possível conferir a exportação. O último estado foi conservado.'); alert.setAttribute('role', 'alert'); const retry = addText(box, 'button', 'Tentar conferir novamente'); retry.type = 'button'; retry.addEventListener('click', () => pollExport()); }
+  }
+}
+async function pollExport() {
+  clearTimeout(exportTimer); const version = readVersion, ticket = ++exportVersion, job = exportJob; if (!job || !authenticated || suspended) return;
+  try { const r = await request('/api/exports/' + encodeURIComponent(job.jobId)); const data = await r.json(); if (version !== readVersion || ticket !== exportVersion || !authenticated || suspended) return; if (!r.ok) { exportJob = { ...job, state: r.status === 410 ? 'expired' : job.state, reason: data.error, pollError: true }; } else exportJob = data; exportView(); if (r.ok && data.state === 'preparing') exportTimer = setTimeout(pollExport, 1000); }
+  catch (e) { if (version === readVersion && ticket === exportVersion && !['stale', 'expired'].includes(e.message)) { exportJob = { ...job, pollError: true }; exportView(); } }
+}
+function exportForm(tab) {
+  const form = addText(tab.panel, 'form', '', 'export-form'); form.noValidate = true;
+  addText(form, 'h3', 'Exportar recorte'); addText(form, 'p', 'Conversa fixa: ' + conversationLabel(tab.conversation)).dir = 'auto';
+  const inputs = ['De', 'Até'].map((label, i) => { const id = 'export-' + tab.conversation.id + '-' + i; const l = addText(form, 'label', label); l.htmlFor = id; const input = addText(form, 'input', ''); input.id = id; input.type = 'date'; input.setAttribute('aria-describedby', 'export-help'); return input; });
+  const submit = addText(form, 'button', 'Preparar exportação'); submit.type = 'submit';
+  const feedback = addText(form, 'p', ''); feedback.setAttribute('role', 'alert'); const job = addText(tab.panel, 'section', '');
+  Object.assign(tab, { exportForm: form, exportSubmit: submit, exportFeedback: job }); exportView();
+  form.addEventListener('submit', async e => {
+    e.preventDefault(); if (!authenticated || suspended || submit.disabled) return;
+    const from = inputs[0].value, to = inputs[1].value; feedback.textContent = ''; inputs.forEach(i => i.removeAttribute('aria-invalid'));
+    if (from && to && from > to) { feedback.textContent = 'Confira as datas. A data inicial deve ser igual ou anterior à final.'; inputs[0].setAttribute('aria-invalid', 'true'); inputs[0].focus(); return; }
+    const version = readVersion, ticket = ++exportVersion; exportCreating = true; exportView(); feedback.textContent = 'Solicitando preparação…';
+    try { const r = await request('/api/exports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: tab.conversation.id, from, to, csrfToken }) }); const data = await r.json(); if (version !== readVersion || ticket !== exportVersion || !authenticated || suspended) return; feedback.textContent = ''; if (!r.ok) { feedback.textContent = data.error ?? 'Não foi possível iniciar a exportação.'; if ([400, 422].includes(r.status)) { inputs[0].setAttribute('aria-invalid', 'true'); inputs[0].focus(); } return; } exportJob = data; exportView(); pollExport(); }
+    catch (e) { if (version === readVersion && !['stale', 'expired'].includes(e.message)) feedback.textContent = 'Não foi possível iniciar a exportação. Tente novamente.'; }
+    finally { if (version === readVersion) { exportCreating = false; exportView(); } }
+  });
+}
 function closePreviews(root = document) { for (const preview of [...previews]) if (root.contains(preview.block)) preview.close(false); }
 let suspended = false;
 const searchPanel = $('search-panel'), searchForm = $('search-form'), termInput = $('search-terms'), searchButton = $('search-submit');
@@ -86,6 +128,7 @@ async function search(append = false) {
 searchForm.addEventListener('submit', e => { e.preventDefault(); search(); }); moreResults.addEventListener('click', () => search(true)); refreshSearch.addEventListener('click', () => search());
 function hideQr() { clearTimeout(qrTimer); $('qr')?.remove(); $('qr-instruction').hidden = true; }
 function signedOut(message = '') {
+  clearExport();
   closePreviews();
   ++readVersion; ++navigationVersion; ++statusVersion; ++searchVersion;
   ++contactVersion; contactSelection = candidateCursor = candidateQuery = undefined; $('contact-candidates').replaceChildren(); $('candidate-status').textContent = $('contact-error').textContent = ''; $('contact-selection').textContent = 'Todo o acervo'; $('more-candidates').hidden = true; $('candidate-panel').removeAttribute('aria-busy'); $('locate-contact').disabled = $('more-candidates').disabled = false;
@@ -245,6 +288,7 @@ function createTab(conversation) {
   const before = addText(panel, 'button', 'Carregar mensagens anteriores'), after = addText(panel, 'button', 'Carregar mensagens posteriores'), refresh = addText(panel, 'button', 'Atualizar conversa'); before.hidden = after.hidden = refresh.hidden = true;
   const tab = { conversation, panel, button, status, messages, before, after, refresh, generation: 0, loading: false, scroll: 0, anchor: null };
   tabs.set(conversation.id, tab); button.addEventListener('click', () => activateTab(tab)); before.addEventListener('click', () => contextPage(tab, 'before')); after.addEventListener('click', () => contextPage(tab, 'after')); refresh.addEventListener('click', () => openContext(tab.requestedReference, undefined, conversation.id));
+  exportForm(tab);
   close.addEventListener('click', () => closeTab(tab));
   button.dir = 'auto';
   button.addEventListener('focus', () => { for (const other of tabs.values()) other.button.tabIndex = other === tab ? 0 : -1; });
@@ -415,6 +459,7 @@ $('login-form').addEventListener('submit', async event => {
   finally { $('password').value = ''; $('login-button').disabled = false; $('login-form').removeAttribute('aria-busy'); $('login-status').textContent = ''; }
 });
 $('logout-button').addEventListener('click', async () => {
+  clearExport(); exportView();
   closePreviews();
   ++readVersion; ++navigationVersion; pendingContexts.clear();
   for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; }

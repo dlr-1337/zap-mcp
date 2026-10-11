@@ -475,6 +475,24 @@ export function openArchive(dataDir: string) {
     const { kind: _kind, anchorOrdinal: _anchorOrdinal, ...safe } = metadata;
     return { ...safe, messages, snapshotId, expiresAt: new Date(snapshot.expires_at).toISOString(), previousOrdinal: start > 0 ? start : null, nextOrdinal: end < snapshot.count ? end : null };
   }
+  function freezeExportSelection(conversationId: string, period: EffectivePeriod) {
+    return db.transaction(() => {
+      const id = resolveConversation(conversationId), conversation = conversationEvidence(id);
+      if (!conversation) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
+      const rows = db.prepare('SELECT reference FROM messages WHERE conversation_id=? AND (? IS NULL OR original_ms(original_timestamp)>=?) AND (? IS NULL OR original_ms(original_timestamp)<?) ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp),reference COLLATE BINARY LIMIT 50001').all(id, period.startMs, period.startMs, period.endMs, period.endMs) as { reference: string }[];
+      if (!rows.length) throw Object.assign(Error('Não encontrado no acervo para este período. Ajuste as datas.'), { status: 422 });
+      if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja o período.'), { status: 413 });
+      let bytes = 0;
+      const messages = rows.map(row => {
+        const message = dto(row.reference)!;
+        const safe = message.restricted ? { ...message, text: null, quote: null, attachments: [], revisions: message.revisions.map(r => ({ ...r, text: null, quote: null, restricted: true })) } : message;
+        bytes += Buffer.byteLength(JSON.stringify(safe));
+        if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja o período.'), { status: 413 });
+        return safe;
+      });
+      return { snapshotAt: now(), effectiveFilters: { conversationId: id, ...period }, conversation, coverage: getCoverage(), messages };
+    })();
+  }
   try {
     db.transaction(() => {
       db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(reference UNINDEXED,revision_id UNINDEXED,content,tokenize='unicode61 remove_diacritics 2'); CREATE TABLE IF NOT EXISTS query_snapshots(id TEXT PRIMARY KEY,session TEXT NOT NULL,filters TEXT NOT NULL,expires_at INTEGER NOT NULL,count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS query_items(snapshot_id TEXT NOT NULL REFERENCES query_snapshots(id) ON DELETE CASCADE,ordinal INTEGER NOT NULL,dto TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal)); DELETE FROM query_snapshots; DELETE FROM search_fts;");
@@ -490,7 +508,7 @@ export function openArchive(dataDir: string) {
   }
   return {
     db,
-    searchMessages, openContext, readContextPage, indexMessage, conversationEvidence,
+    searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence,
     dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
       db.transaction(() => { for (const m of batch.lidPnMappings ?? []) ingestIdentity(m); for (const c of batch.contacts ?? []) ingestIdentity(c); for (const c of batch.chats ?? []) ingestIdentity(c, true); })();

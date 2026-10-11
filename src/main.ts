@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
 import { startMediaWorker, openVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
+import { createExportManager } from './export.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -42,6 +43,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   for (const name of ['archive.sqlite', 'auth.sqlite']) chmodSync(join(dataDir, name), 0o600);
   } catch (error) { for (const db of opened) db.close(); lock.release(); throw error; }
   const app = express();
+  const exports = createExportManager({ archive, dataDir, mediaDir });
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     if (!/^(127\.0\.0\.1|localhost)(:[0-9]+)?$/.test(req.get('Host') ?? '') || !['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(req.socket.remoteAddress ?? '')) { res.status(403).json({ error: 'Transporte recusado' }); return; } next();
@@ -62,6 +64,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.use('/api/search', requireOwner);
   app.use('/api/context', requireOwner);
   app.use('/api/attachments', requireOwner);
+  app.use('/api/exports', requireOwner);
   app.get(['/api/attachments/:id', '/api/attachments/:id/preview'], (req, res, next) => {
     const file = typeof req.params.id === 'string' ? openVerifiedAttachment(archive, mediaDir, req.params.id) : null;
     if (!file) { res.status(404).json({ error: 'Original disponível não encontrado no acervo' }); return; }
@@ -125,10 +128,28 @@ export function createService({ dataDir }: { dataDir: string }) {
     return { ...conversation, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity?.endsWith('@s.whatsapp.net') || identity?.endsWith('@lid') ? 'individual' : null };
   };
   const searchSession = (req: Request) => createHmac('sha256', signingKey).update(JSON.stringify([req.sessionID, req.session.ownerGeneration])).digest('hex');
+  const exportError = (error: unknown, res: Response, next: NextFunction) => {
+    const status = (error as { status?: number }).status;
+    if ([400, 404, 409, 410, 413, 422, 507].includes(status ?? 0)) res.status(status!).json({ error: (error as Error).message }); else next(error);
+  };
+  app.post('/api/exports', auth.csrf, (req, res, next) => {
+    try { if (!req.body || Object.keys(req.body).some(k => !['conversationId', 'from', 'to', 'csrfToken'].includes(k))) throw Object.assign(Error('Seleção inválida'), { status: 400 }); res.status(202).json(exports.createExportJob(searchSession(req), req.body.conversationId, req.body.from, req.body.to)); } catch (e) { exportError(e, res, next); }
+  });
+  app.get('/api/exports/:id', (req, res, next) => { try { res.json(exports.getExportJob(req.params.id, searchSession(req))); } catch (e) { exportError(e, res, next); } });
+  app.get('/api/exports/:id/download', (req, res, next) => {
+    try {
+      const file = exports.openExport(req.params.id, searchSession(req));
+      res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="exportacao-' + req.params.id + '.zip"', 'Content-Length': String(file.size) });
+      if (req.method === 'HEAD') { closeSync(file.fd); res.end(); return; }
+      const stream = createReadStream('', { fd: file.fd, autoClose: true, start: 0 }); res.on('close', () => stream.destroy()); stream.on('error', e => res.headersSent ? res.destroy() : next(e)); stream.pipe(res);
+    } catch (e) { exportError(e, res, next); }
+  });
+  auth.store.on('revoked', (id: string, generation: string | undefined) => exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([id, generation])).digest('hex')));
   auth.store.on('revoked', (id: string, generation: string | undefined) => archive.dropQueries(createHmac('sha256', signingKey).update(JSON.stringify([id, generation])).digest('hex')));
   const querySweep = setInterval(() => {
     for (const row of authDb.prepare('SELECT id FROM web_sessions').all() as { id: string }[]) auth.store.get(row.id, () => {});
     archiveDb.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+    exports.purge();
   }, 60_000); querySweep.unref();
   app.get('/api/context/:reference', (req, res) => {
     if (Object.keys(req.query).some(k => !['sourceSnapshotId', 'limit', 'cursor', 'direction'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
@@ -196,7 +217,7 @@ export function createService({ dataDir }: { dataDir: string }) {
       archive.indexMessage(message.reference);
       return id;
     }),
-    async setPassword(password: string) { await setOwnerPassword(authDb, password); archiveDb.exec('DELETE FROM query_snapshots'); },
+    async setPassword(password: string) { const sessions = authDb.prepare('SELECT id,data FROM web_sessions').all() as { id: string; data: string }[]; await setOwnerPassword(authDb, password); for (const row of sessions) exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([row.id, JSON.parse(row.data).ownerGeneration])).digest('hex')); archiveDb.exec('DELETE FROM query_snapshots'); },
     startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
       lock.assert(); if (collector) throw Error('Coletor já ativo');
       collector = createCollector({ authDb, archive, lock, ...options });
@@ -206,8 +227,8 @@ export function createService({ dataDir }: { dataDir: string }) {
     },
     close() {
       const finish = () => { clearInterval(querySweep); archiveDb.close(); authDb.close(); lock.release(); };
-      if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(finish);
-      finish();
+      if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(() => exports.close()).then(finish);
+      return exports.close().then(finish);
     }
   };
 }
