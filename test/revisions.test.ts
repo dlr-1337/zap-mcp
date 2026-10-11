@@ -1,16 +1,100 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createService } from '../src/main.js';
+import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
+import { startMediaWorker } from '../src/media.js';
 import { proto, makeEventBuffer, type WAMessage } from '@whiskeysockets/baileys';
 import processMessage from '@whiskeysockets/baileys/lib/Utils/process-message.js';
 const key = { remoteJid: '1@s.whatsapp.net', id: 'a', fromMe: false };
 function fixture(t: any) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-revision-')); const s = createService({ dataDir: dir });
-  t.after(() => { s.close(); rmSync(dir, { recursive: true }); }); return { ...s, archive: (s as any).archive };
+  t.after(() => { s.close(); rmSync(dir, { recursive: true }); }); return { ...s, dir, archive: (s as any).archive };
 }
+test('originais no mesmo relógio com contexto de envelope diferente conservam texto e todas as revisões', t => {
+  const { archive: a } = fixture(t);
+  for (const [i, body] of [
+    { conversation: 'texto recebido' },
+    { extendedTextMessage: { text: 'texto recebido', contextInfo: { stanzaId: 'quote', participant: '2@s.whatsapp.net', quotedMessage: { conversation: 'citação recebida' }, expiration: 60 } } }
+  ].entries()) {
+    const target = { ...key, id: 'replay-text-' + i };
+    const original = { key: target, messageTimestamp: 1700000000, message: { ...body, messageContextInfo: { messageSecret: Buffer.alloc(32, 1) } } };
+    a.ingestHistory({ messages: [original] });
+    const before = a.readStoredMessage(target);
+    const captured = a.db.prepare('SELECT * FROM revisions WHERE reference=?').all(before.reference);
+    assert.equal(before.orderUncertain, false); assert.equal(before.text, 'texto recebido');
+    const replay = { ...original, message: { messageContextInfo: { threadId: Buffer.alloc(32, 2), messageSecret: Buffer.alloc(32, 3) }, ...body } };
+    a.ingestUpsert({ type: 'append', messages: [replay] });
+    const message = a.readStoredMessage(target);
+    assert.equal(message.reference, before.reference); assert.equal(message.revisions.length, 2);
+    assert.deepEqual(a.db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id LIMIT 1').all(before.reference), captured);
+    assert.equal(new Set(message.revisions.map((r: any) => r.sourceTimestamp)).size, 1);
+    assert.deepEqual(a.db.prepare('SELECT DISTINCT evidence FROM revisions WHERE reference=?').all(before.reference), [{ evidence: JSON.stringify({ type: i ? 'extendedTextMessage' : 'conversation', text: 'texto recebido', restricted: false, quote: i ? { id: 'quote', author: '2@s.whatsapp.net', remoteJid: null, text: 'citação recebida', restricted: false, reference: null } : null, expirationSeconds: i ? 60 : null }) }]);
+    assert.equal(message.orderUncertain, false, 'contexto do envelope não muda o corpo capturado');
+    assert.equal(message.type, i ? 'extendedTextMessage' : 'conversation'); assert.equal(message.text, 'texto recebido');
+    assert.deepEqual(a.readPrivateMessage(target)!.message, replay.message);
+  }
+});
+test('replay original conserva referência, anexo disponível, bytes, revisão e job existentes', async t => {
+  const { archive: a, dir } = fixture(t), bytes = Buffer.from('original sintético');
+  for (const type of ['imageMessage', 'audioMessage']) {
+    const target = { ...key, id: 'replay-' + type }, node = { url: 'https://mmg.whatsapp.net/original', mediaKey: Buffer.alloc(32, 1), fileLength: bytes.length, fileSha256: createHash('sha256').update(bytes).digest(), caption: 'legenda recebida' };
+    const original = { key: target, messageTimestamp: 1700000000, message: { [type]: node } };
+    a.ingestHistory({ messages: [original] });
+    const before = a.readStoredMessage(target), id = before.attachments[0].id;
+    const worker = startMediaWorker({ archive: a, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) });
+    await worker.drain(); await worker.stop();
+    assert.equal(a.getAttachment(id)!.state, 'available');
+    const revision = a.db.prepare('SELECT * FROM revisions WHERE reference=?').all(before.reference);
+    const attachment = a.db.prepare('SELECT * FROM attachments WHERE id=?').get(id);
+    const job = a.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(id);
+    a.ingestUpsert({ type: 'append', messages: [{ ...original, message: { messageContextInfo: { messageSecret: Buffer.alloc(32, 2) }, [type]: Object.fromEntries(Object.entries(node).reverse()) } }] });
+    const message = a.readStoredMessage(target);
+    assert.equal(message.reference, before.reference); assert.equal(message.revisions.length, 2); assert.equal(message.attachments.length, 2);
+    assert.deepEqual(a.db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id LIMIT 1').all(before.reference), revision);
+    assert.deepEqual(a.db.prepare('SELECT * FROM attachments WHERE id=?').get(id), attachment);
+    assert.deepEqual(a.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(id), job);
+    assert.deepEqual(readFileSync(join(dir, 'media', id + '.bin')), bytes);
+    assert.equal(new Set(message.attachments.map((item: any) => item.id)).size, 2);
+    assert.equal(message.attachments.every((item: any) => item.reference === before.reference), true);
+    assert.equal(a.db.prepare('SELECT count(*) AS n FROM media_jobs WHERE attachment_id IN (SELECT id FROM attachments WHERE reference=?)').get(before.reference).n, 2);
+    assert.equal(message.orderUncertain, false); assert.equal(message.type, type); assert.equal(message.text, 'legenda recebida');
+    assert.deepEqual(a.readPrivateMessage(target)!.message[type], node);
+    assert.deepEqual(a.db.pragma('foreign_key_check'), []);
+  }
+});
+test('originais no mesmo relógio com corpo ou mídia diferentes mantêm conflito real', t => {
+  const { archive: a } = fixture(t);
+  const media = { caption: 'mesma legenda', url: 'https://mmg.whatsapp.net/original', mediaKey: Buffer.alloc(32, 1), fileSha256: Buffer.alloc(32, 2) };
+  for (const [i, bodies] of [
+    [{ conversation: 'primeiro corpo' }, { conversation: 'segundo corpo' }],
+    [{ imageMessage: media }, { imageMessage: { ...media, fileSha256: Buffer.alloc(32, 3) } }]
+  ].entries()) {
+    const target = { ...key, id: 'conflict-' + i };
+    a.ingestHistory({ messages: bodies.map(message => ({ key: target, messageTimestamp: 1700000000, message })) });
+    const message = a.readStoredMessage(target);
+    assert.equal(message.revisions.length, 2); assert.equal(message.orderUncertain, true); assert.equal(message.text, null);
+    assert.equal(a.readPrivateMessage(target), undefined); assert.equal(message.attachments.length, i ? 2 : 0);
+    if (i) assert.equal(new Set(a.db.prepare('SELECT evidence FROM revisions WHERE reference=?').all(message.reference).map((r: any) => r.evidence)).size, 1, 'mesma legenda não prova o mesmo original');
+    a.ingestHistory({ messages: [{ key: target, messageTimestamp: 1700000001, message: { conversation: 'posterior' } }] });
+    assert.equal(a.readStoredMessage(target).orderUncertain, false); assert.equal(a.readStoredMessage(target).text, 'posterior', 'relógio posterior continua prevalecendo');
+  }
+});
+test('equivalência de envelope não elimina incerteza sem relógio confiável nem em edições', t => {
+  const { archive: a } = fixture(t);
+  for (const [i, kind] of ['original', 'edit'].entries()) {
+    const target = { ...key, id: 'no-clock-' + i };
+    const variants = [{ conversation: 'mesmo corpo' }, { conversation: 'mesmo corpo', messageContextInfo: { messageSecret: Buffer.alloc(32, 1) } }];
+    if (kind === 'original') a.ingestHistory({ messages: variants.map(message => ({ key: target, message })) });
+    else a.ingestUpdates(variants.map(message => ({ key: target, update: { message } })));
+    const message = a.readStoredMessage(target);
+    assert.equal(message.orderUncertain, true); assert.equal(message.text, null); assert.equal(message.revisions.length, 2);
+    assert.equal(a.readPrivateMessage(target), undefined);
+  }
+});
 async function protocolEvents(archive: ReturnType<typeof createService>['archive'], message: proto.IWebMessageInfo) {
   const wire = proto.WebMessageInfo.decode(proto.WebMessageInfo.encode(message).finish()) as WAMessage;
   const logger = { debug() {}, trace() {}, warn() {}, error() {}, info() {}, child() { return this; } };
