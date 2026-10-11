@@ -87,11 +87,12 @@ export function openArchive(dataDir: string) {
   chmodSync(location, 0o700);
   const db = new Database(path);
   chmodSync(path, 0o600);
-  db.pragma('foreign_keys = ON'); db.pragma('secure_delete = ON');
+  // Rebuild the attachment table inside the migration; validate all references before committing.
+  db.pragma('foreign_keys = OFF'); db.pragma('secure_delete = ON');
   try {
     db.transaction(() => {
       let version = db.pragma('user_version', { simple: true }) as number;
-      if (version > 5) throw Error('Versão do arquivo não suportada');
+      if (version > 6) throw Error('Versão do arquivo não suportada');
       if (version === 0) {
         db.exec('CREATE TABLE conversations(id TEXT PRIMARY KEY,name TEXT,source_id TEXT); CREATE UNIQUE INDEX conversation_source ON conversations(source_id); CREATE TABLE messages(reference TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),text TEXT NOT NULL,original_timestamp TEXT NOT NULL); PRAGMA user_version=2'); version = 2;
       }
@@ -131,7 +132,16 @@ export function openArchive(dataDir: string) {
         ALTER TABLE media_jobs ADD COLUMN retry_at INTEGER NOT NULL DEFAULT 0;
         PRAGMA user_version=5;
       `);
+      if (version <= 5) db.exec(`
+        CREATE TABLE attachments_v6(id TEXT PRIMARY KEY,reference TEXT NOT NULL REFERENCES messages(reference),revision_id INTEGER NOT NULL REFERENCES revisions(id),type TEXT NOT NULL,name TEXT,mime_type TEXT,state TEXT NOT NULL,descriptor BLOB,reason TEXT,size INTEGER,sha256 TEXT,source_hash_verified INTEGER NOT NULL DEFAULT 0,source_key TEXT);
+        INSERT INTO attachments_v6 SELECT *,NULL FROM attachments;
+        DROP TABLE attachments;
+        ALTER TABLE attachments_v6 RENAME TO attachments;
+        PRAGMA user_version=6;
+      `);
+      if ((db.pragma('foreign_key_check') as unknown[]).length) throw Error('Arquivo inconsistente');
     })();
+    db.pragma('foreign_keys = ON');
     if (db.pragma('integrity_check', { simple: true }) !== 'ok' || (db.pragma('foreign_key_check') as unknown[]).length) throw Error('Arquivo inconsistente');
   } catch (error) { db.close(); throw error; }
   const now = () => new Date().toISOString();
@@ -163,12 +173,19 @@ export function openArchive(dataDir: string) {
     for (const r of db.prepare('SELECT * FROM revisions WHERE reference=?').all(drop) as Revision[]) {
       const duplicate = db.prepare('SELECT id FROM revisions WHERE reference=? AND fingerprint=(SELECT fingerprint FROM revisions WHERE id=?)').get(keep, r.id) as { id: number } | undefined;
       if (duplicate) {
-        const attachments = db.prepare("SELECT a.id,a.revision_id FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.revision_id IN (?,?) ORDER BY CASE a.state WHEN 'available' THEN 4 WHEN 'downloading' THEN 3 WHEN 'pending' THEN 2 WHEN 'retry_wait' THEN 1 ELSE 0 END DESC,(j.id IS NOT NULL) DESC,a.rowid").all(duplicate.id, r.id) as { id: string; revision_id: number }[];
+        const attachments = db.prepare("SELECT a.id,a.revision_id,a.state,a.size,a.sha256,j.state job_state,r.payload FROM attachments a JOIN revisions r ON r.id=a.revision_id LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.revision_id IN (?,?) ORDER BY CASE a.state WHEN 'available' THEN 4 WHEN 'downloading' THEN 3 WHEN 'pending' THEN 2 WHEN 'retry_wait' THEN 1 ELSE 0 END DESC,(j.id IS NOT NULL) DESC,a.rowid").all(duplicate.id, r.id) as { id: string; revision_id: number; state: string; size: number | null; sha256: string | null; job_state: string | null; payload: Buffer | null }[];
         const winner = attachments[0];
-        // Keep the binary/manifest ID and any live lease; removing losers fences their workers.
-        for (const loser of attachments.slice(1)) { db.prepare('DELETE FROM media_jobs WHERE attachment_id=?').run(loser.id); db.prepare('DELETE FROM attachments WHERE id=?').run(loser.id); }
+        for (const attachment of attachments) {
+          // A live writer or persisted digest may own unique bytes; only disk verification proves availability.
+          if (attachment === winner || attachment.state === 'downloading' || attachment.job_state === 'downloading' || attachment.size !== null || attachment.sha256 !== null) {
+            const key = attachment.payload ? keyOf(obj(deserialize(attachment.payload)).key) : null;
+            db.prepare('UPDATE attachments SET reference=?,revision_id=?,source_key=coalesce(source_key,?) WHERE id=?').run(keep, duplicate.id, key ? JSON.stringify(key) : null, attachment.id);
+          } else {
+            db.prepare('DELETE FROM media_jobs WHERE attachment_id=?').run(attachment.id);
+            db.prepare('DELETE FROM attachments WHERE id=?').run(attachment.id);
+          }
+        }
         if (winner?.revision_id === r.id) {
-          db.prepare('UPDATE attachments SET reference=?,revision_id=? WHERE id=?').run(keep, duplicate.id, winner.id);
           db.prepare('UPDATE revisions SET payload=? WHERE id=?').run(r.payload, duplicate.id);
         }
         db.prepare('DELETE FROM revisions WHERE id=?').run(r.id);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, createCipheriv } from 'node:crypto';
@@ -28,6 +28,115 @@ function fixture(t: { after(fn: () => unknown): void }) {
   return { dir, service, archive: service.archive };
 }
 async function moduleMedia() { const path = '../src/media.js'; return import(path); }
+
+for (const point of ['published', 'beforeAvailable'] as const) for (const priorHash of [false, true]) {
+  test(`PN/LID preserva original em ${point} com dois workers e hash pré-publicação=${priorHash}`, async t => {
+    const base = mkdtempSync(join(tmpdir(), 'zap-merge-race-')), dataDir = join(base, 'source');
+    let service = createService({ dataDir });
+    t.after(async () => { await service.close(); rmSync(base, { recursive: true }); });
+    createAuthState(service.authDb, { newProfile: true });
+    const archive = service.archive, pn = media('race'), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
+    archive.ingestHistory({ messages: [pn, lid] });
+    const firstId = archive.readStoredMessage(pn.key)!.attachments[0]!.id, savedId = archive.readStoredMessage(lid.key)!.attachments[0]!.id;
+    let rejectFirst!: (error: Error) => void, reached!: () => void, release!: () => void, downloads = 0;
+    const first = new Promise<Readable>((_, reject) => { rejectFirst = reject; });
+    const checkpoint = new Promise<void>(resolve => { reached = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+    const { startMediaWorker } = await moduleMedia();
+    const worker = startMediaWorker({ archive, mediaDir: join(dataDir, 'media'),
+      downloadOriginal: async (job: MediaJob) => { downloads++; return job.id === firstId ? first : Readable.from([bytes]); },
+      fault: async (current: string) => { if (current === point) { reached(); await held; throw Error('interrupção após publicação'); } }
+    });
+    t.after(async () => { release(); rejectFirst(Error('cleanup')); await worker.stop(); });
+    await checkpoint;
+    assert.equal(worker.snapshot().active, 2);
+    if (priorHash) archive.db.prepare('UPDATE attachments SET size=?,sha256=? WHERE id=?').run(bytes.length, hash.toString('hex'), firstId);
+    const lease = archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(savedId);
+    const manifest = (lease as { generation: string }).generation;
+    archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid });
+    try {
+      assert.ok(archive.getAttachment(savedId), 'ID do original publicado deve permanecer consultável');
+      assert.ok(archive.getAttachment(firstId), 'outro worker ainda pode produzir bytes únicos');
+      assert.deepEqual(archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(savedId), lease);
+      for (const [id, jid] of [[firstId, pn.key.remoteJid], [savedId, lid.key.remoteJid]]) {
+        const privateRow = archive.db.prepare('SELECT source_key FROM attachments WHERE id=?').get(id) as { source_key: string };
+        assert.equal(JSON.parse(privateRow.source_key).remoteJid, jid, 'locator fica congelado por attachment');
+        const publicFields = ['id', 'reference', 'type', 'name', 'mimeType', 'state', 'reason', 'attempts', 'size', 'sha256', 'sourceHashVerified'].sort();
+        assert.deepEqual(Object.keys(archive.getAttachment(id)!).sort(), publicFields);
+        assert.deepEqual(Object.keys(archive.readStoredMessage(pn.key)!.attachments.find(a => a!.id === id)!).sort(), publicFields);
+      }
+      assert.equal(archive.getCoverage().uniqueMessages, 1); assert.equal(archive.readStoredMessage(pn.key)!.revisions.length, 1);
+      assert.deepEqual(archive.db.pragma('foreign_key_check'), []);
+    } finally { release(); rejectFirst(Error('primeiro download falhou')); }
+    await worker.drain(); await worker.stop();
+    assert.notEqual(archive.getAttachment(savedId)!.state, 'available', 'publicação interrompida ainda exige verificação');
+    await service.close(); service = createService({ dataDir });
+    assert.equal(service.archive.getAttachment(savedId)!.state, 'available');
+    assert.equal(service.archive.getAttachment(savedId)!.sha256, hash.toString('hex'));
+    assert.notEqual(service.archive.getAttachment(firstId)!.state, 'available', 'hash isolado não prova presença do binário');
+    assert.deepEqual(readFileSync(join(dataDir, 'media', savedId + '.bin')), bytes);
+    assert.equal(JSON.parse(readFileSync(join(dataDir, 'media', `${savedId}.${manifest}.manifest`), 'utf8')).sha256, hash.toString('hex'));
+    const offline = startMediaWorker({ archive: service.archive, mediaDir: join(dataDir, 'media'), online: () => false,
+      downloadOriginal: async () => { downloads++; throw Error('nenhum redownload offline'); } });
+    await offline.drain(); await offline.stop(); assert.equal(downloads, 2);
+    await service.close();
+    const snapshotDir = join(base, 'snapshot'), destination = join(base, 'restore');
+    await createSnapshot({ dataDir, destination: snapshotDir });
+    assert.equal((await verifyBackup({ dataDir, snapshotDir, destination })).verified, true, 'restore verifica HTTP autenticado offline e hash');
+    assert.deepEqual(readFileSync(join(destination, 'media', savedId + '.bin')), bytes);
+    service = createService({ dataDir: destination });
+    assert.equal(service.archive.getAttachment(savedId)!.state, 'available');
+    assert.equal(service.archive.readStoredMessage(lid.key)!.attachments.some(a => a!.id === savedId), true);
+    assert.equal(downloads, 2);
+  });
+}
+
+test('PN/LID preserva bytes distintos e usa locator de cada attachment nas novas tentativas', async t => {
+  const { archive, dir, service } = fixture(t), { startMediaWorker } = await moduleMedia();
+  const pn = media('distinct', 'documentMessage', { fileLength: undefined, fileSha256: undefined }), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
+  archive.ingestHistory({ messages: [pn, lid] });
+  const ids = [archive.readStoredMessage(pn.key)!.attachments[0]!.id, archive.readStoredMessage(lid.key)!.attachments[0]!.id];
+  let started!: () => void, release!: () => void, calls = 0;
+  const both = new Promise<void>(resolve => { started = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+  const originals = [bytes, Buffer.from('outro original sem hash de origem')];
+  let worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async (job: MediaJob) => {
+    calls++; if (calls === 2) started(); await held; return Readable.from([originals[ids.indexOf(job.id)]]);
+  } });
+  t.after(() => worker.stop()); await both;
+  archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid }); release(); await worker.drain(); await worker.stop();
+  assert.equal(archive.getCoverage().uniqueMessages, 1); assert.equal(archive.readStoredMessage(pn.key)!.revisions.length, 1);
+  for (const [index, id] of ids.entries()) {
+    assert.equal(archive.getAttachment(id)!.state, 'available'); assert.deepEqual(readFileSync(join(dir, 'media', id + '.bin')), originals[index]);
+    rmSync(join(dir, 'media', id + '.bin'));
+  }
+  const { reconcileMedia } = await moduleMedia(); reconcileMedia(archive, join(dir, 'media'));
+  worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async (job: MediaJob) => {
+    const index = ids.indexOf(job.id); assert.equal(job.message.key.remoteJid, index === 0 ? pn.key.remoteJid : lid.key.remoteJid);
+    calls++; return Readable.from([originals[index]]);
+  } });
+  await worker.drain(); await worker.stop(); assert.equal(calls, 4);
+  for (const [index, id] of ids.entries()) assert.deepEqual(readFileSync(join(dir, 'media', id + '.bin')), originals[index]);
+  assert.deepEqual(service.archiveDb.pragma('foreign_key_check'), []);
+});
+
+test('PN/LID exclui job supersedido e impede publicação do worker realmente descartado', async t => {
+  const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia();
+  const pn = media('retired'), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
+  archive.ingestHistory({ messages: [pn, lid] });
+  const retiredId = archive.readStoredMessage(pn.key)!.attachments[0]!.id, keptId = archive.readStoredMessage(lid.key)!.attachments[0]!.id;
+  let started!: () => void, release!: () => void, calls = 0;
+  const both = new Promise<void>(resolve => { started = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+  const worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async () => {
+    if (++calls === 2) started(); await held; return Readable.from([bytes]);
+  } });
+  t.after(async () => { release(); await worker.stop(); }); await both;
+  archive.db.prepare("UPDATE media_jobs SET generation='superseded',state='unavailable' WHERE attachment_id=?").run(retiredId);
+  archive.db.prepare("UPDATE attachments SET state='unavailable' WHERE id=?").run(retiredId);
+  archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid });
+  assert.equal(archive.getAttachment(retiredId), null); release(); await worker.drain(); await worker.stop();
+  assert.equal(existsSync(join(dir, 'media', retiredId + '.bin')), false);
+  assert.equal(archive.getAttachment(keptId)!.state, 'available');
+  assert.deepEqual(readFileSync(join(dir, 'media', keptId + '.bin')), bytes);
+});
 
 test('PN/LID mantém o único original disponível, locator privado, HTTP offline e backup restaurado', async t => {
   const base = mkdtempSync(join(tmpdir(), 'zap-media-merge-')), dataDir = join(base, 'source');
@@ -61,6 +170,12 @@ test('PN/LID mantém o único original disponível, locator privado, HTTP offlin
     const challenge = await fetch(url + '/api/session'), form = await challenge.json() as { csrfToken: string };
     const login = await fetch(url + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: url, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'synthetic-password', csrfToken: form.csrfToken }) });
     assert.equal(login.status, 200);
+    const publicPage = await fetch(url + '/api/conversations/' + kept.conversationId + '/messages', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
+    const page = await publicPage.json() as { messages: { attachments: Record<string, unknown>[] }[] };
+    assert.equal(publicPage.status, 200);
+    for (const message of page.messages) for (const attachment of message.attachments) {
+      assert.deepEqual(Object.keys(attachment).sort(), ['id', 'reference', 'type', 'name', 'mimeType', 'state', 'reason', 'attempts', 'size', 'sha256', 'sourceHashVerified'].sort());
+    }
     const response = await fetch(url + '/api/attachments/' + availableId, { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
     assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }

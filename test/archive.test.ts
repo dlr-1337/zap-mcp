@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { createService } from '../src/main.js';
+import { openArchive } from '../src/archive.js';
 
 export const item = (id: string, extra = {}) => ({ key: { remoteJid: '1@s.whatsapp.net', id, fromMe: false }, messageTimestamp: 1700000000, message: { conversation: 'Olá 🧪' }, ...extra });
 export function fixture(t: TestContext) {
@@ -75,6 +76,38 @@ test('migração v2 conserva UUID, referência e texto existentes', t => {
   const db = new Database(join(dir, 'archive.sqlite'));
   db.exec("CREATE TABLE conversations(id TEXT PRIMARY KEY,name TEXT,source_id TEXT); CREATE UNIQUE INDEX conversation_source ON conversations(source_id); CREATE TABLE messages(reference TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),text TEXT NOT NULL,original_timestamp TEXT NOT NULL); CREATE INDEX message_window ON messages(conversation_id,original_timestamp,reference); PRAGMA user_version=2; INSERT INTO conversations VALUES('old-uuid','nome','source'); INSERT INTO messages VALUES('old-ref','old-uuid','texto','2020-01-01T00:00:00.000Z')"); db.close();
   const s = createService({ dataDir: dir }); t.after(() => { s.close(); rmSync(dir, { recursive: true }); });
-  assert.equal(s.archiveDb.pragma('user_version', { simple: true }), 5);
+  assert.equal(s.archiveDb.pragma('user_version', { simple: true }), 6);
   assert.deepEqual(s.archiveDb.prepare('SELECT reference,conversation_id,text FROM messages').get(), { reference: 'old-ref', conversation_id: 'old-uuid', text: 'texto' });
+});
+
+test('migração v5 conserva attachments/jobs e falha transacional preserva o banco anterior', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-migration-v5-'));
+  t.after(() => rmSync(dir, { recursive: true }));
+  const service = createService({ dataDir: dir });
+  service.archive.ingestHistory({ messages: [item('v5', { message: { imageMessage: { url: 'https://mmg.whatsapp.net/file', mediaKey: Buffer.alloc(32) } } })] });
+  const id = service.archive.readStoredMessage(item('v5').key)!.attachments[0]!.id;
+  service.archiveDb.prepare("UPDATE media_jobs SET state='downloading',generation='old-generation',lease_until=12345,attempts=2 WHERE attachment_id=?").run(id);
+  service.archiveDb.prepare("UPDATE attachments SET state='downloading',size=123,sha256='digest' WHERE id=?").run(id);
+  await service.close();
+  const db = new Database(join(dir, 'archive.sqlite'));
+  db.pragma('foreign_keys=OFF');
+  db.exec(`CREATE TABLE attachments_v5(id TEXT PRIMARY KEY,reference TEXT NOT NULL REFERENCES messages(reference),revision_id INTEGER NOT NULL REFERENCES revisions(id),type TEXT NOT NULL,name TEXT,mime_type TEXT,state TEXT NOT NULL,descriptor BLOB,reason TEXT,size INTEGER,sha256 TEXT,source_hash_verified INTEGER NOT NULL DEFAULT 0,UNIQUE(reference,revision_id));
+    INSERT INTO attachments_v5 SELECT id,reference,revision_id,type,name,mime_type,state,descriptor,reason,size,sha256,source_hash_verified FROM attachments;
+    DROP TABLE attachments; ALTER TABLE attachments_v5 RENAME TO attachments; PRAGMA user_version=5;`);
+  const attachments = db.prepare('SELECT * FROM attachments').all(), jobs = db.prepare('SELECT * FROM media_jobs').all();
+  db.exec('CREATE TABLE attachments_v6(injected TEXT)'); db.close();
+  assert.throws(() => openArchive(dir), /already exists/);
+  const failed = new Database(join(dir, 'archive.sqlite'));
+  assert.equal(failed.pragma('user_version', { simple: true }), 5);
+  assert.deepEqual(failed.prepare('SELECT * FROM attachments').all(), attachments);
+  assert.deepEqual(failed.prepare('SELECT * FROM media_jobs').all(), jobs);
+  failed.exec('DROP TABLE attachments_v6'); failed.close();
+  const archive = openArchive(dir);
+  try {
+    assert.equal(archive.db.pragma('user_version', { simple: true }), 6);
+    assert.equal(archive.db.pragma('foreign_keys', { simple: true }), 1);
+    assert.deepEqual(archive.db.prepare('SELECT * FROM attachments').all(), attachments.map(a => ({ ...a as object, source_key: null })));
+    assert.deepEqual(archive.db.prepare('SELECT * FROM media_jobs').all(), jobs);
+    assert.deepEqual(archive.db.pragma('foreign_key_check'), []);
+  } finally { archive.close(); }
 });

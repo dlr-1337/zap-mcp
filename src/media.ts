@@ -168,10 +168,11 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
   const noSpace = () => Object.assign(Error('Espaço insuficiente; downloads pausados'), { code: 'ENOSPC' });
   function claim(): MediaJob | null {
     return archive.db.transaction(() => {
-      const row = archive.db.prepare("SELECT a.id,a.type,a.descriptor,r.payload,j.attempts FROM media_jobs j JOIN attachments a ON a.id=j.attachment_id JOIN revisions r ON r.id=a.revision_id JOIN messages m ON m.reference=a.reference WHERE j.state IN ('pending','retry_wait') AND j.attempts<5 AND j.retry_at<=? AND m.restricted=0 ORDER BY j.rowid LIMIT 1").get(now()) as { id: string; type: string; descriptor: Buffer; payload: Buffer; attempts: number } | undefined;
+      const row = archive.db.prepare("SELECT a.id,a.type,a.descriptor,a.source_key,r.payload,j.attempts FROM media_jobs j JOIN attachments a ON a.id=j.attachment_id JOIN revisions r ON r.id=a.revision_id JOIN messages m ON m.reference=a.reference WHERE j.state IN ('pending','retry_wait') AND j.attempts<5 AND j.retry_at<=? AND m.restricted=0 ORDER BY j.rowid LIMIT 1").get(now()) as { id: string; type: string; descriptor: Buffer; source_key: string | null; payload: Buffer; attempts: number } | undefined;
       if (!row) return null;
       const generation = randomUUID(), stored = deserialize(row.payload) as { key: Node }, descriptor = deserialize(row.descriptor) as Node;
-      if (descriptor.viewOnce === true || stored.key.isViewOnce === true || !(descriptor.url || descriptor.directPath) || !(descriptor.mediaKey instanceof Uint8Array) || descriptor.mediaKey.length !== 32) {
+      const key = row.source_key ? JSON.parse(row.source_key) as Node : stored.key;
+      if (descriptor.viewOnce === true || key.isViewOnce === true || !(descriptor.url || descriptor.directPath) || !(descriptor.mediaKey instanceof Uint8Array) || descriptor.mediaKey.length !== 32) {
         failure(archive, row.id, 'Original não recebido ou mídia restrita', undefined, 0, true); return null;
       }
       let size: bigint | null; try { size = expected(descriptor).size; } catch { size = 0n; }
@@ -181,7 +182,7 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
       if (size === null) unknownSize.add(row.id);
       archive.db.prepare("UPDATE media_jobs SET state='downloading',attempts=attempts+1,generation=?,lease_until=? WHERE attachment_id=?").run(generation, now() + 120_000, row.id);
       archive.db.prepare("UPDATE attachments SET state='downloading',reason=NULL WHERE id=?").run(row.id);
-      return { id: row.id, type: row.type, descriptor, message: { key: stored.key, message: { [row.type]: descriptor } }, attempts: row.attempts + 1, generation };
+      return { id: row.id, type: row.type, descriptor, message: { key, message: { [row.type]: descriptor } }, attempts: row.attempts + 1, generation };
     })();
   }
   function assertLease(job: MediaJob, signal: AbortSignal) {
