@@ -136,6 +136,9 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.post('/api/exports', auth.csrf, (req, res, next) => {
     try { if (!req.body || Object.keys(req.body).some(k => !['conversationId', 'from', 'to', 'csrfToken'].includes(k))) throw Object.assign(Error('Seleção inválida'), { status: 400 }); res.status(202).json(exports.createExportJob(searchSession(req), req.body.conversationId, req.body.from, req.body.to)); } catch (e) { exportError(e, res, next); }
   });
+  app.get('/api/exports/period', (req, res, next) => {
+    try { if (Object.keys(req.query).some(k => !['from', 'to'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('Período inválido'), { status: 400 }); res.json(parsePeriod(req.query.from, req.query.to)); } catch (e) { exportError(e, res, next); }
+  });
   app.get('/api/exports/:id', (req, res, next) => { try { res.json(exports.getExportJob(req.params.id, searchSession(req))); } catch (e) { exportError(e, res, next); } });
   app.get('/api/exports/:id/download', (req, res, next) => {
     try {

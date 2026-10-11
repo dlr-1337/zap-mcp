@@ -15,6 +15,7 @@ function exportView() {
   for (const tab of tabs.values()) {
     if (!tab.exportForm) continue;
     tab.exportSubmit.disabled = exportCreating || exportJob?.state === 'preparing';
+    tab.exportForm.setAttribute('aria-busy', String(exportCreating || exportJob?.state === 'preparing'));
     const box = tab.exportFeedback; box.replaceChildren();
     if (!exportJob) continue;
     const f = exportJob.effectiveFilters;
@@ -39,6 +40,15 @@ function exportForm(tab) {
   addText(form, 'h3', 'Exportar recorte'); addText(form, 'p', 'Conversa fixa: ' + conversationLabel(tab.conversation)).dir = 'auto';
   const inputs = ['De', 'Até'].map((label, i) => { const id = 'export-' + tab.conversation.id + '-' + i; const l = addText(form, 'label', label); l.htmlFor = id; const input = addText(form, 'input', ''); input.id = id; input.type = 'date'; input.setAttribute('aria-describedby', 'export-help'); return input; });
   const submit = addText(form, 'button', 'Preparar exportação'); submit.type = 'submit';
+  const period = addText(form, 'p', '', 'export-period'); period.setAttribute('role', 'status');
+  let periodVersion = 0;
+  async function previewPeriod() {
+    const version = readVersion, ticket = ++periodVersion, query = new URLSearchParams({ from: inputs[0].value, to: inputs[1].value });
+    period.textContent = 'Conferindo período…';
+    try { const r = await request('/api/exports/period?' + query), f = await r.json(); if (version !== readVersion || ticket !== periodVersion || !authenticated || suspended || !form.isConnected) return; period.textContent = r.ok ? (f.from ?? 'Início aberto') + ' até ' + (f.to ?? 'fim aberto') + '; ' + f.zone + '; UTC: ' + (f.startUtc ?? 'início aberto') + ' até ' + (f.endUtc ?? 'fim aberto') + ' (exclusivo). ' + f.dateUnknownPolicy : f.error; }
+    catch (e) { if (version === readVersion && ticket === periodVersion && !['stale', 'expired'].includes(e.message)) period.textContent = 'Não foi possível conferir o período. Tente ajustar as datas novamente.'; }
+  }
+  inputs.forEach(input => input.addEventListener('input', previewPeriod)); previewPeriod();
   const feedback = addText(form, 'p', ''); feedback.setAttribute('role', 'alert'); const job = addText(tab.panel, 'section', '');
   Object.assign(tab, { exportForm: form, exportSubmit: submit, exportFeedback: job }); exportView();
   form.addEventListener('submit', async e => {
@@ -483,11 +493,12 @@ async function revalidate() {
   try {
     const previousToken = csrfToken, session = await challenge(); if (version !== readVersion) return;
     if (!session.authenticated || previousToken !== csrfToken) { signedOut(expired); return; } suspended = false; $('archive').hidden = false; $('login-panel').hidden = true;
+    if (exportJob) pollExport();
     if (await refreshStatus() && version === readVersion && wasOffline) $('archive-error').textContent = 'Acesso ao servidor restabelecido. Atualize os dados para conferir o estado atual.';
   }
   catch (error) { failure(error); if ($('archive').hidden && authenticated) { $('login-panel').hidden = false; $('login-error').textContent = noServer; } }
 }
 window.addEventListener('online', revalidate); window.addEventListener('pageshow', event => { if (event.persisted) revalidate(); });
-window.addEventListener('pagehide', () => { closePreviews(); hideQr(); if (authenticated) { suspended = true; ++readVersion; ++navigationVersion; pendingContexts.clear(); for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; for (const player of tab.panel.querySelectorAll('audio,video')) player.pause(); } $('archive').hidden = true; } });
+window.addEventListener('pagehide', () => { ++exportVersion; clearTimeout(exportTimer); closePreviews(); hideQr(); if (authenticated) { suspended = true; ++readVersion; ++navigationVersion; pendingContexts.clear(); for (const tab of tabs.values()) { ++tab.generation; tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; for (const player of tab.panel.querySelectorAll('audio,video')) player.pause(); } $('archive').hidden = true; } });
 setInterval(() => { if (authenticated && document.visibilityState === 'visible') refreshStatus(); }, 10_000);
 challenge().then(data => data.authenticated ? enter() : signedOut()).catch(() => { $('login-error').textContent = noServer; });

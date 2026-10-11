@@ -17,13 +17,25 @@ const { chromium } = requireBrowser('playwright');
 test('browser exporta conversa inteira além da página e conclui download ZIP', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ messages: Array.from({ length: 161 }, (_, i) => ({ key: { remoteJid: 'export@lid', id: 'm' + i, fromMe: false }, messageTimestamp: 1700000000 + i, message: { conversation: 'exportável ' + i } })) });
+  const bytes = Buffer.from('original para download ZIP 🧪'), key = { remoteJid: 'export@lid', id: 'original', fromMe: false };
+  s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 1700000001, message: { documentMessage: { fileName: '../nome repetido.bin', url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32), fileLength: bytes.length, fileSha256: createHash('sha256').update(bytes).digest() } } }] });
+  const worker = startMediaWorker({ archive: s.archive, mediaDir: join(s.archiveDb.name, '..', 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
   assert.equal(await page.getByRole('button', { name: 'Preparar exportação', exact: true }).count(), 1, 'leitor deve oferecer exportação explícita');
   await page.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
   await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).waitFor();
   const pending = page.waitForEvent('download'); await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).click(); const download = await pending;
   assert.equal(await download.failure(), null); const path = await download.path();
-  assert.equal(spawnSync('unzip', ['-t', path]).status, 0); const manifest = spawnSync('unzip', ['-p', path, 'manifest.json']); assert.equal(manifest.status, 0); assert.equal(JSON.parse(manifest.stdout.toString()).messages.length, 161);
+  assert.equal(spawnSync('unzip', ['-t', path]).status, 0); const manifest = spawnSync('unzip', ['-p', path, 'manifest.json']); assert.equal(manifest.status, 0); const data = JSON.parse(manifest.stdout.toString()); assert.equal(data.messages.length, 162); const a = data.messages.flatMap((m: any) => m.attachments)[0]; const original = spawnSync('unzip', ['-p', path, a.path]); assert.equal(original.status, 0); assert.deepEqual(original.stdout, bytes); assert.equal(a.sha256, createHash('sha256').update(original.stdout).digest('hex'));
+});
+test('logout vence status de exportação retido e impede restauração de conteúdo', async t => {
+  const { s, page, login } = await uiFixture(t); s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'logout@lid', id: 'm', fromMe: false }, messageTimestamp: 123, message: { conversation: 'privado' } }] });
+  await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
+  let release!: () => void, started!: () => void; const held = new Promise<void>(r => release = r), began = new Promise<void>(r => started = r);
+  await page.route(/\/api\/exports\/[0-9a-f-]{36}$/, async (route: any) => { const response = await route.fetch(); started(); await held; await route.fulfill({ response }); });
+  await page.getByRole('button', { name: 'Preparar exportação', exact: true }).click(); await began;
+  await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); release(); await page.waitForTimeout(100);
+  assert.equal(await page.locator('#conversation-panels').textContent(), ''); assert.equal(await page.getByRole('link', { name: 'Baixar ZIP' }).count(), 0);
 });
 test('exportação mostra período efetivo e recupera polling sem misturar abas UC40 a UC49', async t => {
   const { s, page, login } = await uiFixture(t);
@@ -43,7 +55,7 @@ test('exportação mostra período efetivo e recupera polling sem misturar abas 
   assert.match(await page.locator('#messages').textContent(), /mensagem B/); fail = false; await page.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).filter({ visible: true }).click();
   await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).filter({ visible: true }).waitFor(); assert.equal(posts, 1); assert.match(await page.locator('#panel-' + idB).textContent(), /1 mensagens · 0 arquivos · 0 faltantes/);
   for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: `dist/02-04-ui-${width}.png`, fullPage: true }); }
-  await page.addStyleTag({ content: ':root{font-size:200%}' }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'dist/02-04-ui-zoom200.png', fullPage: true });
+  await page.evaluate(() => document.styleSheets[0].insertRule(':root{font-size:200%}', document.styleSheets[0].cssRules.length)); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'dist/02-04-ui-zoom200.png', fullPage: true });
 });
 async function uiFixture(t: any) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-ui-')), s = createService({ dataDir: dir });
