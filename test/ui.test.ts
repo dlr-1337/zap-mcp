@@ -23,6 +23,70 @@ async function uiFixture(t: any) {
   const login = async () => { await page.goto(base); await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click(); await page.locator('#archive').waitFor({ state: 'visible' }); await page.waitForFunction(() => document.getElementById('login-status')?.textContent === ''); };
   return { s, page, base, login, browser };
 }
+async function mediaUiFixture(t: any) {
+  const f = await uiFixture(t), wav = Buffer.alloc(8044, 128);
+  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(8000, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(8000, 40);
+  const video = Buffer.from('GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAILEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEyTbuMU6uEHFO7a1OsggH17AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjMuMS4xMDFXQYxMYXZmNjMuMS4xMDFEiYhAeQAAAAAAABZUrmvXrgEAAAAAAABO14EBc8WIQ9hvZMJBSqucgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QL68IA4JCwgRC6gRCagQJVsIRVuYEBVe6BAOwBAAAAAAAAAgAAElTDZ/pzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYzLjEuMTAxc3PVY8CLY8WIQ9hvZMJBSqtnyKBFo4dFTkNPREVSRIeTTGF2YzYzLjEuMTAxIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDAuNDAwMDAwMDAwAB9DtnW/54EAo6OBAACAEAIAnQEqEAAQAABHCIWFiIWEiAICAAwNYAD+/6tQgKOVgQDIALEBAAUQrAAYABhYL/QACAAAHFO7a5G7j7OBALeK94EB8YIBsfCBAw==', 'base64');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1kAAAAASUVORK5CYII=', 'base64');
+  const unsupported = Buffer.from('AAAAIGZ0eXBpc29tAAACAGlzb21pc282aXNvMm1wNDEAAAMrbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAAAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAi50cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAHKbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABdW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAATVzdGJsAAAA6XN0c2QAAAAAAAAAAQAAANltcDR2AAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABEkxhdmM2My4xLjEwMSBtcGVnNAAAAAAAAAAAAAAAAAAAGP//AAAAX2VzZHMAAAAAA4CAgE4AAQAEgICAQCARAAAAAAMNQAADDUAFgICALgAAAbABAAABtYkTAAABAAAAASAAxI2IAC0AhAIUYwAAAbJMYXZjNjMuMS4xMDEGgICAAQIAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAMNQAADDUAAAAAQc3R0cwAAAAAAAAAAAAAAEHN0c2MAAAAAAAAAAAAAABRzdHN6AAAAAAAAAAAAAAAAAAAAEHN0Y28AAAAAAAAAAAAAAChtdmV4AAAAIHRyZXgAAAAAAAAAAQAAAAEAAAAAAAAAAAAAAAAAAABhdWR0YQAAAFltZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAACxpbHN0AAAAJKl0b28AAAAcZGF0YQAAAAEAAAAATGF2ZjYzLjEuMTAxAAAAeG1vb2YAAAAQbWZoZAAAAAAAAAABAAAAYHRyYWYAAAAkdGZoZAAAADkAAAABAAAAAAAAA0sAAAgAAAAAEgEBAAAAAAAUdGZkdAEAAAAAAAAAAAAAAAAAACB0cnVuAAACBQAAAAIAAACAAgAAAAAAABIAAAAHAAAAIW1kYXQAAAGzABAHAAABthGBRgj2378AAAG2U8CNAAAAQ21mcmEAAAArdGZyYQEAAAAAAAABAAAAAAAAAAEAAAAAAAAAAAAAAAAAAANLAQEBAAAAEG1mcm8AAAAAAAAAQw==', 'base64');
+  const files = [
+    { id: 'audio', type: 'audioMessage', mime: 'audio/wav', bytes: wav }, { id: 'video', type: 'videoMessage', mime: 'video/webm', bytes: video },
+    { id: 'codec', type: 'videoMessage', mime: 'video/mp4', bytes: unsupported },
+    { id: 'png', type: 'imageMessage', mime: 'image/png', bytes: png }, { id: 'doc', type: 'documentMessage', mime: 'text/html', bytes: Buffer.from('<script>PRIVATE_SENTINEL</script>') },
+    { id: 'pending', type: 'imageMessage', mime: 'image/png', bytes: png }, { id: 'retry', type: 'imageMessage', mime: 'image/png', bytes: png }, { id: 'missing', type: 'imageMessage', mime: 'image/png', bytes: png }
+  ];
+  f.s.archive.ingestHistory({ chats: [{ id: '1@lid', subject: 'A' }, { id: '2@lid', subject: 'B' }], messages: [...files.map((a, i) => ({ key: { remoteJid: '1@lid', id: a.id, fromMe: false }, messageTimestamp: 123 + i, message: { [a.type]: { caption: 'anexo ' + a.id, fileName: a.id + ' שלום ' + 'nome longo '.repeat(20), mimetype: a.mime, url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32, 1), fileLength: a.bytes.length } } })), { key: { remoteJid: '2@lid', id: 'b', fromMe: false }, message: { conversation: 'leitura B' } }] });
+  const worker = startMediaWorker({ archive: f.s.archive, mediaDir: join(f.s.archiveDb.name, '..', 'media'), downloadOriginal: async job => Readable.from([files.find(a => a.id === job.message.key.id)!.bytes]) }); await worker.drain(); await worker.stop();
+  for (const [id, state, reason] of [['pending', 'pending', null], ['retry', 'retry_wait', 'Falha ao obter ou verificar original'], ['missing', 'unavailable', 'Original não recebido ou mídia restrita']]) { const a = f.s.archive.readStoredMessage({ remoteJid: '1@lid', id, fromMe: false })!.attachments[0]!; f.s.archiveDb.prepare('UPDATE attachments SET state=?,reason=? WHERE id=?').run(state, reason, a.id); }
+  await f.login(); await f.page.locator('#conversations a').filter({ hasText: /^A/ }).click(); await f.page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('anexo png'));
+  return { ...f, files };
+}
+test('players nativos sob ação fallback e estados preservam original UC35 a UC39', async t => {
+  const { s, page, files } = await mediaUiFixture(t);
+  assert.equal(await page.getByRole('button', { name: 'Ouvir áudio', exact: true }).count(), 1, 'áudio tem ação sob demanda');
+  assert.equal(await page.getByRole('button', { name: 'Assistir vídeo', exact: true }).count(), 2);
+  assert.equal(await page.locator('#messages .attachment audio,#messages .attachment video').count(), 0);
+  assert.match(await page.locator('#messages').textContent(), /Pendente — o original ainda não foi preservado/); assert.match(await page.locator('#messages').textContent(), /Falha recuperável/); assert.match(await page.locator('#messages').textContent(), /Indisponível/);
+  assert.match(await page.locator('#messages').textContent(), /Sem visualização integrada para este formato/);
+  await page.getByRole('button', { name: 'Ouvir áudio', exact: true }).click(); const audio = page.locator('#messages audio'); await audio.waitFor();
+  assert.equal(await audio.getAttribute('preload'), 'none'); assert.equal(await audio.getAttribute('autoplay'), null); assert.equal(await audio.evaluate((el: any) => el.controls), true);
+  await audio.evaluate((el: any) => el.play()); await page.waitForFunction(() => (document.querySelector('#messages audio') as HTMLAudioElement)?.currentTime > 0);
+  await page.locator('#messages .attachment').filter({ has: page.getByRole('heading', { name: /^video שלום/ }) }).getByRole('button', { name: 'Assistir vídeo' }).click(); const video = page.locator('#messages video'); await video.waitFor();
+  assert.equal(await video.getAttribute('preload'), 'none'); assert.equal(await video.getAttribute('autoplay'), null); assert.equal(await video.evaluate((el: any) => el.controls), true);
+  await video.evaluate((el: any) => el.play()); await page.waitForFunction(() => (document.querySelector('#messages video') as HTMLVideoElement)?.videoWidth === 16);
+  const codec = page.locator('#messages .attachment').filter({ has: page.getByRole('heading', { name: /^codec שלום/ }) });
+  await codec.getByRole('button', { name: 'Assistir vídeo', exact: true }).click();
+  await codec.locator('video').evaluate((el: any) => el.play().catch(() => {})); await page.waitForFunction(() => [...document.querySelectorAll('#messages .attachment')].some(el => el.querySelector('h3')?.textContent?.startsWith('codec ') && el.textContent?.includes('Não foi possível visualizar este formato')));
+  assert.equal(await codec.locator('.download').count(), 1); assert.match(await codec.textContent(), /Disponível/);
+  const codecDownload = page.waitForEvent('download'); await codec.locator('.download').click(); assert.deepEqual(readFileSync(await (await codecDownload).path()), files.find(a => a.id === 'codec')!.bytes);
+  await audio.evaluate((el: any) => el.dispatchEvent(new Event('error'))); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('Não foi possível visualizar este formato'));
+  const block = audio.locator('xpath=ancestor::section[contains(@class,"attachment")]'); assert.match(await block.textContent(), /Disponível — arquivo finalizado e verificado/);
+  const event = page.waitForEvent('download'); await block.locator('.download').click(); const saved = await event; assert.deepEqual(readFileSync(await saved.path()), files[0].bytes);
+  assert.equal(s.archive.readStoredMessage({ remoteJid: '1@lid', id: 'audio', fromMe: false })!.attachments[0]!.state, 'available');
+  for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); await video.scrollIntoViewIfNeeded(); await page.screenshot({ path: 'dist/02-03-ui-' + width + '.png' }); }
+  await page.setViewportSize({ width: 320, height: 900 }); await page.evaluate(() => document.documentElement.style.fontSize = '200%'); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); await video.scrollIntoViewIfNeeded(); await page.screenshot({ path: 'dist/02-03-ui-zoom200.png' });
+  await page.evaluate(() => { (window as any).oldMedia = [...document.querySelectorAll('#messages audio,#messages video')]; });
+  await page.locator('#conversations a').filter({ hasText: /^B/ }).click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('leitura B'));
+  assert.ok(await page.evaluate(() => (window as any).oldMedia.every((el: any) => el.paused && !el.hasAttribute('src'))), 'troca de aba libera src/players');
+});
+test('HEAD retido close switch logout expiração e pagehide impedem GET tardio', async t => {
+  const { s, page } = await mediaUiFixture(t); let gets = 0;
+  page.on('request', (r: any) => { if (r.url().endsWith('/preview') && r.method() === 'GET') gets++; });
+  for (const action of ['close', 'switch', 'pagehide', 'logout', 'expire']) {
+    if (action === 'expire') { await page.goto(page.url().split('?')[0]); await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click(); await page.locator('#archive').waitFor({ state: 'visible' }); await page.locator('#conversations a').filter({ hasText: /^A/ }).click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('anexo png')); }
+    let release!: () => void, begun!: () => void; const held = new Promise<void>(r => release = r), started = new Promise<void>(r => begun = r);
+    await page.route('**/api/attachments/*/preview', async (route: any) => { const response = await route.fetch(); begun(); await held; await route.fulfill({ response }); });
+    await page.getByRole('button', { name: 'Visualizar imagem', exact: true }).click(); await started; assert.match(await page.locator('#messages .preview').textContent(), /Carregando visualização/);
+    if (action === 'close') await page.getByRole('button', { name: 'Fechar visualização', exact: true }).click();
+    if (action === 'switch') await page.locator('#conversations a').filter({ hasText: /^B/ }).click();
+    if (action === 'pagehide') await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+    if (action === 'logout') await page.locator('#logout-button').click();
+    if (action === 'expire') { s.authDb.exec('UPDATE web_sessions SET touched_at=0'); await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))); await page.locator('#login-panel').waitFor({ state: 'visible' }); }
+    release(); await page.waitForTimeout(100); await page.unroute('**/api/attachments/*/preview'); assert.equal(gets, 0, action + ' não permite GET tardio'); assert.equal(await page.locator('.preview [src]').count(), 0);
+    if (action === 'switch') await page.getByRole('tab', { name: /^A ·/ }).click();
+    if (action === 'pagehide') { await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))); await page.locator('#archive').waitFor({ state: 'visible' }); }
+  }
+});
 test('imagem preservada abre somente após clique e download conserva hash', async t => {
   const { s, page, login } = await uiFixture(t);
   const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1kAAAAASUVORK5CYII=', 'base64');
