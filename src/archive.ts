@@ -4,8 +4,24 @@ import { join, resolve } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { serialize, deserialize } from 'node:v8';
 import { isDeepStrictEqual } from 'node:util';
+import { Temporal } from '@js-temporal/polyfill';
 
 type Obj = Record<string, unknown>;
+export type EffectivePeriod = { zone: 'America/Sao_Paulo'; from: string | null; to: string | null; startMs: number | null; endMs: number | null; startUtc: string | null; endUtc: string | null; dateUnknownPolicy: string };
+export function parsePeriod(from?: unknown, to?: unknown): EffectivePeriod {
+  try {
+    const day = (value: unknown) => {
+      if (value == null || value === '') return null;
+      if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000-')) throw Error('date');
+      return Temporal.PlainDate.from(value, { overflow: 'reject' });
+    };
+    const start = day(from), end = day(to), zone = 'America/Sao_Paulo';
+    if (start && end && Temporal.PlainDate.compare(start, end) > 0) throw Error('range');
+    const startMs = start?.toZonedDateTime(zone).startOfDay().epochMilliseconds ?? null;
+    const endMs = end?.add({ days: 1 }).toZonedDateTime(zone).startOfDay().epochMilliseconds ?? null;
+    return { zone, from: start?.toString() ?? null, to: end?.toString() ?? null, startMs, endMs, startUtc: startMs === null ? null : new Date(startMs).toISOString(), endUtc: endMs === null ? null : new Date(endMs).toISOString(), dateUnknownPolicy: start || end ? 'Instantes originais desconhecidos são excluídos do período.' : 'Sem período, instantes desconhecidos aparecem por último.' };
+  } catch { throw Object.assign(Error('Confira as datas. A data inicial deve ser igual ou anterior à final.'), { status: 400 }); }
+}
 export type Attachment = { id: string; reference: string; revisionId: number; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
 export function searchTerms(input: unknown = '') {
   if (typeof input !== 'string' || [...input].length > 2000) throw Object.assign(Error('Use até 2000 caracteres e 25 termos simples.'), { status: 400 });
@@ -98,6 +114,7 @@ export function openArchive(dataDir: string) {
   if (existsSync(path) && (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink())) throw Error('Arquivo privado inválido');
   chmodSync(location, 0o700);
   const db = new Database(path);
+  db.function('original_ms', { deterministic: true }, value => { const ms = typeof value === 'string' ? Date.parse(value) : NaN; return Number.isSafeInteger(ms) ? ms : null; });
   chmodSync(path, 0o600);
   // Rebuild the attachment table inside the migration; validate all references before committing.
   db.pragma('foreign_keys = OFF'); db.pragma('secure_delete = ON');
@@ -398,7 +415,8 @@ export function openArchive(dataDir: string) {
         const id = conversationId ? resolveConversation(conversationId) : null;
         if (id && !conversationEvidence(id)) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
         const match = terms.map(t => '"' + t.replaceAll('"', '""') + '"').join(' AND ');
-        const rows = (terms.length ? db.prepare("SELECT m.reference,m.original_timestamp,group_concat(search_fts.revision_id) AS matched FROM messages m JOIN search_fts ON search_fts.reference=m.reference WHERE search_fts MATCH ? AND (? IS NULL OR m.conversation_id=?) GROUP BY m.reference ORDER BY m.original_timestamp IS NULL,m.original_timestamp DESC,m.reference COLLATE BINARY DESC LIMIT 50001").all(match, id, id) : db.prepare('SELECT reference,original_timestamp,NULL AS matched FROM messages WHERE (? IS NULL OR conversation_id=?) ORDER BY original_timestamp IS NULL,original_timestamp DESC,reference COLLATE BINARY DESC LIMIT 50001').all(id, id)) as { reference: string; original_timestamp: string | null; matched: string | null }[];
+        const startMs = filters.startMs ?? null, endMs = filters.endMs ?? null;
+        const rows = (terms.length ? db.prepare("SELECT m.reference,m.original_timestamp,group_concat(search_fts.revision_id) AS matched FROM messages m JOIN search_fts ON search_fts.reference=m.reference WHERE search_fts MATCH ? AND (? IS NULL OR m.conversation_id=?) AND (? IS NULL OR original_ms(m.original_timestamp)>=?) AND (? IS NULL OR original_ms(m.original_timestamp)<?) GROUP BY m.reference ORDER BY original_ms(m.original_timestamp) IS NULL,original_ms(m.original_timestamp) DESC,m.reference COLLATE BINARY DESC LIMIT 50001").all(match, id, id, startMs, startMs, endMs, endMs) : db.prepare('SELECT reference,original_timestamp,NULL AS matched FROM messages WHERE (? IS NULL OR conversation_id=?) AND (? IS NULL OR original_ms(original_timestamp)>=?) AND (? IS NULL OR original_ms(original_timestamp)<?) ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp) DESC,reference COLLATE BINARY DESC LIMIT 50001').all(id, id, startMs, startMs, endMs, endMs)) as { reference: string; original_timestamp: string | null; matched: string | null }[];
         if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja os filtros.'), { status: 413 });
         const items: string[] = []; let bytes = 0;
         for (const row of rows) {

@@ -1,6 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createWebAuth, setOwnerPassword } from './auth.js';
-import { openArchive, searchTerms, type Archive } from './archive.js';
+import { openArchive, searchTerms, parsePeriod, type Archive } from './archive.js';
 import Database from 'better-sqlite3';
 import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync, createReadStream } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -121,9 +121,9 @@ export function createService({ dataDir }: { dataDir: string }) {
   };
   const searchSession = (req: Request) => createHmac('sha256', signingKey).update(JSON.stringify([req.sessionID, req.session.ownerGeneration])).digest('hex');
   app.get('/api/search', (req, res) => {
-    if (Object.keys(req.query).some(k => !['q', 'conversationId', 'limit', 'cursor'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
+    if (Object.keys(req.query).some(k => !['q', 'conversationId', 'from', 'to', 'limit', 'cursor'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
     const terms = searchTerms(req.query.q), conversationId = typeof req.query.conversationId === 'string' && req.query.conversationId ? req.query.conversationId : null;
-    const filters = { terms, conversationId, zone: 'America/Sao_Paulo', from: null, to: null, startUtc: null, endUtc: null, dateUnknownPolicy: 'Sem período, instantes desconhecidos aparecem por último.' };
+    const filters = { terms, conversationId, ...parsePeriod(req.query.from, req.query.to) };
     const session = searchSession(req), scope = createHmac('sha256', signingKey).update(JSON.stringify([session, filters])).digest('hex');
     const cursor = decodeCursor(req.query.cursor, 'search', scope);
     if (cursor && (cursor[3] !== 'next' || !/^\d+$/.test(cursor[4]) || !Number.isSafeInteger(Number(cursor[4])))) throw Object.assign(Error('cursor'), { status: 400 });
