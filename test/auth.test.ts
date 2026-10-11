@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -239,4 +240,32 @@ test('UI HTTP vazia, texto hostil e janelas com cursor estável sem coletor', as
     assert.equal((await fetch(service.base + `/api/conversations/${other}/messages?cursor=` + firstCursor, { headers })).status, 400);
     assert.equal((await fetch(service.base + '/api/conversations/%27%20OR%201=1/messages', { headers })).status, 404);
   } finally { await service.stop(); rmSync(dir, { recursive: true }); }
+});
+
+test('arquivos públicos funcionam sob diretório oculto sem expor arquivos privados', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-hidden-public-')), checkout = join(dir, '.checkout');
+  try {
+    mkdirSync(checkout, { mode: 0o700 });
+    cpSync(new URL('../src/', import.meta.url), join(checkout, 'dist/src'), { recursive: true });
+    cpSync(new URL('../../public/', import.meta.url), join(checkout, 'public'), { recursive: true });
+    symlinkSync(fileURLToPath(new URL('../../node_modules/', import.meta.url)), join(checkout, 'node_modules'), 'dir');
+    const child = spawnSync(process.execPath, ['--input-type=module'], { cwd: checkout, encoding: 'utf8', timeout: 10000, input: `
+      import assert from 'node:assert/strict';
+      import { once } from 'node:events';
+      import { createService } from './dist/src/main.js';
+      const service = createService({ dataDir: process.cwd() + '/../data' }), server = service.app.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const base = 'http://127.0.0.1:' + server.address().port;
+      try {
+        for (const path of ['/', '/app.js', '/style.css']) {
+          const r = await fetch(base + path); assert.equal(r.status, 200, path);
+          assert.equal(r.headers.get('cache-control'), 'no-store'); assert.ok((await r.text()).length > 0);
+        }
+        for (const path of ['/.env', '/auth.sqlite', '/archive.sqlite', '/public/index.html']) assert.equal((await fetch(base + path)).status, 404, path);
+        assert.equal((await fetch(base + '/api/conversations')).status, 401);
+        console.log('HIDDEN_PUBLIC_ROOT_OK');
+      } finally { await new Promise(r => server.close(r)); await service.close(); }
+    ` });
+    assert.equal(child.status, 0, child.stderr); assert.equal(child.stdout.trim(), 'HIDDEN_PUBLIC_ROOT_OK');
+  } finally { rmSync(dir, { recursive: true }); }
 });
