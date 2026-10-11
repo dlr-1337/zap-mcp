@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, readlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once, EventEmitter } from 'node:events';
@@ -125,7 +125,7 @@ test('falhas ENOSPC stream conferência e publicação não anunciam pronto nem 
   const bytes = Buffer.from('original intacto'), mediaKey = { ...key, id: 'file' }; a.ingestHistory({ messages: [{ key: mediaKey, messageTimestamp: 123, message: { documentMessage: { url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32), fileLength: bytes.length } } }] }); const worker = startMediaWorker({ archive: a, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop(); const attachment = a.readStoredMessage(mediaKey)!.attachments[0];
   const id = a.readStoredMessage(key)!.conversationId;
   for (const point of ['claimed', 'stream', 'entry', 'written', 'verified', 'synced', 'published']) {
-    const m = createExportManager({ archive: a, dataDir: dir, mediaDir: join(dir, 'media'), fault: async (stage, path) => { if (stage === point) { if (point === 'written') writeFileSync(path, 'truncated'); else throw Object.assign(Error('PRIVATE_FAULT'), { code: 'ENOSPC' }); } } });
+    const m = createExportManager({ archive: a, dataDir: dir, mediaDir: join(dir, 'media'), fault: async (stage, path) => { if (stage === point) { if (point === 'written') writeFileSync(path, 'truncated'); else if (point === 'stream') { const fd = readdirSync('/proc/self/fd').find(n => { try { return readlinkSync('/proc/self/fd/' + n) === join(dir, 'media', attachment.id + '.bin'); } catch { return false; } }); assert.ok(fd); closeSync(Number(fd)); } else throw Object.assign(Error('PRIVATE_FAULT'), { code: 'ENOSPC' }); } } });
     const j = m.createExportJob('session', id, '', ''); assert.equal(j.state, 'preparing'); assert.throws(() => m.createExportJob('other', id, '', ''), (e: any) => e.status === 409);
     for (let i = 0; i < 100 && m.getExportJob(j.jobId, 'session').state === 'preparing'; i++) await new Promise(r => setTimeout(r, 5));
     const done = m.getExportJob(j.jobId, 'session'); assert.equal(done.state, 'failed', point); assert.equal('downloadURL' in done, false); assert.doesNotMatch(done.reason!, /PRIVATE_FAULT/); assert.throws(() => m.openExport(j.jobId, 'session'));
