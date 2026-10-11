@@ -15,6 +15,7 @@ import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
 import { createSnapshot, verifyBackup } from '../src/backup.js';
 import { deserialize } from 'node:v8';
+import { spawnSync } from 'node:child_process';
 
 const bytes = Buffer.from('original sintético\0🧪');
 const hash = createHash('sha256').update(bytes).digest();
@@ -344,16 +345,43 @@ test('erros antes/tarde e cancelamento mantêm parcial indisponível e viewOnce 
   assert.equal((archive.readStoredMessage({ ...view.key, id: 'quote' }) as any).attachments.length, 0);
 });
 
-test('dispatcher aceita DNS público fixado no Node24 sem erro de formato IP', async () => {
-  const { mediaDispatcher } = await moduleMedia();
-  const signal = AbortSignal.timeout(200);
-  const dispatcher = mediaDispatcher(signal, async () => [{ address: '8.8.8.8', family: 4 }]);
-  try {
-    const response = await fetch('https://mmg.whatsapp.net/file', { dispatcher } as any);
-    await response.body?.cancel();
-  } catch (error) {
-    assert.notEqual((error as Error & { cause?: { code?: string } }).cause?.code, 'ERR_INVALID_IP_ADDRESS', 'DNS já validado deve passar pelo contrato de lookup do Node24');
-  }
+test('dispatcher passa family=4 e exercita lookup público fixado no Node24 sem rede', () => {
+  const source = `
+    import assert from 'node:assert/strict';
+    import https from 'node:https';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { EventEmitter } from 'node:events';
+    const stop = Error('TRANSPORTE_SINTETICO_INTERROMPIDO');
+    let requests = 0, dns = 0, lookups = 0, requestOptions, lookupResult;
+    https.request = (url, options) => {
+      requests++; requestOptions = options;
+      options.lookup(url.hostname, { family: options.family, all: false }, (...result) => {
+        lookups++; lookupResult = result;
+      });
+      const req = new EventEmitter();
+      req.destroy = () => req;
+      req.end = () => queueMicrotask(() => { req.emit('error', stop); req.emit('close'); });
+      return req;
+    };
+    syncBuiltinESMExports();
+    const { mediaDispatcher } = await import(${JSON.stringify(new URL('../src/media.js', import.meta.url).href)});
+    const dispatcher = mediaDispatcher(new AbortController().signal, async hostname => {
+      dns++; assert.equal(hostname, 'mmg.whatsapp.net');
+      return [{ address: '8.8.8.8', family: 4 }];
+    });
+    await assert.rejects(fetch('https://mmg.whatsapp.net/file', { dispatcher }), error => error.cause === stop);
+    assert.equal(requests, 1, 'request deve ser alcançado exatamente uma vez');
+    assert.equal(dns, 1);
+    assert.equal(requestOptions.family, 4, 'request deve fixar family=4');
+    assert.equal(requestOptions.agent, false);
+    assert.equal(lookups, 1, 'lookup fixado deve ser exercitado exatamente uma vez');
+    assert.deepEqual(lookupResult, [null, '8.8.8.8', 4]);
+    console.log('DNS_LOOKUP_FAMILY4_SEM_REDE_OK');
+  `;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', source], { encoding: 'utf8' });
+  assert.equal(child.error, undefined);
+  assert.equal(child.status, 0, child.stderr);
+  assert.equal(child.stdout.trim(), 'DNS_LOOKUP_FAMILY4_SEM_REDE_OK');
 });
 
 test('dispatcher bloqueia URL interna, redirect host e DNS privado antes de conexão', async () => {
