@@ -7,6 +7,7 @@ import { createService } from '../src/main.js';
 import { spawnSync, spawn } from 'node:child_process';
 import { once, EventEmitter } from 'node:events';
 import type { Clock, SocketFactory } from '../src/whatsapp.js';
+import { generateRegistrationNode, proto, DEFAULT_CONNECTION_CONFIG } from '@whiskeysockets/baileys';
 
 test('trava recupera PID reutilizado sem abrir dois escritores', () => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-lock-')); mkdirSync(join(dir, 'service.lock'));
@@ -57,7 +58,10 @@ test('QR atual expira sem extensão, FULL e eventos persistem sem expor sessão'
   try {
     const collector=service.startCollector({newProfile:true,clock:timer.clock,socketFactory: cfg => {config=cfg;sockets++;return fake as unknown as ReturnType<SocketFactory>;}});
     assert.throws(()=>service.startCollector({socketFactory:()=>fake as unknown as ReturnType<SocketFactory>}),/ativo/);
-    assert.equal(config!.syncFullHistory,true); assert.equal(config!.shouldSyncHistoryMessage!({syncType:2}),true); assert.equal(config!.markOnlineOnConnect,false); assert.deepEqual(config!.browser?.slice(0,2),['Mac OS','Desktop']);
+    assert.equal(config!.syncFullHistory,true); assert.equal(config!.shouldSyncHistoryMessage!({syncType:2}),true); assert.equal(config!.markOnlineOnConnect,false);
+    const registration=generateRegistrationNode(config!.auth.creds,{...DEFAULT_CONNECTION_CONFIG,...config!});
+    assert.equal(registration.webInfo?.webSubPlatform,proto.ClientPayload.WebInfo.WebSubPlatform.WEB_BROWSER,'registro não deve anunciar o Desktop DARWIN rejeitado antes do QR');
+    assert.equal(proto.DeviceProps.decode(registration.devicePairingData!.deviceProps!).requireFullSync,true);
     fake.ev.emit('connection.update',{qr:'synthetic-qr-private'}); const expires=collector.snapshot().qrExpiresAt;
     const pairs=await Promise.all(Array.from({length:4},()=>collector.pairing())); assert.ok(pairs.every(p=>p?.expiresAt===expires && p.image.startsWith('data:image/png;base64,'))); assert.equal(sockets,1);
     assert.ok(!JSON.stringify(collector.snapshot()).includes('synthetic-qr-private')); timer.advance(20_000); assert.equal(await collector.pairing(),null);

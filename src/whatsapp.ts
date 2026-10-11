@@ -140,7 +140,7 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
     const config: Parameters<typeof makeWASocket>[0] = { auth: { creds: JSON.parse(JSON.stringify(auth.state.creds, BufferJSON.replacer), BufferJSON.reviver), keys: {
       get: (type, ids) => { if (current !== generation || stopped) throw Error('Socket expirado'); return auth.state.keys.get(type, ids); },
       set: data => { if (current !== generation || stopped) throw Error('Socket expirado'); return auth.state.keys.set(data); }
-    } }, logger: silent, browser: Browsers.macOS('Desktop'), syncFullHistory: true, shouldSyncHistoryMessage: () => true, markOnlineOnConnect: false, qrTimeout: 20_000, connectTimeoutMs: 20_000,
+    } }, logger: silent, browser: Browsers.macOS('Chrome'), syncFullHistory: true, shouldSyncHistoryMessage: () => true, markOnlineOnConnect: false, qrTimeout: 20_000, connectTimeoutMs: 20_000,
       getMessage: async key => archive.readPrivateMessage(key)?.message as proto.IMessage | undefined };
     socket = socketFactory!(config);
     connecting = clock.setTimeout(() => { if (current !== generation || stopped || state !== 'connecting') return; try { disconnect(408); } catch { fail(); } }, config.connectTimeoutMs!);
