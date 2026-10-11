@@ -75,10 +75,46 @@ export function openVerifiedAttachment(archive: Archive, mediaDir: string, id: s
 }
 
 export function classifyPreview(file: NonNullable<ReturnType<typeof openVerifiedAttachment>>) {
-  const header = Buffer.alloc(Math.min(file.size, 512));
-  const count = readSync(file.fd, header, 0, header.length, 0);
-  if (file.attachment.mimeType === 'image/png' && count >= 8 && header.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
-  return null;
+  const buffer = Buffer.alloc(Math.min(file.size, 1445));
+  const header = buffer.subarray(0, readSync(file.fd, buffer, 0, buffer.length, 0));
+  const mime = file.attachment.mimeType?.split(';')[0].trim().toLowerCase();
+  const begins = (hex: string) => header.subarray(0, hex.length / 2).equals(Buffer.from(hex, 'hex'));
+  const text = (start: number, end: number) => header.toString('latin1', start, end);
+  // Signatures identify containers, never promise a decodable codec (WHATWG MIME Sniffing §6).
+  switch (mime) {
+    case 'image/png': return begins('89504e470d0a1a0a') ? mime : null;
+    case 'image/jpeg': return begins('ffd8ff') ? mime : null;
+    case 'image/gif': return ['GIF87a', 'GIF89a'].includes(text(0, 6)) ? mime : null;
+    case 'image/webp': return text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP' && ['VP8 ', 'VP8L', 'VP8X'].includes(text(12, 16)) ? mime : null;
+    case 'audio/wav': case 'audio/wave': case 'audio/x-wav': return text(0, 4) === 'RIFF' && text(8, 12) === 'WAVE' ? 'audio/wav' : null;
+    case 'audio/ogg': return begins('4f67675300') ? mime : null;
+    case 'audio/flac': case 'audio/x-flac': return begins('664c6143') ? 'audio/flac' : null;
+    case 'audio/mpeg': {
+      if (begins('494433') && header.length >= 10 && [2, 3, 4].includes(header[3]) && header.subarray(6, 10).every(n => n < 128)) return mime;
+      const frameSize = (at: number) => {
+        if (at + 4 > header.length || header[at] !== 255 || (header[at + 1] & 224) !== 224 || (header[at + 1] & 6) !== 2) return 0;
+        const version = (header[at + 1] >> 3) & 3, rate = header[at + 2] >> 4, sample = (header[at + 2] >> 2) & 3;
+        if (version === 1 || rate === 0 || rate === 15 || sample === 3) return 0;
+        const bitrate = (version === 3 ? [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320] : [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160])[rate] * 1000;
+        const frequency = [44100,48000,32000][sample] / (version === 3 ? 1 : version === 2 ? 2 : 4);
+        return Math.floor((version === 3 ? 144 : 72) * bitrate / frequency) + ((header[at + 2] >> 1) & 1);
+      };
+      const next = frameSize(0); return next >= 4 && frameSize(next) >= 4 ? mime : null;
+    }
+    case 'video/mp4': {
+      if (header.length < 16 || text(4, 8) !== 'ftyp') return null;
+      const size = header.readUInt32BE(0); if (size < 16 || size > header.length || size % 4) return null;
+      for (let at = 8; at < size; at += at === 8 ? 8 : 4) if (text(at, at + 3) === 'mp4') return mime;
+      return null;
+    }
+    case 'video/webm': {
+      if (!begins('1a45dfa3')) return null;
+      const doctype = header.indexOf(Buffer.from('4282847765626d', 'hex'), 4);
+      // shortcut: unusual EBML DocType encodings fall back to download, expand if real files need them.
+      return doctype >= 4 && doctype < 38 ? mime : null;
+    }
+    default: return null;
+  }
 }
 
 const running = new WeakSet<Archive>();

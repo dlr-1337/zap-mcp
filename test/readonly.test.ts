@@ -7,6 +7,8 @@ import { once, EventEmitter } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 import type { SocketFactory } from '../src/whatsapp.js';
+import { Readable } from 'node:stream';
+import { startMediaWorker } from '../src/media.js';
 
 test('HTTP privado status/QR/leitor/logout é somente leitura e funciona offline', async () => {
   const dir=mkdtempSync(join(tmpdir(),'zap-readonly-'));const service=createService({dataDir:dir});const ev=new EventEmitter();let sockets=0,ends=0,forbidden=0;
@@ -14,6 +16,10 @@ test('HTTP privado status/QR/leitor/logout é somente leitura e funciona offline
   const server=service.app.listen(0,'127.0.0.1');await once(server,'listening');const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const session=async(cookie='')=>{const r=await fetch(base+'/api/session',{headers:{Cookie:cookie}});return {cookie:r.headers.get('set-cookie')?.split(';')[0]??cookie,...await r.json() as {csrfToken:string}};};
   try {
+    const bytes=Buffer.from('89504e470d0a1a0a', 'hex'), key={remoteJid:'local@lid',id:'png',fromMe:false};
+    service.archive.ingestHistory({messages:[{key,message:{imageMessage:{mimetype:'image/png',url:'https://mmg.whatsapp.net/synthetic',mediaKey:Buffer.alloc(32,1),fileLength:bytes.length}}}]});
+    const worker=startMediaWorker({archive:service.archive,mediaDir:join(dir,'media'),downloadOriginal:async()=>Readable.from([bytes])});await worker.drain();await worker.stop();
+    const attachment=service.archive.readStoredMessage(key)!.attachments[0]!;
     await service.setPassword('synthetic-password');const collector=service.startCollector({newProfile:true,socketFactory:()=>{sockets++;return socket as unknown as ReturnType<SocketFactory>;}});
     ev.emit('connection.update',{qr:'private-synthetic-qr'});const message={key:{remoteJid:'local@lid',id:'m',fromMe:false},messageTimestamp:123,message:{conversation:'mensagem offline'}};ev.emit('messages.upsert',{messages:[message],type:'notify'});
     const id=service.archive.listConversations().conversations[0].id;const paths=['/api/status','/api/qr','/api/conversations',`/api/conversations/${id}/messages`];
@@ -25,6 +31,8 @@ test('HTTP privado status/QR/leitor/logout é somente leitura e funciona offline
     const c=await session(cookie);assert.equal((await fetch(base+'/logout',{method:'POST',headers:{...headers,Origin:base,'Content-Type':'application/json'},body:JSON.stringify({csrfToken:c.csrfToken})})).status,200);assert.equal(collector.snapshot().connection,'awaiting-pairing');assert.equal(await collector.pairing(),null);assert.equal(ends,0);
     for(const path of paths)assert.equal((await fetch(base+path,{headers})).status,401);
     await collector.stop();assert.equal(ends,1);const next=await session();const relogin=await fetch(base+'/login',{method:'POST',headers:{Origin:base,Cookie:next.cookie,'Content-Type':'application/json'},body:JSON.stringify({password:'synthetic-password',csrfToken:next.csrfToken})});const h={Cookie:relogin.headers.get('set-cookie')!.split(';')[0]};
-    assert.equal((await fetch(base+'/api/qr',{headers:h})).status,409);const read=await (await fetch(base+`/api/conversations/${id}/messages`,{headers:h})).json();assert.equal(read.messages[0].text,'mensagem offline');assert.equal(sockets,1);assert.equal(forbidden,0);
+    assert.equal((await fetch(base+'/api/qr',{headers:h})).status,409);const read=await (await fetch(base+`/api/conversations/${id}/messages`,{headers:h})).json();assert.ok(read.messages.some((m: any)=>m.text==='mensagem offline'));assert.equal(sockets,1);assert.equal(forbidden,0);
+    for(const suffix of ['', '/preview'])for(const method of ['GET','HEAD']){const r=await fetch(base+'/api/attachments/'+attachment.id+suffix,{method,headers:{...h,Range:'bytes=0-0'}});assert.equal(r.status,206);assert.deepEqual(Buffer.from(await r.arrayBuffer()),method==='HEAD'?Buffer.alloc(0):bytes.subarray(0,1));}
+    assert.equal(sockets,1);assert.equal(forbidden,0);
   }finally{server.close();await once(server,'close');await service.close();rmSync(dir,{recursive:true});}
 });
