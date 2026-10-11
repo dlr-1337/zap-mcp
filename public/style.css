@@ -41,8 +41,9 @@ blockquote { margin: 16px 0; padding: 16px; border-left: 1px solid #66717f; whit
 #pairing { margin-top: 24px; }
 #coverage-batches li { margin-bottom: 8px; }
 #refresh-conversation { margin-bottom: 16px; }
-#conversation-tabs { display: flex; gap: 8px; max-width: 100%; overflow-x: auto; margin-bottom: 16px; }
+#conversation-tabs { display: flex; gap: 8px; max-width: 100%; overflow-x: auto; margin-bottom: 16px; padding: 4px; }
 #conversation-tabs > div { flex: 0 0 200px; max-width: 100%; }
+[role=tab] { width: 100%; white-space: pre-wrap; }
 [role=tab][aria-selected=true], [data-anchor=true] { border-left: 4px solid #155e75; }
 [data-anchor=true] { padding-left: 16px; }
 #search-panel { min-width: 0; padding: 24px; margin-bottom: 32px; background: #fff; border: 1px solid #d7dce1; overflow-wrap: anywhere; }

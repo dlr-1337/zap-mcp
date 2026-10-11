@@ -15,7 +15,7 @@ async function uiFixture(t: any) {
   const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const browser = await chromium.launch({ executablePath: process.env.ZAP_BROWSER_EXECUTABLE ?? '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   t.after(async () => { await browser.close(); server.close(); await once(server, 'close'); await s.close(); rmSync(dir, { recursive: true }); });
-  await s.setPassword('senha sintética'); const page = await browser.newPage();
+  await s.setPassword('senha sintética'); const page = await browser.newPage(); page.setDefaultTimeout(10000);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const login = async () => { await page.goto(base); await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click(); await page.locator('#archive').waitFor({ state: 'visible' }); await page.waitForFunction(() => document.getElementById('login-status')?.textContent === ''); };
   return { s, page, base, login, browser };
@@ -103,7 +103,7 @@ test('abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34', a
   await page.locator('#more-messages').evaluate((el: any) => el.click()); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 76);
   assert.ok(Math.abs((await anchor.evaluate((el: any) => el.getBoundingClientRect().top)) - top) < 2, 'prepend conserva âncora');
   const originalA = await page.locator('#messages').textContent(); await controls.nth(1).click();
-  s.archive.ingestHistory({ messages: [{ key: { remoteJid: '2@lid', id: 'new', fromMe: false }, messageTimestamp: 150, message: { conversation: 'nova B por atualização explícita' } }] });
+  s.archive.ingestHistory({ messages: [{ key: { remoteJid: '2@lid', id: 'new', fromMe: false }, messageTimestamp: 250, message: { conversation: 'nova B por atualização explícita' } }] });
   await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('nova B por atualização explícita'));
   await controls.nth(0).click(); assert.equal(await page.locator('#messages').textContent(), originalA, 'refresh B preserva DTO/DOM A');
   await page.route('**/api/context/*?*', (r: any) => r.fulfill({ status: 500, json: { error: 'Solicitação não concluída' } })); await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.textContent?.startsWith('Não foi possível carregar'));

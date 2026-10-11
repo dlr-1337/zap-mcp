@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
+import { openArchive } from '../src/archive.js';
+import { createHmac } from 'node:crypto';
 
 async function contextFixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-context-')), s = createService({ dataDir: dir });
@@ -55,6 +57,7 @@ test('contexto conserva correspondência histórica e resolve redirect recebido'
   assert.equal(page.messages.find((m: any) => m.reference === page.anchorReference).text, 'texto atual');
   assert.ok(page.messages[0].attachments.length); assert.ok(page.messages[0].revisions.length);
   assert.doesNotMatch(JSON.stringify(page), /PRIVATE_SENTINEL|mediaKey|descriptor|payload|https:\/\//);
+  for (const cookie of ['', 'zap.sid=invalid']) for (const method of ['GET', 'HEAD']) assert.equal((await fetch(base + '/api/context/' + old, { method, headers: { Cookie: cookie } })).status, 401, 'redirect antigo não evita autenticação');
 });
 
 test('expiração e reset eliminam snapshots privados além de recusar sessão velha', async t => {
@@ -69,4 +72,31 @@ test('expiração e reset eliminam snapshots privados além de recusar sessão v
   assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM query_snapshots WHERE id=?').get(page.snapshotId) as any).n, 0, 'expiração purga derivados da sessão');
   const fresh = await login(); const r = await fetch(base + '/api/context/' + ref, { headers: fresh }); assert.equal(r.status, 200);
   await s.setPassword('nova sintética'); assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM query_snapshots').get() as any).n, 0, 'reset purga todos recortes');
+});
+
+test('contexto valida escopo direção limites bordas empates desconhecidos e restart', async t => {
+  const { s, read, base, headers, login } = await contextFixture(t);
+  const messages = Array.from({ length: 106 }, (_, i) => ({ key: { ...key, id: 'same' + i }, messageTimestamp: 123, message: { conversation: 'empate' } }));
+  s.archive.ingestHistory({ messages: [...messages, { key: { ...key, id: 'unknown' }, message: { conversation: 'sem relógio' } }] });
+  const ordered = s.archiveDb.prepare('SELECT reference FROM messages ORDER BY original_ms(original_timestamp) IS NULL, original_ms(original_timestamp), reference COLLATE BINARY').all() as { reference: string }[];
+  const first = await read(ordered[0].reference); assert.equal(first.previousCursor, null); assert.equal(first.messages.length, 26);
+  assert.deepEqual(first.messages.map((m: any) => m.reference), ordered.slice(0, 26).map(m => m.reference));
+  const last = await read(ordered.at(-1)!.reference); assert.equal(last.nextCursor, null); assert.equal(last.messages.at(-1).originalTimestamp, null);
+  const cursor = first.nextCursor, ref = first.requestedReference, other = await login();
+  for (const [query, status] of [['?direction=before&cursor=' + cursor, 400], ['?direction=after&cursor=' + cursor + 'x', 400], ['?direction=after', 400], ['?limit=0', 400], ['?limit=101', 400], ['?limit=1.5', 400], ['?limit=1&limit=2', 400], ['?direction[]=after', 400], ['?cursor=' + 'x'.repeat(1025), 400], ['?unknown=1', 400]] as const) assert.equal((await fetch(base + '/api/context/' + ref + query, { headers })).status, status, query);
+  assert.equal((await fetch(base + '/api/context/' + ref + '?direction=after&cursor=' + cursor, { headers: other })).status, 400);
+  const parts = JSON.parse(Buffer.from(cursor.split('.')[0], 'base64url').toString()), secret = (s.authDb.prepare("SELECT value FROM web_config WHERE key='signing-secret'").get() as any).value;
+  for (const value of ['-1', '9007199254740992', '99999']) { const body = Buffer.from(JSON.stringify([...parts.slice(0, 4), value])).toString('base64url'), signed = body + '.' + createHmac('sha256', secret).update(body).digest('base64url'); assert.equal((await fetch(base + '/api/context/' + ref + '?direction=after&cursor=' + signed, { headers })).status, 400); }
+  assert.equal((await fetch(base + '/api/context/' + last.requestedReference + '?direction=after&cursor=' + cursor, { headers })).status, 400);
+  for (const invalid of ['%E2%80%AE', '..%2Fsecret', '%2Fetc%2Fpasswd']) assert.ok([400, 404].includes((await fetch(base + '/api/context/' + invalid, { headers })).status));
+  const search = await (await fetch(base + '/api/search?q=empate', { headers })).json();
+  const absentInSearch = ordered.at(-1)!.reference;
+  assert.equal((await fetch(base + '/api/context/' + absentInSearch + '?sourceSnapshotId=' + search.snapshotId, { headers })).status, 400);
+  s.archiveDb.prepare('UPDATE query_snapshots SET expires_at=0 WHERE id=?').run(first.snapshotId); assert.equal((await fetch(base + '/api/context/' + ref + '?direction=after&cursor=' + cursor, { headers })).status, 410);
+  s.archive.ingestHistory({ messages: [{ key: { ...key, remoteJid: 'single@lid', id: 'one' }, message: { conversation: 'única' } }] });
+  const one = await read(s.archive.readStoredMessage({ ...key, remoteJid: 'single@lid', id: 'one' })!.reference); assert.equal(one.messages.length, 1); assert.equal(one.previousCursor, null); assert.equal(one.nextCursor, null);
+  const dir = mkdtempSync(join(tmpdir(), 'zap-context-restart-')); t.after(() => rmSync(dir, { recursive: true }));
+  let archive = openArchive(dir); archive.ingestHistory({ messages: [messages[0]] }); const restartRef = archive.readStoredMessage(messages[0].key)!.reference;
+  const saved = archive.openContext(restartRef, 'session'); archive.close(); archive = openArchive(dir);
+  assert.throws(() => archive.readContextPage({ reference: restartRef, session: 'session', snapshotId: saved.snapshotId, ordinal: 0 }), /expirou/); assert.ok(archive.readStoredMessage(restartRef)); archive.close();
 });

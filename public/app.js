@@ -98,7 +98,7 @@ function signedOut(message = '') {
   for (const id of ['connection', 'qr-status', 'media-status', 'archive-error', 'list-status', 'status-loading']) $(id).textContent = '';
   for (const id of ['pairing', 'back', 'more-conversations', 'more-messages', 'refresh-conversation', 'retry', 'empty-list']) $(id).hidden = true;
   for (const id of ['reader', 'conversation-panel']) $(id).removeAttribute('aria-busy');
-  $('message-title').textContent = 'Mensagens arquivadas'; $('reader-status').textContent = 'Abra uma conversa da lista para ler as mensagens arquivadas.';
+  $('message-title').textContent = 'Mensagens arquivadas'; $('reader-status').textContent = 'Abra uma conversa ou um resultado para ler o contexto.';
   $('login-error').textContent = message; $('password').value = ''; history.replaceState({}, '', '/'); $('password').focus();
 }
 async function request(path, options) {
@@ -202,8 +202,8 @@ function resetReader() {
 }
 function createTab(conversation) {
   if (!tabs.size) for (const id of readerIds) $(id)?.remove();
-  const panel = document.createElement('section'); panel.id = 'panel-' + conversation.id; panel.hidden = true; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'tab-' + conversation.id); $('conversation-panels').append(panel);
-  const holder = document.createElement('div'); $('conversation-tabs').append(holder);
+  const panel = document.createElement('section'); panel.id = 'panel-' + conversation.id; panel.hidden = true; panel.tabIndex = 0; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'tab-' + conversation.id); $('conversation-panels').append(panel);
+  const holder = document.createElement('div'); holder.setAttribute('role', 'presentation'); $('conversation-tabs').append(holder);
   const button = addText(holder, 'button', conversationLabel(conversation)); button.id = 'tab-' + conversation.id; button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-selected', 'false'); button.tabIndex = -1;
   const close = addText(holder, 'button', 'Fechar'); close.setAttribute('aria-label', 'Fechar conversa: ' + conversationLabel(conversation));
   const status = addText(panel, 'p', ''); status.setAttribute('role', 'status');
@@ -212,6 +212,15 @@ function createTab(conversation) {
   const tab = { conversation, panel, button, status, messages, before, after, refresh, generation: 0, loading: false, scroll: 0, anchor: null };
   tabs.set(conversation.id, tab); button.addEventListener('click', () => activateTab(tab)); before.addEventListener('click', () => contextPage(tab, 'before')); after.addEventListener('click', () => contextPage(tab, 'after')); refresh.addEventListener('click', () => openContext(tab.requestedReference, undefined, conversation.id));
   close.addEventListener('click', () => closeTab(tab));
+  button.dir = 'auto';
+  button.addEventListener('focus', () => { for (const other of tabs.values()) other.button.tabIndex = other === tab ? 0 : -1; });
+  button.addEventListener('keydown', event => {
+    const order = [...tabs.values()], index = order.indexOf(tab);
+    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault(); const target = event.key === 'Home' ? 0 : event.key === 'End' ? order.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + order.length) % order.length; order[target].button.focus({ preventScroll: true }); order[target].button.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    } else if (['Enter', ' '].includes(event.key)) { event.preventDefault(); activateTab(tab); }
+    else if (event.key === 'Delete') { event.preventDefault(); closeTab(tab); }
+  });
   return tab;
 }
 function activateTab(tab, restore = true) {
@@ -233,7 +242,7 @@ function releasePanel(panel) {
   for (const el of panel.querySelectorAll('audio,video,img,[src]')) { el.pause?.(); el.removeAttribute('src'); el.load?.(); }
 }
 function closeTab(tab) {
-  const order = [...tabs.values()], index = order.indexOf(tab), active = selected === tab.conversation.id;
+  const order = [...tabs.values()], index = order.indexOf(tab), active = selected === tab.conversation.id || tab.button.parentElement.contains(document.activeElement);
   ++tab.generation; pendingContexts.delete(tab.conversation.id); tabs.delete(tab.conversation.id); releasePanel(tab.panel); tab.panel.remove(); tab.button.parentElement.remove();
   if (active) {
     const next = order[index + 1] ?? order[index - 1];
