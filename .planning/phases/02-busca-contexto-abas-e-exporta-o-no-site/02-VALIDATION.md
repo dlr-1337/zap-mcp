@@ -212,4 +212,3 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 |02-04| src/archive.ts freezeExportSelection; src/export.ts createExportManager/createExportJob/getExportJob/openExport/buildZip/verifyZip; /api/exports | export.test.ts; ui/security/readonly |
 |02-05| scripts/phase2-acceptance.mjs --mode real-offline/real-browser | acceptance.test.ts;02-ACCEPTANCE.md; ledgerVALIDATION |
 
-
