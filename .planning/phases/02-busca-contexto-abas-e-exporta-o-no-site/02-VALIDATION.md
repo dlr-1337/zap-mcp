@@ -34,9 +34,9 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | 02-03-01 | 3 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/ui.test.js` | passed —9/9; tracer repetido9/9, PNG/browser/download hash |
 | 02-03-02 | 3 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/security.test.js dist/test/readonly.test.js` | passed —6/6; MIME/assinatura, auth/Range/HEAD/415/fd/offline |
 | 02-03-03 | 3 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/preview.test.js` | passed —15/15; WAV/WebM nativos, mp4v fallback, lifecycle/reflow; full113/113 |
-| 02-04-01 | 4 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/ui.test.js` | pending execution |
-| 02-04-02 | 4 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/security.test.js dist/test/search.test.js` | pending execution |
-| 02-04-03 | 4 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/readonly.test.js dist/test/export.test.js` | pending execution |
+| 02-04-01 | 4 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/ui.test.js` | passed —12/12; tracer repetido12/12; HTTP/browser além da página |
+| 02-04-02 | 4 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/security.test.js dist/test/search.test.js` | passed —17/17; versões/faltantes/CRC/SHA/space/7faultpoints/SIGKILL |
+| 02-04-03 | 4 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/readonly.test.js dist/test/export.test.js` | passed —23/23; período/polling/abas/download/logout; full127/127 |
 | 02-05-01 | 5 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-offline` | pending execution |
 | 02-05-02 | 5 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js dist/test/ui.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-browser` | pending execution |
 | 02-05-03 | 5 | auto | `mise exec node@24.21.0 -- npm test` | pending execution |
@@ -187,8 +187,8 @@ Sem SPEC, aplicar recall/precision aos requisitos: a evidência não deve se tor
 | P-02-02 | WEB-02 | search: AND entre versões não corresponde; histórico rotulado | enforced — search.test.ts AND entre versões e ui.test.ts histórico passaram |
 | P-02-03 | WEB-04 | browser races/storage/logout; duas leituras não misturam | enforced — ui.test.ts retençãoA/B/close/logout,bfcache,scroll e storage vazio passaram |
 | P-02-04 | WEB-05 | preview/codec mantém download; miniatura não satisfaz original | enforced — preview.test.ts missing404/ativo415; ui.test.ts mp4v sem suporte mantém original/hash, zero binários antes do clique |
-| P-02-05 | EXP-02 | manifest/texto com cobertura parcial, revisões e todos missing | flagged-unverified |
-| P-02-06 | EXP-03 | ZIP fault/crash/CRC/entries impedem ready | flagged-unverified |
+| P-02-05 | EXP-02 | manifest/texto com cobertura parcial, revisões e todos missing | enforced — export.test.ts versões Unicode/quote/revoke/restricted, pending congelado e dois nomes iguais; completeAccount=false |
+| P-02-06 | EXP-03 | ZIP fault/crash/CRC/entries impedem ready | enforced — export.test.ts CRC/SHA/conjunto/duplicata/traversal, falhas ENOSPC/fd/ZIP e SIGKILL em3pontos; download recusado |
 | P-02-07 | EXP-01 | acceptance self-check recusa fixture/truncado como real | flagged-unverified |
 
 Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refere aos threat_models T-02-01..T-02-22 e T-02-SC/ASVS5.0.0 L1 e ao controle gsd-secure-phase; não duplicado como valores genéricos. Bloqueio configurado: high. Sem novas permissões de WhatsApp.
@@ -204,6 +204,14 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 - Ondas1→2→3→4→5 por dependência e arquivos compartilhados; nenhuma paralelização falsa. STATE/ROADMAP ficam comorquestrador.
 
 ## Artefatos e símbolos produzidos
+
+### Evidência executada do plano02-04 —2026-10-11
+
+Exportação privada POST202 congela toda conversa/período e DTOs antes do stream, sem herdar página/termo. HTTP/browser162mensagens com original efetivamente baixado, hash igual e unzip -t status0. Manifesto schemaVersion1 conserva UTC/fuso/origins/PN-LID/citações/versões/attachmentrevisionId, capturedState/packagingState, hash/tamanho esperado e faltantes; nomesUUID únicos. Edição/retroativo/merge/recuperação posterior não muda o recorte. ZIP é relido por yauzl lazy, conjunto exato, tamanho/CRC32/SHA antes de fsync/link/ready. Um claim global; orçamento2GiB,50000mensagens/64MiBDTO, reserva max256MiB/5%filesystem, TTL30min/sessão; excesso recusa sem truncamento.
+
+Sete pontos de fault, fd real interrompido antes da leitura, CRC/entrada ausente/duplicata/traversal/SHA, ENOSPC e SIGKILL claimed/verified/published recusam ready e preservam mensagens; fault conserva também bytes originais. Auth/CSRF/Origin/sessão distinta/reset/GET/HEAD/Range e IDs hostis recusados; TTL limpa DTOs/ZIP, tombstone sem conteúdo. UI prévia /api/exports/period compartilha parsePeriod; loading/polling falho/retry mesmojob, duas abas/leitura, logout com status retido, downloadfinished/hash e reflow320/768/1280/fonte200% passam. Capturas dist/02-04-ui-*.png sintéticas inspecionadas. Novo readonly de export usa somente socket sintético desligado, métodos proibidos0; readonly.test.ts existente não alterado.
+
+REDs dist/02-04-{01,02,03,close}-red.json classificados RED_EVIDENCE_OK antes dos GREENs. Full inicial117/129 identificou regressão introduzida no close ocioso; corrigida preservando contrato síncrono e63/63afetados. Full final127/127,0fail/skip/todo,40,747s em dist/02-04-full-tests-final.log; após full, mesmo teste de fault reforçado para causar EBADF real passou1/1 sem nova mudança de produto. Nenhum acervo/coletor/perfil real ou VPS foi alterado. Aceite real02-05 e EVID-02/EXP globais continuam pendentes.
 
 ### Evidência executada do plano02-03 —2026-10-11
 

@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 7
-total_count: 7
-last_updated: 2026-10-11T23:23:05.093Z
+fixed_count: 9
+total_count: 9
+last_updated: 2026-10-11T23:56:04.558Z
 ---
 
 # Broken Windows Ledger
@@ -22,6 +22,8 @@ last_updated: 2026-10-11T23:23:05.093Z
 | 5 | 1 | deviation | src/main.ts |  | DTO da lista preserva proteção de identificadores legados privados e expõe somente PN/LID/grupo recebido; teste antigo passou | fixed |  | 2026-10-10T22:01:44.911Z | 2026-10-10T22:01:45.042Z |
 | 6 | 1 | deviation | src/media.ts |  | Suite paralela apresentou retry_wait inesperado em original válido (58/59); reserva de job com tamanho desconhecido sob filesystem compartilhado requer revisão fora de01-06. | fixed |  | 2026-10-10T22:20:11.110Z | 2026-10-10T22:23:17.496Z |
 | 7 | 02 | deviation | test/http.test.ts |  | Fixture preexistente passou a resolver conversa pela origem conhecida; corrigido e verificado105/105. | fixed |  | 2026-10-11T23:21:43.647Z | 2026-10-11T23:23:05.093Z |
+| 8 | 02 | deviation | src/main.ts |  | 02-04: fechamento ocioso tornou-se assíncrono e atrasou liberação da trava; corrigido preservando contrato síncrono | fixed |  | 2026-10-11T23:55:42.958Z | 2026-10-11T23:56:04.001Z |
+| 9 | 02 | deviation | src/main.ts |  | 02-04: prévia UTC privada /api/exports/period adicionada para compartilhar parsePeriod sem duplicar DST no browser | fixed |  | 2026-10-11T23:56:04.289Z | 2026-10-11T23:56:04.558Z |
 
 ````json
 [
@@ -114,6 +116,32 @@ last_updated: 2026-10-11T23:23:05.093Z
     "reason": "",
     "recorded_at": "2026-10-11T23:21:43.647Z",
     "resolved_at": "2026-10-11T23:23:05.093Z",
+    "milestone": null
+  },
+  {
+    "id": 8,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "src/main.ts",
+    "line": null,
+    "description": "02-04: fechamento ocioso tornou-se assíncrono e atrasou liberação da trava; corrigido preservando contrato síncrono",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-11T23:55:42.958Z",
+    "resolved_at": "2026-10-11T23:56:04.001Z",
+    "milestone": null
+  },
+  {
+    "id": 9,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "src/main.ts",
+    "line": null,
+    "description": "02-04: prévia UTC privada /api/exports/period adicionada para compartilhar parsePeriod sem duplicar DST no browser",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-11T23:56:04.289Z",
+    "resolved_at": "2026-10-11T23:56:04.558Z",
     "milestone": null
   }
 ]
