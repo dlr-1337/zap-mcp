@@ -66,7 +66,7 @@ actuals:
   commits: 6
 plan_head_before: 8a93acf7ab70a900b22829f05fdd176f043d7f52
 plan_head_after: 60e100fb0f111c60b4abb874f125cfcdf645a056
-duration: 14min
+duration: 16min
 completed: 2026-10-11
 status: complete
 ---
@@ -77,7 +77,7 @@ status: complete
 
 ## Performance
 
-- Intervalo do ledger: base registrada2026-10-11T23:07:49Z até fechamento2026-10-11T23:22Z, aproximadamente14min.
+- Intervalo do ledger: base registrada2026-10-11T23:07:49Z até fechamento do resumo2026-10-11T23:23Z, aproximadamente16min.
 - Tarefas3/3;10 arquivos de produto/testes. actuals.tokens mede caracteres/4 do diff de src/public/test; seis commits antes deste resumo.
 
 ## Accomplishments

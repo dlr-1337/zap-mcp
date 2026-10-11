@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Busca, contexto, abas e exportação no site
-current_plan: 2
+current_plan: 3
 status: Phase 2 in progress — 02-01 complete; next 02-02
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-10-11T23:06:17.771Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-10-11T23:23:26.905Z"
 last_activity: 2026-10-11
 last_activity_desc: "02-01 verified: 97 tests passed"
-state_head: ca02db2d9316cdb5728fa889a5c0b749c774f8a5
+state_head: 4cd2aa98cb13cca01c183512a3be779710a99113
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
   percent: 25
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 ## Current Position
 
 Phase: 2 (Busca, contexto, abas e exportação no site) — READY TO EXECUTE
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 5
 Status: Phase 2 in progress — 02-01 complete; next 02-02
 Last activity: 2026-10-11 — 02-01 verified: 97 tests passed
@@ -69,6 +69,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 01 P05 | 12min | 2 tasks | 7 files |
 | Phase 01 P06 | 15min | 2 tasks | 8 files |
 | Phase 02 P01 | 14min | 3 tasks | 10 files |
+| Phase 02 P02 | 16min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
 - [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 local concluída após controles e verificador.
 - [Phase 02]: Busca usa FTS por revisão e snapshots sanitizados de sessão; período Temporal respeita DST, mantendo requisitos globais pendentes do aceite real.
+- [Phase 02]: Contexto reutiliza snapshots existentes; abas conservam DOM e posições próprios com geração por sessão/aba e purge TTL/logout/reset;105 testes sintéticos passaram, aceite real segue02-05.
 
 ### Pending Todos
 
@@ -114,8 +116,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-11T23:05:26.288Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-10-11T23:23:26.872Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
