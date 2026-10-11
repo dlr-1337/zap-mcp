@@ -59,3 +59,22 @@ test('HTTP privado nega HEAD/Range, paths e vazamentos; revalida expiração ant
   assert.equal((await fetch(base + '/logout', { method: 'POST', headers: { ...headers, Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ csrfToken: session.csrfToken }) })).status, 200);
   for (const path of paths.slice(0, -1)) assert.equal((await fetch(base + path, { method: 'HEAD', headers })).status, 401);
 });
+test('export POST status HEAD Range e download isolam sessão CSRF e geração do proprietário', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-export-security-')), s = createService({ dataDir: dir }); const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(async () => { server.close(); await once(server, 'close'); await s.close(); rmSync(dir, { recursive: true }); });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`, password = 'senha sintética'; await s.setPassword(password);
+  const authenticate = async () => { const c = await fetch(base + '/api/session'), challenge = await c.json(); const l = await fetch(base + '/login', { method: 'POST', headers: { Cookie: c.headers.get('set-cookie')!.split(';')[0], Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password, csrfToken: challenge.csrfToken }) }); assert.equal(l.status, 200); const headers = { Cookie: l.headers.get('set-cookie')!.split(';')[0] }; return { headers, csrfToken: (await (await fetch(base + '/api/session', { headers })).json()).csrfToken }; };
+  const owner = await authenticate(); s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'secure@lid', id: 'm', fromMe: false }, messageTimestamp: 123, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { conversation: 'texto exportável' } }] }); const conversationId = s.archive.listConversations().conversations[0].id;
+  const body = JSON.stringify({ conversationId, csrfToken: owner.csrfToken }); const headers = { ...owner.headers, Origin: base, 'Content-Type': 'application/json' };
+  for (const h of [{}, { Cookie: 'zap.sid=invalid' }]) assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers: { ...h, Origin: base, 'Content-Type': 'application/json' }, body })).status, 401);
+  for (const h of [{ ...headers, Origin: 'https://evil.example' }, { ...headers, Origin: '' }]) assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers: h, body })).status, 403);
+  assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers, body: JSON.stringify({ conversationId, csrfToken: 'wrong' }) })).status, 403);
+  const j = await (await fetch(base + '/api/exports', { method: 'POST', headers, body })).json();
+  let job: any; for (let i = 0; i < 100; i++) { job = await (await fetch(base + '/api/exports/' + j.jobId, { headers: owner.headers })).json(); if (job.state !== 'preparing') break; await new Promise(r => setTimeout(r, 5)); } assert.equal(job.state, 'ready');
+  const paths = ['/api/exports/' + j.jobId, '/api/exports/' + j.jobId + '/download', '/api/exports/%2Fetc%2Fpasswd/download', '/api/exports/..%2Fsecret/download'];
+  for (const path of paths) for (const method of ['GET', 'HEAD']) { const r = await fetch(base + path, { method, headers: { Range: 'bytes=0-0' } }); assert.equal(r.status, 401); assert.equal(r.headers.get('content-range'), null); }
+  for (const path of paths.slice(2)) assert.equal((await fetch(base + path, { headers: owner.headers })).status, 404);
+  const second = await authenticate(); for (const path of paths.slice(0, 2)) assert.equal((await fetch(base + path, { headers: second.headers })).status, 404);
+  const head = await fetch(base + job.downloadURL, { method: 'HEAD', headers: { ...owner.headers, Range: 'bytes=0-0' } }); assert.equal(head.status, 200); assert.equal(head.headers.get('cache-control'), 'no-store'); assert.equal(head.headers.get('x-content-type-options'), 'nosniff'); assert.equal(await head.text(), ''); assert.doesNotMatch(JSON.stringify(job) + JSON.stringify([...head.headers]), /PRIVATE_SENTINEL|jobs.sqlite|auth.sqlite|mediaKey|descriptor/);
+  await s.setPassword(password); for (const path of paths.slice(0, 2)) assert.equal((await fetch(base + path, { method: 'HEAD', headers: owner.headers })).status, 401);
+});
