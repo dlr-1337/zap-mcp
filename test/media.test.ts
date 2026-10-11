@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, createCipheriv } from 'node:crypto';
@@ -38,13 +38,13 @@ for (const point of ['published', 'beforeAvailable'] as const) for (const priorH
     const archive = service.archive, pn = media('race'), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
     archive.ingestHistory({ messages: [pn, lid] });
     const firstId = archive.readStoredMessage(pn.key)!.attachments[0]!.id, savedId = archive.readStoredMessage(lid.key)!.attachments[0]!.id;
-    let rejectFirst!: (error: Error) => void, reached!: () => void, release!: () => void, downloads = 0;
+    let rejectFirst!: (error: Error) => void, reached!: () => void, release!: () => void, downloads = 0, time = 0;
     const first = new Promise<Readable>((_, reject) => { rejectFirst = reject; });
     const checkpoint = new Promise<void>(resolve => { reached = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
     const { startMediaWorker } = await moduleMedia();
-    const worker = startMediaWorker({ archive, mediaDir: join(dataDir, 'media'),
-      downloadOriginal: async (job: MediaJob) => { downloads++; return job.id === firstId ? first : Readable.from([bytes]); },
-      fault: async (current: string) => { if (current === point) { reached(); await held; throw Error('interrupção após publicação'); } }
+    const worker = startMediaWorker({ archive, mediaDir: join(dataDir, 'media'), now: () => time,
+      downloadOriginal: async (job: MediaJob) => { if (++downloads > 2) throw Error('origem indisponível no retry'); return job.id === firstId ? first : Readable.from([bytes]); },
+      fault: async (current: string) => { if (current === point) { reached(); await held; archive.db.exec("CREATE TRIGGER media_fault BEFORE UPDATE OF state ON attachments WHEN NEW.state='available' BEGIN SELECT RAISE(ABORT,'injected'); END"); } }
     });
     t.after(async () => { release(); rejectFirst(Error('cleanup')); await worker.stop(); });
     await checkpoint;
@@ -67,8 +67,33 @@ for (const point of ['published', 'beforeAvailable'] as const) for (const priorH
       assert.equal(archive.getCoverage().uniqueMessages, 1); assert.equal(archive.readStoredMessage(pn.key)!.revisions.length, 1);
       assert.deepEqual(archive.db.pragma('foreign_key_check'), []);
     } finally { release(); rejectFirst(Error('primeiro download falhou')); }
-    await worker.drain(); await worker.stop();
+    await worker.drain();
     assert.notEqual(archive.getAttachment(savedId)!.state, 'available', 'publicação interrompida ainda exige verificação');
+    const publishedJob = archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(savedId) as { generation: string; attempts: number };
+    const locator = archive.db.prepare('SELECT source_key FROM attachments WHERE id=?').get(savedId);
+    const receipt = readFileSync(join(dataDir, 'media', `${savedId}.${manifest}.manifest`));
+    archive.db.exec('DROP TRIGGER media_fault'); time = 2000;
+    await worker.drain(); await worker.stop();
+    assert.equal(archive.getAttachment(savedId)!.state, 'available', 'retry no mesmo processo deve adotar o final antes de outro download');
+    assert.equal(downloads, 3, 'só a origem sem binário tenta baixar novamente');
+    const adoptedJob = archive.db.prepare('SELECT * FROM media_jobs WHERE attachment_id=?').get(savedId) as { generation: string; attempts: number; state: string; lease_until: number | null };
+    assert.equal(adoptedJob.generation, publishedJob.generation); assert.equal(adoptedJob.attempts, publishedJob.attempts);
+    assert.equal(adoptedJob.state, 'available'); assert.equal(adoptedJob.lease_until, null);
+    assert.deepEqual(archive.db.prepare('SELECT source_key FROM attachments WHERE id=?').get(savedId), locator);
+    assert.deepEqual(readFileSync(join(dataDir, 'media', `${savedId}.${manifest}.manifest`)), receipt);
+    assert.deepEqual(readFileSync(join(dataDir, 'media', savedId + '.bin')), bytes);
+    assert.equal(worker.snapshot().active, 0); assert.equal(worker.snapshot().diagnostic, null);
+    await service.setPassword('synthetic-password');
+    const server = service.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      assert.equal((await fetch(url + '/api/attachments/' + savedId)).status, 401);
+      const challenge = await fetch(url + '/api/session'), form = await challenge.json() as { csrfToken: string };
+      const login = await fetch(url + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: url, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'synthetic-password', csrfToken: form.csrfToken }) });
+      assert.equal(login.status, 200);
+      const response = await fetch(url + '/api/attachments/' + savedId, { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
+      assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
     await service.close(); service = createService({ dataDir });
     assert.equal(service.archive.getAttachment(savedId)!.state, 'available');
     assert.equal(service.archive.getAttachment(savedId)!.sha256, hash.toString('hex'));
@@ -77,7 +102,7 @@ for (const point of ['published', 'beforeAvailable'] as const) for (const priorH
     assert.equal(JSON.parse(readFileSync(join(dataDir, 'media', `${savedId}.${manifest}.manifest`), 'utf8')).sha256, hash.toString('hex'));
     const offline = startMediaWorker({ archive: service.archive, mediaDir: join(dataDir, 'media'), online: () => false,
       downloadOriginal: async () => { downloads++; throw Error('nenhum redownload offline'); } });
-    await offline.drain(); await offline.stop(); assert.equal(downloads, 2);
+    await offline.drain(); await offline.stop(); assert.equal(downloads, 3);
     await service.close();
     const snapshotDir = join(base, 'snapshot'), destination = join(base, 'restore');
     await createSnapshot({ dataDir, destination: snapshotDir });
@@ -86,7 +111,50 @@ for (const point of ['published', 'beforeAvailable'] as const) for (const priorH
     service = createService({ dataDir: destination });
     assert.equal(service.archive.getAttachment(savedId)!.state, 'available');
     assert.equal(service.archive.readStoredMessage(lid.key)!.attachments.some(a => a!.id === savedId), true);
-    assert.equal(downloads, 2);
+    assert.equal(downloads, 3);
+  });
+}
+
+for (const outcome of ['sql', 'corrupt', 'unverified', 'noSpace', 'lastAttempt'] as const) {
+  test(`retry verifica final publicado antes de geração, tentativa e orçamento: ${outcome}`, async t => {
+    const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia();
+    const message = media('retry-final'); archive.ingestHistory({ messages: [message] });
+    const id = archive.readStoredMessage(message.key)!.attachments[0]!.id;
+    if (outcome === 'lastAttempt') archive.db.prepare('UPDATE media_jobs SET attempts=4 WHERE attachment_id=?').run(id);
+    let downloads = 0, time = 0, free = 1n << 30n;
+    const worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), now: () => time,
+      diskSpace: () => ({ free, total: 1n << 30n }),
+      downloadOriginal: async () => { if (++downloads > 1) throw Error('origem indisponível'); return Readable.from([bytes]); },
+      fault: async (point: string) => { if (point === 'beforeAvailable') archive.db.exec("CREATE TRIGGER media_fault BEFORE UPDATE OF state ON attachments WHEN NEW.state='available' BEGIN SELECT RAISE(ABORT,'injected'); END"); }
+    });
+    t.after(() => worker.stop()); await worker.drain();
+    const published = archive.db.prepare('SELECT generation,attempts FROM media_jobs WHERE attachment_id=?').get(id) as { generation: string; attempts: number };
+    const final = join(dir, 'media', id + '.bin'), receipt = join(dir, 'media', `${id}.${published.generation}.manifest`), manifest = readFileSync(receipt);
+    assert.deepEqual(readFileSync(final), bytes);
+    if (outcome !== 'sql') archive.db.exec('DROP TRIGGER media_fault');
+    const damaged = Buffer.from(bytes); damaged[0] ^= 1;
+    if (outcome === 'corrupt') writeFileSync(final, damaged);
+    if (outcome === 'unverified') archive.db.prepare('UPDATE attachments SET size=NULL,sha256=NULL WHERE id=?').run(id);
+    if (outcome === 'noSpace') free = 256n * 1024n * 1024n;
+    time = 60_000; await worker.drain(); const status = worker.snapshot(); await worker.stop();
+    const job = archive.db.prepare('SELECT generation,attempts,state,lease_until FROM media_jobs WHERE attachment_id=?').get(id) as { generation: string; attempts: number; state: string; lease_until: number | null };
+    assert.deepEqual(readFileSync(receipt), manifest);
+    if (outcome === 'corrupt') {
+      assert.equal(downloads, 2); assert.equal(existsSync(final), false);
+      const quarantine = readdirSync(join(dir, 'media')).filter(name => name.endsWith('.damaged'));
+      assert.equal(quarantine.length, 1); assert.deepEqual(readFileSync(join(dir, 'media', quarantine[0])), damaged);
+      assert.equal(job.attempts, published.attempts + 1); assert.notEqual(job.generation, published.generation);
+      assert.notEqual(archive.getAttachment(id)!.state, 'available');
+    } else {
+      assert.equal(downloads, 1); assert.deepEqual(readFileSync(final), bytes);
+      assert.equal(job.generation, published.generation); assert.equal(job.attempts, published.attempts); assert.equal(job.lease_until, null);
+      assert.equal(readdirSync(join(dir, 'media')).some(name => name.endsWith('.damaged')), false);
+      if (outcome === 'sql' || outcome === 'unverified') {
+        assert.notEqual(archive.getAttachment(id)!.state, 'available'); assert.equal(status.paused, true);
+        assert.match(status.diagnostic!, /persistência/i);
+        if (outcome === 'sql') archive.db.exec('DROP TRIGGER media_fault');
+      } else { assert.equal(archive.getAttachment(id)!.state, 'available'); assert.equal(status.paused, false); }
+    }
   });
 }
 

@@ -75,24 +75,33 @@ export function openVerifiedAttachment(archive: Archive, mediaDir: string, id: s
 }
 
 const running = new WeakSet<Archive>();
+type FinalRow = { id: string; descriptor: Buffer; size: number | null; sha256: string | null; generation: string | null; job_state: string };
+function adoptFinal(archive: Archive, dir: string, row: FinalRow) {
+  if (!internalId.test(row.id)) throw Error('Identificador interno inválido');
+  let file: ReturnType<typeof hashFile>;
+  try { file = hashFile(join(dir, row.id + '.bin')); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing'; throw error; }
+  try {
+    if (row.size === null || !row.sha256) return 'unverified';
+    if (file.size !== row.size || file.sha256 !== row.sha256) return 'divergent';
+    const descriptor = deserialize(row.descriptor) as Node; expected(descriptor);
+    try { compare(BigInt(file.size), file.sha256, descriptor); } catch { return 'divergent'; }
+  } finally { closeSync(file.fd); }
+  // SQL failure must preserve the verified final and its publication generation.
+  archive.db.transaction(() => {
+    const changed = archive.db.prepare("UPDATE media_jobs SET state='available',lease_until=NULL WHERE attachment_id=? AND generation IS ? AND state=?").run(row.id, row.generation, row.job_state);
+    if (!changed.changes) throw Error('Lease encerrada');
+    archive.db.prepare("UPDATE attachments SET state='available',reason=NULL WHERE id=?").run(row.id);
+  })();
+  return 'available';
+}
 export function reconcileMedia(archive: Archive, mediaDir: string) {
   if (running.has(archive)) throw Error('Pare o worker antes de reconciliar');
   const dir = mediaDirectory(archive, mediaDir);
-  for (const row of archive.db.prepare('SELECT a.id,a.descriptor,a.size,a.sha256,a.state,j.attempts FROM attachments a JOIN media_jobs j ON j.attachment_id=a.id').all() as { id: string; descriptor: Buffer; size: number | null; sha256: string | null; state: string; attempts: number }[]) {
-    if (!internalId.test(row.id)) throw Error('Identificador interno inválido');
-    let file: ReturnType<typeof hashFile> | undefined, valid = false;
-    try {
-      if (row.size === null || !row.sha256) throw Error('Final não verificado');
-      file = hashFile(join(dir, row.id + '.bin'));
-      if (file.size !== row.size || file.sha256 !== row.sha256) throw Error('Final divergente');
-      compare(BigInt(file.size), file.sha256, deserialize(row.descriptor) as Node); valid = true;
-    } catch { /* Unknown/corrupt files stay on disk; only verified finals can be adopted. */ }
-    finally { if (file) closeSync(file.fd); }
+  for (const row of archive.db.prepare('SELECT a.id,a.descriptor,a.size,a.sha256,a.state,j.attempts,j.generation,j.state job_state FROM attachments a JOIN media_jobs j ON j.attachment_id=a.id').all() as (FinalRow & { state: string; attempts: number })[]) {
+    if (adoptFinal(archive, dir, row) === 'available') continue;
     archive.db.transaction(() => {
-      if (valid) {
-        archive.db.prepare("UPDATE media_jobs SET state='available',lease_until=NULL WHERE attachment_id=?").run(row.id);
-        archive.db.prepare("UPDATE attachments SET state='available',reason=NULL WHERE id=?").run(row.id);
-      } else if (row.state === 'available') failure(archive, row.id, 'Arquivo local ausente ou divergente');
+      if (row.state === 'available') failure(archive, row.id, 'Arquivo local ausente ou divergente');
       else {
         const state = row.attempts >= 5 ? 'unavailable' : 'pending';
         archive.db.prepare('UPDATE media_jobs SET state=?,lease_until=NULL,retry_at=0 WHERE attachment_id=?').run(state, row.id);
@@ -168,8 +177,13 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
   const noSpace = () => Object.assign(Error('Espaço insuficiente; downloads pausados'), { code: 'ENOSPC' });
   function claim(): MediaJob | null {
     return archive.db.transaction(() => {
-      const row = archive.db.prepare("SELECT a.id,a.type,a.descriptor,a.source_key,r.payload,j.attempts FROM media_jobs j JOIN attachments a ON a.id=j.attachment_id JOIN revisions r ON r.id=a.revision_id JOIN messages m ON m.reference=a.reference WHERE j.state IN ('pending','retry_wait') AND j.attempts<5 AND j.retry_at<=? AND m.restricted=0 ORDER BY j.rowid LIMIT 1").get(now()) as { id: string; type: string; descriptor: Buffer; source_key: string | null; payload: Buffer; attempts: number } | undefined;
+      // Recover published finals even when an earlier job cannot reserve space or attempts ran out.
+      for (const row of archive.db.prepare("SELECT a.id,a.descriptor,a.size,a.sha256,j.generation,j.state job_state FROM media_jobs j JOIN attachments a ON a.id=j.attachment_id JOIN messages m ON m.reference=a.reference WHERE j.state IN ('pending','retry_wait','unavailable') AND j.retry_at<=? AND a.size IS NOT NULL AND a.sha256 IS NOT NULL AND m.restricted=0").all(now()) as FinalRow[]) adoptFinal(archive, dir, row);
+      const row = archive.db.prepare("SELECT a.id,a.type,a.descriptor,a.source_key,a.size,a.sha256,r.payload,j.attempts,j.generation,j.state job_state FROM media_jobs j JOIN attachments a ON a.id=j.attachment_id JOIN revisions r ON r.id=a.revision_id JOIN messages m ON m.reference=a.reference WHERE j.state IN ('pending','retry_wait') AND j.attempts<5 AND j.retry_at<=? AND m.restricted=0 ORDER BY j.rowid LIMIT 1").get(now()) as (FinalRow & { type: string; source_key: string | null; payload: Buffer; attempts: number }) | undefined;
       if (!row) return null;
+      const final = adoptFinal(archive, dir, row);
+      if (final === 'available') return null;
+      if (final === 'unverified') throw Error('Final local não verificado; acervo preservado');
       const generation = randomUUID(), stored = deserialize(row.payload) as { key: Node }, descriptor = deserialize(row.descriptor) as Node;
       const key = row.source_key ? JSON.parse(row.source_key) as Node : stored.key;
       if (descriptor.viewOnce === true || key.isViewOnce === true || !(descriptor.url || descriptor.directPath) || !(descriptor.mediaKey instanceof Uint8Array) || descriptor.mediaKey.length !== 32) {
@@ -178,10 +192,11 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
       let size: bigint | null; try { size = expected(descriptor).size; } catch { size = 0n; }
       const free = budget();
       if (free <= 0n || size !== null && size > free) { diskPaused = true; diagnostic = 'Espaço insuficiente; downloads pausados, acervo preservado'; onStatus(); return null; }
-      reserved.set(row.id, size ?? free);
-      if (size === null) unknownSize.add(row.id);
+      if (final === 'divergent') { renameSync(join(dir, row.id + '.bin'), join(dir, `${row.id}.${generation}.damaged`)); syncDirectory(dir); }
       archive.db.prepare("UPDATE media_jobs SET state='downloading',attempts=attempts+1,generation=?,lease_until=? WHERE attachment_id=?").run(generation, now() + 120_000, row.id);
       archive.db.prepare("UPDATE attachments SET state='downloading',reason=NULL WHERE id=?").run(row.id);
+      reserved.set(row.id, size ?? free);
+      if (size === null) unknownSize.add(row.id);
       return { id: row.id, type: row.type, descriptor, message: { key, message: { [row.type]: descriptor } }, attempts: row.attempts + 1, generation };
     })();
   }
@@ -195,10 +210,7 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
     let input: Readable | undefined;
     try {
       const source = expected(job.descriptor); assertLease(job, signal);
-      if (existsSync(final)) {
-        // Preserve damaged known finals before a retry; never clobber an existing binary.
-        renameSync(final, join(dir, `${job.id}.${job.generation}.damaged`)); syncDirectory(dir);
-      }
+      if (existsSync(final)) throw Error('Final local existente; acervo preservado');
       const promise = downloadOriginal(job, signal);
       promise.then(stream => { if (signal.aborted) { stream.on('error', () => {}); stream.destroy(); } }, () => {});
       const stream = await new Promise<Readable>((accept, reject) => {
