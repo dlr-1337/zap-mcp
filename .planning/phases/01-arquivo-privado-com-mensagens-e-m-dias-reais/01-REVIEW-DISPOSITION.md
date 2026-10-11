@@ -19,9 +19,13 @@ findings:
     severity: warning
     disposition: fixed
     title: "Citação declarava ausência não verificada"
+  - id: WR-02
+    severity: warning
+    disposition: fixed
+    title: "teste de DNS aceita falha antes de exercitar o lookup"
 open: 0
-total: 4
-recorded: 2026-10-11T00:44:54.295Z
+total: 5
+recorded: 2026-10-11T01:56:26.782Z
 ---
 
 # Phase 01: Code Review Disposition
@@ -32,6 +36,7 @@ recorded: 2026-10-11T00:44:54.295Z
 | CR-01 | critical | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
 | CR-02 | critical | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
 | WR-01 | warning | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-02 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
