@@ -8,6 +8,7 @@ import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 import { openArchive } from '../src/archive.js';
 import * as archiveModule from '../src/archive.js';
+import { createHmac } from 'node:crypto';
 
 export async function searchFixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-search-')), s = createService({ dataDir: dir });
@@ -105,4 +106,56 @@ test('calendário estrito limites abertos original null e Date.max não viram in
   const parsePeriod = (archiveModule as any).parsePeriod;
   for (const value of [[], {}, 123, '2026-02-30', '0000-01-01']) assert.throws(() => parsePeriod(value, undefined));
   assert.equal(parsePeriod(null, '').startUtc, null); assert.ok(parsePeriod('0001-01-01', '9999-12-31').endUtc);
+});
+
+test('busca privada valida auth cursores limites termos literais homônimos e sentinelas', async t => {
+  const { s, read, base, headers, login } = await searchFixture(t);
+  const secret = 'PRIVATE_SENTINEL_NEVER_RETURN';
+  s.archive.ingestHistory({ chats: [{ id: key.remoteJid, name: 'Homônimo' }, { id: '2@g.us', subject: 'Homônimo' }], messages: [{ key, messageTimestamp: 123, privateEnvelope: secret, message: { documentMessage: { caption: 'café OR שלום <script>window.EXECUTED=1</script>', fileName: '../nome.pdf', mediaKey: Buffer.alloc(32), url: 'https://private/' + secret } } }, { key: { ...key, id: 'b' }, message: { conversation: 'café' } }] });
+  const candidates = await (await fetch(base + '/api/conversations?q=Homônimo', { headers })).json();
+  assert.equal(candidates.conversations.length, 2); assert.equal(new Set(candidates.conversations.map((c: any) => c.id)).size, 2);
+  const first = await read('?q=cafe&limit=1'); assert.equal(first.messages.length, 1); assert.ok(first.nextCursor);
+  assert.equal((await read('?q=' + encodeURIComponent('cafe OR'))).messages.length, 1);
+  assert.equal((await read('?q=' + encodeURIComponent('cafe\u0301'))).messages.length, 2);
+  assert.equal((await read('?q=' + encodeURIComponent('" OR 1=1 --'))).messages.length, 0);
+  assert.doesNotMatch(JSON.stringify(first), /PRIVATE_SENTINEL|descriptor|payload|mediaKey|privateEnvelope|https:\/\//);
+  const other = await login();
+  assert.equal((await fetch(base + '/api/search?q=cafe&limit=1&cursor=' + encodeURIComponent(first.nextCursor), { headers: other })).status, 400);
+  const paths = ['/api/search', '/api/conversations?q=Homônimo'];
+  for (const cookie of ['', 'zap.sid=', 'zap.sid=invalid']) for (const path of paths) for (const method of ['GET', 'HEAD']) {
+    const r = await fetch(base + path, { method, headers: { Cookie: cookie } }); assert.equal(r.status, 401); assert.equal(r.headers.get('cache-control'), 'no-store'); assert.doesNotMatch(await r.text(), /café|Homônimo|PRIVATE_SENTINEL/);
+  }
+  const [body] = first.nextCursor.split('.'), parts = JSON.parse(Buffer.from(body, 'base64url').toString());
+  const signingKey = (s.authDb.prepare("SELECT value FROM web_config WHERE key='signing-secret'").get() as any).value;
+  for (const p of [[...parts.slice(0, 4), '-1'], [...parts.slice(0, 4), '9007199254740992'], [parts[0], parts[1], parts[2], 'before', parts[4]]]) {
+    const b = Buffer.from(JSON.stringify(p)).toString('base64url'), cursor = b + '.' + createHmac('sha256', signingKey).update(b).digest('base64url');
+    assert.equal((await fetch(base + '/api/search?q=cafe&cursor=' + cursor, { headers })).status, 400);
+  }
+  for (const query of ['limit=0', 'limit=101', 'limit=1.1', 'limit=9007199254740992', 'limit[]=1', 'limit=1&limit=2', 'q=one&q=two', 'extra=1', 'q=' + encodeURIComponent('!!!'), 'q=' + 'a'.repeat(2001), 'q=' + Array(26).fill('a').join('%20'), 'cursor=' + 'x'.repeat(1025), 'cursor=' + encodeURIComponent(first.nextCursor + 'x'), 'q=other&cursor=' + first.nextCursor]) assert.equal((await fetch(base + '/api/search?' + query, { headers })).status, 400, query.slice(0, 100));
+  assert.equal((await fetch(base + '/api/search?conversationId=absent', { headers })).status, 404);
+  for (const query of ['limit=1&limit=2', 'q=a&q=b', 'unknown=1']) assert.equal((await fetch(base + '/api/conversations?' + query, { headers })).status, 400);
+  s.archiveDb.prepare('UPDATE query_snapshots SET expires_at=0 WHERE id=?').run(first.snapshotId);
+  assert.equal((await fetch(base + '/api/search?q=cafe&cursor=' + first.nextCursor, { headers })).status, 410);
+  s.authDb.exec('UPDATE web_sessions SET touched_at=0');
+  for (const path of paths) for (const method of ['GET', 'HEAD']) assert.equal((await fetch(base + path, { method, headers })).status, 401);
+  const fresh = await login(), session = await (await fetch(base + '/api/session', { headers: fresh })).json();
+  await fetch(base + '/logout', { method: 'POST', headers: { ...fresh, Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ csrfToken: session.csrfToken }) });
+  for (const path of paths) assert.equal((await fetch(base + path, { headers: fresh })).status, 401);
+});
+
+test('recortes recusam excesso sem truncar nem remover recortes válidos', async t => {
+  const { s, base, headers, read } = await searchFixture(t);
+  const id = s.writeMessage({ reference: 'single', conversationId: 'synthetic@lid', conversationName: null, text: 'single', originalTimestamp: '2026-01-01T00:00:00.000Z' });
+  const first = await read(); for (let i = 1; i < 20; i++) await read();
+  assert.equal((await fetch(base + '/api/search', { headers })).status, 429);
+  assert.ok(s.archiveDb.prepare('SELECT id FROM query_snapshots WHERE id=?').get(first.snapshotId));
+  s.archiveDb.exec('UPDATE query_snapshots SET expires_at=0'); assert.equal((await read()).messages.length, 1);
+  const insert = s.archiveDb.prepare('INSERT INTO messages(reference,conversation_id,text) VALUES(?,?,?)');
+  s.archiveDb.transaction(() => { for (let i = 0; i < 50000; i++) insert.run('bulk-' + i, id, 'bulk'); })();
+  assert.equal((await fetch(base + '/api/search', { headers })).status, 413);
+  assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM query_snapshots').get() as any).n, 1);
+  s.archiveDb.prepare("DELETE FROM messages WHERE reference LIKE 'bulk-%'").run();
+  s.archiveDb.prepare('UPDATE messages SET text=? WHERE reference=?').run('x'.repeat(64 * 1024 * 1024), 'single');
+  assert.equal((await fetch(base + '/api/search', { headers })).status, 413);
+  assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM query_snapshots').get() as any).n, 1);
 });
