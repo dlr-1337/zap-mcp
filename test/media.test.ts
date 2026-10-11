@@ -63,7 +63,9 @@ for (const point of ['published', 'beforeAvailable'] as const) for (const priorH
         assert.equal(JSON.parse(privateRow.source_key).remoteJid, jid, 'locator fica congelado por attachment');
         const publicFields = ['id', 'reference', 'type', 'name', 'mimeType', 'state', 'reason', 'attempts', 'size', 'sha256', 'sourceHashVerified'].sort();
         assert.deepEqual(Object.keys(archive.getAttachment(id)!).sort(), publicFields);
-        assert.deepEqual(Object.keys(archive.readStoredMessage(pn.key)!.attachments.find(a => a!.id === id)!).sort(), publicFields);
+        const message = archive.readStoredMessage(pn.key)!, attachment = message.attachments.find(a => a!.id === id)!;
+        assert.deepEqual(Object.keys(attachment).sort(), [...publicFields, 'revisionId'].sort());
+        assert.ok(message.revisions.some(r => r.revisionId === attachment.revisionId), 'anexo pertence à revisão capturada');
       }
       assert.equal(archive.getCoverage().uniqueMessages, 1); assert.equal(archive.readStoredMessage(pn.key)!.revisions.length, 1);
       assert.deepEqual(archive.db.pragma('foreign_key_check'), []);
@@ -240,10 +242,11 @@ test('PN/LID mantém o único original disponível, locator privado, HTTP offlin
     const login = await fetch(url + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: url, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'synthetic-password', csrfToken: form.csrfToken }) });
     assert.equal(login.status, 200);
     const publicPage = await fetch(url + '/api/conversations/' + kept.conversationId + '/messages', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
-    const page = await publicPage.json() as { messages: { attachments: Record<string, unknown>[] }[] };
+    const page = await publicPage.json() as { messages: { attachments: Record<string, unknown>[]; revisions: { revisionId: number }[] }[] };
     assert.equal(publicPage.status, 200);
     for (const message of page.messages) for (const attachment of message.attachments) {
-      assert.deepEqual(Object.keys(attachment).sort(), ['id', 'reference', 'type', 'name', 'mimeType', 'state', 'reason', 'attempts', 'size', 'sha256', 'sourceHashVerified'].sort());
+      assert.deepEqual(Object.keys(attachment).sort(), ['id', 'reference', 'revisionId', 'type', 'name', 'mimeType', 'state', 'reason', 'attempts', 'size', 'sha256', 'sourceHashVerified'].sort());
+      assert.ok(message.revisions.some(revision => revision.revisionId === attachment.revisionId), 'anexo público pertence à revisão capturada');
     }
     const response = await fetch(url + '/api/attachments/' + availableId, { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
     assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);

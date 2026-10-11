@@ -22,7 +22,7 @@ export function parsePeriod(from?: unknown, to?: unknown): EffectivePeriod {
     return { zone, from: start?.toString() ?? null, to: end?.toString() ?? null, startMs, endMs, startUtc: startMs === null ? null : new Date(startMs).toISOString(), endUtc: endMs === null ? null : new Date(endMs).toISOString(), dateUnknownPolicy: start || end ? 'Instantes originais desconhecidos são excluídos do período.' : 'Sem período, instantes desconhecidos aparecem por último.' };
   } catch { throw Object.assign(Error('Confira as datas. A data inicial deve ser igual ou anterior à final.'), { status: 400 }); }
 }
-export type Attachment = { id: string; reference: string; revisionId: number; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
+export type Attachment = { id: string; reference: string; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
 export function searchTerms(input: unknown = '') {
   if (typeof input !== 'string' || [...input].length > 2000) throw Object.assign(Error('Use até 2000 caracteres e 25 termos simples.'), { status: 400 });
   const terms = input.normalize('NFC').match(/[\p{L}\p{N}\p{M}]+/gu) ?? [];
@@ -363,7 +363,7 @@ export function openArchive(dataDir: string) {
     const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => { const e = JSON.parse(r.evidence) as Obj; return { ...e, text: str(e.text), revisionId: r.id, fingerprint: revisionFingerprint(r), kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at }; });
     const identities = new Set(origins.flatMap(k => [k.remoteJid, k.participant, k.remoteJidAlt, k.participantAlt]).filter(k => k !== null));
     const identityMappings = (db.prepare('SELECT jid,alternate FROM identity_evidence').all() as { jid: string; alternate: string }[]).filter(m => identities.has(m.jid) || identities.has(m.alternate));
-    const attachments = (db.prepare('SELECT id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string }[]).map(a => getAttachment(a.id));
+    const attachments = (db.prepare('SELECT id,revision_id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string; revision_id: number }[]).map(a => ({ ...getAttachment(a.id)!, revisionId: a.revision_id }));
     return { ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments };
   }
   function locate(input: unknown) {
@@ -447,7 +447,7 @@ export function openArchive(dataDir: string) {
   }
   catch (error) { db.close(); throw error; }
   function getAttachment(id: string): Attachment | null {
-    const row = db.prepare('SELECT a.id,a.reference,a.revision_id AS revisionId,a.type,a.name,a.mime_type AS mimeType,a.state,a.reason,a.size,a.sha256,a.source_hash_verified AS verified,coalesce(j.attempts,0) AS attempts FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.id=?').get(id) as (Omit<Attachment, 'sourceHashVerified'> & { verified: number }) | undefined;
+    const row = db.prepare('SELECT a.id,a.reference,a.type,a.name,a.mime_type AS mimeType,a.state,a.reason,a.size,a.sha256,a.source_hash_verified AS verified,coalesce(j.attempts,0) AS attempts FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.id=?').get(id) as (Omit<Attachment, 'sourceHashVerified'> & { verified: number }) | undefined;
     if (!row) return null;
     const { verified, ...safe } = row; return { ...safe, sourceHashVerified: Boolean(verified) };
   }
