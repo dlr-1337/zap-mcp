@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Busca, contexto, abas e exportação no site
-current_plan: 3
+current_plan: 4
 status: Phase 2 in progress — 02-02 complete; next 02-03
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-10-11T23:23:52.215Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-10-11T23:38:45.359Z"
 last_activity: 2026-10-11
 last_activity_desc: "02-02 verified: 105 tests passed"
-state_head: 0c3a1e39500b4a693e630e22ce706c4dc8da8a1b
+state_head: 154e0d4a2c410d1a2af47f4ab340fdc0f7c3c1b7
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 25
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 ## Current Position
 
 Phase: 2 (Busca, contexto, abas e exportação no site) — READY TO EXECUTE
-Current Plan: 3
+Current Plan: 4
 Total Plans in Phase: 5
 Status: Phase 2 in progress — 02-02 complete; next 02-03
 Last activity: 2026-10-11 — 02-02 verified: 105 tests passed
@@ -70,6 +70,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 01 P06 | 15min | 2 tasks | 8 files |
 | Phase 02 P01 | 14min | 3 tasks | 10 files |
 | Phase 02 P02 | 16min | 3 tasks | 10 files |
+| Phase 02 P03 | 12min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 local concluída após controles e verificador.
 - [Phase 02]: Busca usa FTS por revisão e snapshots sanitizados de sessão; período Temporal respeita DST, mantendo requisitos globais pendentes do aceite real.
 - [Phase 02]: Contexto reutiliza snapshots existentes; abas conservam DOM e posições próprios com geração por sessão/aba e purge TTL/logout/reset;105 testes sintéticos passaram, aceite real segue02-05.
+- [Phase 02]: Preview usa fd verificado, assinatura/MIME e controls nativos sob ação; 113 testes sintéticos passaram, codecs reais permanecem02-05.
 
 ### Pending Todos
 
@@ -116,8 +118,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-11T23:23:26.872Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-10-11T23:38:45.315Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
