@@ -5,30 +5,56 @@ const date = value => value ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'Amer
 let csrfToken, listCursor, messageCursor, selected, listPosition = 0, reading = false, authenticated = false;
 let readVersion = 0, navigationVersion = 0, statusVersion = 0, qrTimer, lastReference, attemptsLimit;
 let searchVersion = 0, searchCursor, searchFilters;
-const searchPanel = document.createElement('section'); searchPanel.id = 'search-panel';
-$('archive').insertBefore(searchPanel, $('archive').querySelector('main'));
-addText(searchPanel, 'h2', 'Buscar mensagens');
-const searchForm = document.createElement('form'); searchForm.id = 'search-form'; searchForm.noValidate = true; searchPanel.append(searchForm);
-const termLabel = addText(searchForm, 'label', 'Termos'); termLabel.htmlFor = 'search-terms';
-const termInput = document.createElement('input'); termInput.id = 'search-terms'; searchForm.append(termInput);
-const searchButton = addText(searchForm, 'button', 'Buscar mensagens', 'primary'); searchButton.id = 'search-submit'; searchButton.type = 'submit';
-const searchStatus = addText(searchPanel, 'p', 'Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.'); searchStatus.id = 'search-status'; searchStatus.setAttribute('role', 'status');
-const searchError = addText(searchPanel, 'p', ''); searchError.id = 'search-error'; searchError.setAttribute('role', 'alert');
-const searchScope = addText(searchPanel, 'p', 'Todo o acervo'); searchScope.id = 'search-scope';
-const searchResults = document.createElement('ol'); searchResults.id = 'search-results'; searchPanel.append(searchResults);
-const moreResults = addText(searchPanel, 'button', 'Carregar resultados seguintes'); moreResults.id = 'more-results'; moreResults.hidden = true;
-const refreshSearch = addText(searchPanel, 'button', 'Atualizar busca'); refreshSearch.id = 'refresh-search'; refreshSearch.hidden = true;
+let contactVersion = 0, contactSelection, candidateCursor, candidateQuery;
+const searchPanel = $('search-panel'), searchForm = $('search-form'), termInput = $('search-terms'), searchButton = $('search-submit');
+const searchStatus = $('search-status'), searchError = $('search-error'), searchScope = $('search-scope'), searchResults = $('search-results');
+const moreResults = $('more-results'), refreshSearch = $('refresh-search');
+const conversationLabel = c => (c.name ?? 'Conversa sem nome recebido') + ' · ' + (c.identity ?? unknown) + ' · ' + c.id;
+async function locateContacts(append = false) {
+  if (!authenticated || $('candidate-panel').getAttribute('aria-busy') === 'true') return;
+  const version = readVersion, ticket = ++contactVersion;
+  if (!append) candidateQuery = $('contact-query').value.trim();
+  const query = new URLSearchParams({ q: candidateQuery }); if (append && candidateCursor) query.set('cursor', candidateCursor);
+  $('candidate-panel').setAttribute('aria-busy', 'true'); $('locate-contact').disabled = $('more-candidates').disabled = true; $('candidate-status').textContent = 'Localizando conversas…'; $('contact-error').textContent = '';
+  try {
+    const response = await request('/api/conversations?' + query); if (!response.ok) throw Error('server'); const data = await response.json();
+    if (version !== readVersion || ticket !== contactVersion || !authenticated) return;
+    if (!append) $('contact-candidates').replaceChildren();
+    for (const c of data.conversations) {
+      const li = document.createElement('li');
+      addText(li, 'p', conversationLabel(c) + ' · ' + (c.kind === 'group' ? 'Grupo' : c.kind === 'individual' ? 'Individual' : unknown)).dir = 'auto';
+      detail(li, 'Última data — America/Sao_Paulo', date(c.lastTimestamp));
+      const choose = addText(li, 'button', 'Usar na busca'); choose.type = 'button';
+      choose.addEventListener('click', () => { contactSelection = c; $('contact-query').value = c.name ?? c.identity ?? c.id; $('contact-selection').textContent = 'Conversa: ' + conversationLabel(c); $('contact-error').textContent = ''; $('contact-query').removeAttribute('aria-invalid'); searchButton.focus(); });
+      $('contact-candidates').append(li);
+    }
+    candidateCursor = data.nextCursor; $('more-candidates').hidden = !candidateCursor;
+    const n = $('contact-candidates').children.length; $('candidate-status').textContent = n ? n + (n === 1 ? ' conversa localizada' : ' conversas localizadas') : 'Não encontrado no acervo. Confira o nome ou a identidade.';
+  } catch (error) { if (version === readVersion && ticket === contactVersion && !['stale', 'expired'].includes(error.message)) { $('contact-error').textContent = 'Não foi possível localizar conversas. Tente localizar novamente.'; $('candidate-status').textContent = $('contact-candidates').children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; } }
+  finally { if (version === readVersion && ticket === contactVersion) { $('candidate-panel').removeAttribute('aria-busy'); $('locate-contact').disabled = $('more-candidates').disabled = false; } }
+}
+$('contact-query').addEventListener('input', () => { ++contactVersion; contactSelection = candidateCursor = undefined; $('contact-selection').textContent = 'Todo o acervo'; $('contact-candidates').replaceChildren(); $('more-candidates').hidden = true; $('candidate-panel').removeAttribute('aria-busy'); $('locate-contact').disabled = $('more-candidates').disabled = false; });
+$('locate-contact').addEventListener('click', () => locateContacts()); $('more-candidates').addEventListener('click', () => locateContacts(true));
+$('all-archive').addEventListener('click', () => { ++contactVersion; contactSelection = candidateCursor = undefined; $('contact-query').value = ''; $('contact-query').removeAttribute('aria-invalid'); $('contact-selection').textContent = 'Todo o acervo'; $('contact-error').textContent = $('candidate-status').textContent = ''; $('contact-candidates').replaceChildren(); $('more-candidates').hidden = true; $('candidate-panel').removeAttribute('aria-busy'); $('locate-contact').disabled = $('more-candidates').disabled = false; });
 async function search(append = false) {
   if (!authenticated || searchPanel.getAttribute('aria-busy') === 'true') return;
   const version = readVersion, ticket = ++searchVersion;
-  if (!append) searchFilters = new URLSearchParams({ q: termInput.value });
+  if (!append) {
+    for (const id of ['contact-query', 'search-terms', 'search-from', 'search-to']) $(id).removeAttribute('aria-invalid');
+    if ($('contact-query').value.trim() && !contactSelection) { $('contact-error').textContent = 'Escolha uma conversa da lista ou limpe o campo para buscar em todo o acervo.'; $('contact-query').setAttribute('aria-invalid', 'true'); $('contact-query').focus(); return; }
+    const tokens = termInput.value.normalize('NFC').match(/[\p{L}\p{N}\p{M}]+/gu) ?? [];
+    if ([...termInput.value].length > 2000 || tokens.length > 25 || termInput.value.trim() && !tokens.length) { searchError.textContent = 'Use até 2000 caracteres e 25 termos simples.'; termInput.setAttribute('aria-invalid', 'true'); termInput.focus(); return; }
+    const from = $('search-from').value, to = $('search-to').value;
+    if (from && to && from > to || [from, to].some(v => v && (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(v) || v.startsWith('0000-')))) { searchError.textContent = 'Confira as datas. A data inicial deve ser igual ou anterior à final.'; $('search-from').setAttribute('aria-invalid', 'true'); $('search-from').focus(); return; }
+    searchFilters = new URLSearchParams({ q: termInput.value, from, to }); if (contactSelection) searchFilters.set('conversationId', contactSelection.id);
+  }
   const query = new URLSearchParams(searchFilters); if (append && searchCursor) query.set('cursor', searchCursor);
-  searchPanel.setAttribute('aria-busy', 'true'); searchButton.disabled = moreResults.disabled = true; searchStatus.textContent = 'Buscando mensagens…'; searchError.textContent = '';
+  searchPanel.setAttribute('aria-busy', 'true'); searchButton.disabled = moreResults.disabled = refreshSearch.disabled = true; searchStatus.textContent = 'Buscando mensagens…'; searchError.textContent = '';
   try {
     const response = await request('/api/search?' + query);
     if (version !== readVersion || ticket !== searchVersion) return;
     const data = await response.json(); if (version !== readVersion || ticket !== searchVersion) return;
-    if (!response.ok) { searchError.textContent = response.status === 410 ? 'Este recorte expirou. Atualize a busca para criar um novo recorte.' : 'Não foi possível buscar mensagens. Tente buscar novamente.'; searchStatus.textContent = searchResults.children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; refreshSearch.hidden = false; return; }
+    if (!response.ok) { searchError.textContent = response.status === 410 ? 'Este recorte expirou. Atualize a busca para criar um novo recorte.' : [413, 429].includes(response.status) ? data.error : response.status === 404 ? 'Não encontrado no acervo. Confira o contato e busque novamente.' : 'Não foi possível buscar mensagens. Tente buscar novamente.'; searchStatus.textContent = searchResults.children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; refreshSearch.hidden = false; return; }
     if (!append) searchResults.replaceChildren();
     for (const message of data.messages) {
       const li = messageItem(message), article = li.querySelector('article');
@@ -43,16 +69,22 @@ async function search(append = false) {
     }
     searchCursor = data.nextCursor; moreResults.hidden = !searchCursor; refreshSearch.hidden = false;
     const n = searchResults.children.length;
-    searchStatus.textContent = n ? n + (n === 1 ? ' resultado carregado' : ' resultados carregados') + (searchCursor ? '' : '. Todos os resultados deste recorte foram carregados.') : 'Não encontrado no acervo. Nenhuma mensagem corresponde aos filtros. Ajuste a conversa, os termos ou o período e busque novamente.';
-    searchScope.textContent = 'Todo o acervo; fuso: ' + data.effectiveFilters.zone;
+    searchStatus.textContent = n ? n + (n === 1 ? ' resultado carregado' : ' resultados carregados') + (searchCursor ? '' : '. Todos os resultados deste recorte foram carregados.') : '';
+    $('search-empty').hidden = n !== 0;
+    const filters = data.effectiveFilters, c = data.messages[0]?.conversation;
+    searchScope.textContent = (filters.conversationId ? 'Conversa: ' + (c ? conversationLabel(c) : filters.conversationId) : 'Todo o acervo') + '; período: ' + (filters.from ?? 'início aberto') + ' até ' + (filters.to ?? 'fim aberto') + '; fuso: ' + filters.zone + '; termos: ' + (filters.terms.join(' · ') || 'sem termos');
+    $('search-utc').hidden = false; $('search-limits').replaceChildren();
+    detail($('search-limits'), 'Início inclusivo UTC', filters.startUtc ?? 'Aberto'); detail($('search-limits'), 'Fim exclusivo UTC', filters.endUtc ?? 'Aberto'); addText($('search-limits'), 'p', filters.dateUnknownPolicy);
   } catch (error) { if (version === readVersion && ticket === searchVersion && !['stale', 'expired'].includes(error.message)) { searchError.textContent = 'Não foi possível buscar mensagens. Tente buscar novamente.'; searchStatus.textContent = searchResults.children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; } }
-  finally { if (version === readVersion && ticket === searchVersion) { searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = false; } }
+  finally { if (version === readVersion && ticket === searchVersion) { searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = refreshSearch.disabled = false; } }
 }
 searchForm.addEventListener('submit', e => { e.preventDefault(); search(); }); moreResults.addEventListener('click', () => search(true)); refreshSearch.addEventListener('click', () => search());
 function hideQr() { clearTimeout(qrTimer); $('qr')?.remove(); $('qr-instruction').hidden = true; }
 function signedOut(message = '') {
   ++readVersion; ++navigationVersion; ++statusVersion; ++searchVersion;
-  searchResults.replaceChildren(); searchForm.reset(); searchCursor = searchFilters = undefined; searchError.textContent = ''; searchStatus.textContent = 'Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.'; searchScope.textContent = 'Todo o acervo'; moreResults.hidden = refreshSearch.hidden = true; searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = false;
+  ++contactVersion; contactSelection = candidateCursor = candidateQuery = undefined; $('contact-candidates').replaceChildren(); $('candidate-status').textContent = $('contact-error').textContent = ''; $('contact-selection').textContent = 'Todo o acervo'; $('more-candidates').hidden = true; $('candidate-panel').removeAttribute('aria-busy'); $('locate-contact').disabled = $('more-candidates').disabled = false;
+  searchResults.replaceChildren(); searchForm.reset(); searchCursor = searchFilters = undefined; searchError.textContent = ''; searchStatus.textContent = 'Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.'; searchScope.textContent = 'Todo o acervo'; moreResults.hidden = refreshSearch.hidden = true; $('search-empty').hidden = $('search-utc').hidden = true; $('search-limits').replaceChildren(); searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = refreshSearch.disabled = false;
+  for (const id of ['contact-query', 'search-terms', 'search-from', 'search-to']) $(id).removeAttribute('aria-invalid');
   authenticated = reading = false; selected = listCursor = messageCursor = csrfToken = lastReference = attemptsLimit = undefined;
   hideQr();
   $('archive').hidden = true; $('archive').classList.remove('reading'); $('login-panel').hidden = false;

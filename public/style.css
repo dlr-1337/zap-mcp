@@ -41,6 +41,12 @@ blockquote { margin: 16px 0; padding: 16px; border-left: 1px solid #66717f; whit
 #pairing { margin-top: 24px; }
 #coverage-batches li { margin-bottom: 8px; }
 #refresh-conversation { margin-bottom: 16px; }
+#search-panel { min-width: 0; padding: 24px; margin-bottom: 32px; background: #fff; border: 1px solid #d7dce1; overflow-wrap: anywhere; }
+#search-form input { width: 100%; min-width: 0; margin-bottom: 16px; }
+.search-actions, .search-dates { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.search-dates > div { flex: 1 1 200px; min-width: 0; }
+#contact-candidates li { padding: 16px 0; border-bottom: 1px solid #d7dce1; }
+#contact-selection { white-space: pre-wrap; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 .skip { position: absolute; left: 16px; top: 16px; padding: 8px 16px; background: #fff; transform: translateY(-200%); }
 .skip:focus { transform: none; }
@@ -51,6 +57,8 @@ blockquote { margin: 16px 0; padding: 16px; border-left: 1px solid #66717f; whit
   #reader { display: none; }
   .reading #reader { display: block; }
   .reading #conversation-panel { display: none; }
+  .reading #search-panel { display: none; }
+  #search-panel { padding: 16px; }
   .status-panel { padding: 16px; margin-bottom: 24px; }
   nav, #reader { padding: 16px; }
 }

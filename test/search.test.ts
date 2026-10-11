@@ -111,13 +111,13 @@ test('calendário estrito limites abertos original null e Date.max não viram in
 test('busca privada valida auth cursores limites termos literais homônimos e sentinelas', async t => {
   const { s, read, base, headers, login } = await searchFixture(t);
   const secret = 'PRIVATE_SENTINEL_NEVER_RETURN';
-  s.archive.ingestHistory({ chats: [{ id: key.remoteJid, name: 'Homônimo' }, { id: '2@g.us', subject: 'Homônimo' }], messages: [{ key, messageTimestamp: 123, privateEnvelope: secret, message: { documentMessage: { caption: 'café OR שלום <script>window.EXECUTED=1</script>', fileName: '../nome.pdf', mediaKey: Buffer.alloc(32), url: 'https://private/' + secret } } }, { key: { ...key, id: 'b' }, message: { conversation: 'café' } }] });
+  s.archive.ingestHistory({ chats: [{ id: key.remoteJid, subject: 'Homônimo' }, { id: '2@g.us', subject: 'Homônimo' }], messages: [{ key, messageTimestamp: 123, privateEnvelope: secret, message: { documentMessage: { caption: 'café OR שלום <script>window.EXECUTED=1</script>', fileName: '../nome.pdf', mediaKey: Buffer.alloc(32), url: 'https://private/' + secret } } }, { key: { ...key, id: 'b' }, message: { conversation: 'café' } }] });
   const candidates = await (await fetch(base + '/api/conversations?q=Homônimo', { headers })).json();
   assert.equal(candidates.conversations.length, 2); assert.equal(new Set(candidates.conversations.map((c: any) => c.id)).size, 2);
   const first = await read('?q=cafe&limit=1'); assert.equal(first.messages.length, 1); assert.ok(first.nextCursor);
   assert.equal((await read('?q=' + encodeURIComponent('cafe OR'))).messages.length, 1);
   assert.equal((await read('?q=' + encodeURIComponent('cafe\u0301'))).messages.length, 2);
-  assert.equal((await read('?q=' + encodeURIComponent('" OR 1=1 --'))).messages.length, 0);
+  assert.equal((await read('?q=' + encodeURIComponent('" OR 1=1 --'))).messages.length, 1, 'OR e 1 são termos presentes em uma evidência, não operadores que retornam todas');
   assert.doesNotMatch(JSON.stringify(first), /PRIVATE_SENTINEL|descriptor|payload|mediaKey|privateEnvelope|https:\/\//);
   const other = await login();
   assert.equal((await fetch(base + '/api/search?q=cafe&limit=1&cursor=' + encodeURIComponent(first.nextCursor), { headers: other })).status, 400);

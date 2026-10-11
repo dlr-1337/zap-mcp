@@ -23,12 +23,14 @@ async function uiFixture(t: any) {
 test('site encontra termo literal em evidência congelada', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', name: 'Homônimo' }], messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'm', fromMe: false }, messageTimestamp: 123, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { conversation: 'Orçamento café <img src=x onerror=window.EXECUTED=1>' } }] });
+  s.archive.ingestUpdates([{ key: { remoteJid: '1@s.whatsapp.net', id: 'm', fromMe: false }, update: { message: { conversation: 'texto atual' }, messageTimestamp: 124 } }]);
   await login();
   assert.equal(await page.locator('#search-form').count(), 1, 'formulário real de busca disponível');
   await page.locator('#search-terms').fill('cafe'); await page.locator('#search-submit').click();
   await page.waitForFunction(() => document.getElementById('search-results')?.children.length === 1);
   const result = page.locator('#search-results > li');
   assert.match(await result.textContent(), /Orçamento café/); assert.match(await result.textContent(), /Referência: /);
+  assert.match(await result.textContent(), /Correspondência em conteúdo anteriormente capturado — registro histórico/); assert.match(await result.textContent(), /texto atual/); assert.match(await page.locator('#search-status').textContent(), /1 resultado carregado/);
   assert.equal(await result.locator('img').count(), 0); assert.equal(await page.evaluate(() => (window as any).EXECUTED), undefined);
   assert.doesNotMatch(await page.locator('body').textContent(), /PRIVATE_SENTINEL/);
   await result.getByRole('button', { name: 'Abrir contexto' }).click();
@@ -36,10 +38,35 @@ test('site encontra termo literal em evidência congelada', async t => {
   assert.equal(await page.locator('#messages > li').count(), 1);
 });
 
+test('DOM candidatos zero um falha buscas loading termos inválidos e logout recusam resposta antiga', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ contacts: [{ id: '1@lid', name: 'Única' }], messages: [{ key: { remoteJid: '1@lid', id: 'm', fromMe: false }, message: { conversation: 'relógio desconhecido' } }] });
+  await login(); await page.locator('#contact-query').fill('ausente'); await page.locator('#locate-contact').click();
+  await page.waitForFunction(() => document.getElementById('candidate-status')?.textContent?.startsWith('Não encontrado'));
+  assert.equal(await page.locator('#contact-candidates > li').count(), 0);
+  await page.locator('#contact-query').fill('Única'); await page.locator('#locate-contact').click();
+  await page.waitForFunction(() => document.getElementById('contact-candidates')?.children.length === 1);
+  assert.equal(await page.locator('#candidate-status').textContent(), '1 conversa localizada');
+  await page.route('**/api/conversations?q=*', (r: any) => r.fulfill({ status: 500, json: { error: 'Solicitação não concluída' } }));
+  await page.locator('#locate-contact').click(); await page.waitForFunction(() => document.getElementById('contact-error')?.textContent?.startsWith('Não foi possível localizar'));
+  assert.equal(await page.locator('#contact-candidates > li').count(), 1); await page.unroute('**/api/conversations?q=*');
+  await page.locator('#all-archive').click();
+  await page.locator('#search-terms').fill('!!!'); await page.locator('#search-submit').click(); assert.match(await page.locator('#search-error').textContent(), /25 termos/); assert.equal(await page.evaluate(() => document.activeElement?.id), 'search-terms');
+  await page.locator('#search-terms').fill('desconhecido'); await page.locator('#search-submit').click(); await page.waitForFunction(() => document.getElementById('search-results')?.children.length === 1);
+  assert.match(await page.locator('#search-results').textContent(), /Não informado pela origem/);
+  let release!: () => void, started!: () => void, delivered!: () => void; const gate = new Promise<void>(r => release = r), begun = new Promise<void>(r => started = r), done = new Promise<void>(r => delivered = r);
+  await page.route('**/api/search?*', async (route: any) => { const response = await route.fetch(); started(); await gate; await route.fulfill({ response }); delivered(); });
+  await page.locator('#refresh-search').click(); await begun;
+  assert.equal(await page.locator('#search-panel').getAttribute('aria-busy'), 'true'); assert.equal(await page.locator('#search-status').textContent(), 'Buscando mensagens…'); assert.equal(await page.locator('#search-submit').isDisabled(), true);
+  await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); release(); await done; await page.unroute('**/api/search?*');
+  await page.waitForTimeout(50); assert.equal(await page.locator('#search-results > li').count(), 0); assert.equal(await page.locator('#archive').isVisible(), false);
+  assert.deepEqual(await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } })), { local: {}, session: {} });
+});
+
 test('contatos homônimos e estados UC01 a UC22 usam DOM acessível e recorte estável', async t => {
   const { s, page, login } = await uiFixture(t);
   const long = 'Homônimo שלום 🧪 ' + 'muito longo '.repeat(60);
-  s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', name: long }, { id: '2@g.us', subject: long }], messages: Array.from({ length: 106 }, (_, i) => ({ key: { remoteJid: i === 0 ? '2@g.us' : '1@s.whatsapp.net', id: 'm' + i, fromMe: false, participant: '3@s.whatsapp.net' }, messageTimestamp: 1541300400, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { documentMessage: { caption: 'café שלום <script>window.EXECUTED=1</script>', fileName: '../../arquivo שלום.pdf' } } })) });
+  s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', subject: long }, { id: '2@g.us', subject: long }], messages: Array.from({ length: 106 }, (_, i) => ({ key: { remoteJid: i === 0 ? '2@g.us' : '1@s.whatsapp.net', id: 'm' + i, fromMe: false, participant: '3@s.whatsapp.net' }, messageTimestamp: 1541300400, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { documentMessage: { caption: 'café שלום <script>window.EXECUTED=1</script>', fileName: '../../arquivo שלום.pdf' } } })) });
   await login();
   assert.equal(await page.locator('#contact-query').count(), 1, 'seletor de contato nativo disponível');
   assert.match(await page.locator('#search-status').textContent(), /Campos vazios buscam todo o acervo/);
@@ -83,10 +110,10 @@ test('contatos homônimos e estados UC01 a UC22 usam DOM acessível e recorte es
   for (const width of [320, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sem overflow em ' + width);
-    await page.screenshot({ path: 'dist/02-01-ui-' + width + '.png', fullPage: true });
+    await page.screenshot({ path: 'dist/02-01-ui-' + width + '.png' });
   }
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; }); await page.setViewportSize({ width: 320, height: 900 });
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'reflow200%'); await page.screenshot({ path: 'dist/02-01-ui-zoom200.png', fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'reflow200%'); await page.screenshot({ path: 'dist/02-01-ui-zoom200.png' });
   assert.equal(await page.locator('#search-results script').count(), 0); assert.equal(await page.evaluate(() => (window as any).EXECUTED), undefined);
   assert.doesNotMatch(await page.locator('body').textContent(), /PRIVATE_SENTINEL/);
   await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' });
