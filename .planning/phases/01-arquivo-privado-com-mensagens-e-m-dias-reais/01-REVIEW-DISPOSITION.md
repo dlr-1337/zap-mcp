@@ -7,9 +7,21 @@ findings:
     severity: critical
     disposition: fixed
     title: "Retry retira o final íntegro preservado pelo merge antes de tentar outro download"
+  - id: CR-01
+    severity: critical
+    disposition: fixed
+    title: "Edição duplicada pela rc14"
+  - id: CR-02
+    severity: critical
+    disposition: fixed
+    title: "Perspectiva do alvo do protocolo"
+  - id: WR-01
+    severity: warning
+    disposition: fixed
+    title: "Citação declarava ausência não verificada"
 open: 0
-total: 1
-recorded: 2026-10-11T00:44:34.811Z
+total: 4
+recorded: 2026-10-11T00:44:54.295Z
 ---
 
 # Phase 01: Code Review Disposition
@@ -17,6 +29,9 @@ recorded: 2026-10-11T00:44:34.811Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | CR-03 | critical | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| CR-01 | critical | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| CR-02 | critical | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-01 | warning | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
