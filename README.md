@@ -23,6 +23,14 @@ Uma conta e um proprietário. O site e o MCP consultam o arquivo persistido; nã
 
 Veja o [contexto do projeto](.planning/PROJECT.md), os [requisitos](.planning/REQUIREMENTS.md), o [roadmap completo](.planning/ROADMAP.md) e a [pesquisa técnica](.planning/research/SUMMARY.md).
 
+## Piloto local verificado
+
+Em 2026-10-11, conta real vinculada e amostras de conversa individual/grupo comparadas autonomamente com WhatsApp Web, conforme autorização do proprietário. Áudio, imagem, vídeo e documento foram correlacionados pelos IDs de origem; seus originais preservados passaram pela conferência de tamanho/hash recebido da origem, disco e HTTP autenticado. A comparação cobre somente o recorte observado, sem afirmar histórico integral ou comparação dos bytes baixados diretamente do Web.
+
+Após corrigir repetição de originais que ocultava 244 projeções, uma cópia privada pós-reparo restaurou 8.684 mensagens e 828 originais disponíveis. Fonte parada durante verificação e nenhum segundo coletor; único coletor voltou conectado sem novo QR. Download de áudio pelo Chrome normal completou 33.529 bytes com hash igual ao acervo e página funcionando. A suíte completa passou 86 testes; revisão incremental passou 12 testes e 29 verificações independentes, sem achados novos. Os controles finais da fase ainda são necessários para concluir seus requisitos.
+
+O navegador auxiliar separado sofreu SIGSEGV de causa nativa não determinada e foi retirado do procedimento; não houve alteração global de Chromium. Use o Chrome normal para consultar o site. Campos desconhecidos e mídias não recuperadas permanecem explícitos. Detalhes e arquivos reais continuam privados fora do Git; VPS e MCP ainda não foram validados.
+
 ## Privacidade
 
 O repositório público contém o código e os documentos do projeto. Mensagens reais, anexos, bancos, sessões de WhatsApp, credenciais e exportações devem permanecer no ambiente privado e fora do Git. As regras de exclusão estão em [.gitignore](.gitignore); todo material novo precisa respeitar essa separação.

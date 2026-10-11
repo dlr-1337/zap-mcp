@@ -1,7 +1,7 @@
 # Phase 1: Arquivo privado com mensagens e mídias reais - Context
 
 **Gathered:** 2026-10-10
-**Status:** Execução em andamento; checkpoint 01-07-02 aguardando comparação humana
+**Status:** Plano 01-07 com três tarefas verificadas; controles finais da fase pendentes
 **Modo:** `1 --all --auto`; decisões operacionais escolhidas pelo agente conforme a autorização, sem respostas individuais do usuário.
 
 <domain>
@@ -50,7 +50,7 @@ Responsabilidade desta fase: PRIV-01/02/03, SYNC-01 a SYNC-07, EVID-01, MEDIA-01
 - **D-17:** Interface simples com estado de conexão, lista de conversas, uma conversa por vez, mensagens e acesso privado ao original disponível; leitura limitada e ordenada sem carregar todo o acervo.
 - **D-18:** Autor/direção, data original em America/Sao_Paulo, referência, tipo, texto/legenda, citação recebida, alterações e estados de anexo; campos desconhecidos explícitos e homônimos distintos.
 - **D-19:** Só após preparar e conferir cópia privada recuperável e exclusividade do coletor; manter consulta sem coletor para testes e restauração.
-- **D-20:** Comparar conversa conhecida e exemplos reais acessíveis dos quatro tipos com o celular, incluir grupo/direção recebida-enviada, testar leitura offline e reinício; falta de acesso, QR ou amostra mantém aceite pendente. O proprietário indicou o grupo conhecido indicado; usar os itens existentes desse grupo, sem enviar mensagens para criar amostras. A conversa individual conhecida também foi indicada, localizada e aberta privadamente; a comparação das amostras com o celular continua pendente. `--auto` resolve escolhas operacionais, sem substituir essa evidência humana.
+- **D-20:** Comparar autonomamente a conversa individual e o grupo indicados com o WhatsApp Web já vinculado do proprietário, conforme instrução explícita de 2026-10-11. Conferir autoria/direção, IDs, data/tipo/texto/citação e quatro formatos reais acessíveis, leitura offline e reinício; falta de amostra essencial mantém aceite pendente. O usuário dispensou a comparação manual no celular; QR já lido é a única intervenção humana necessária nesta fase. Não enviar mensagens para fabricar amostras. A comparação Web cobre somente o recorte observado; hashes de origem dos binários são verificados separadamente. `fromMe` identifica a própria conta, sem inferir dispositivo.
 
 ### Discrição do agente
 - Escolher estrutura de módulos, schema/migrações, biblioteca mínima de sessão/QR, layout e números iniciais de fila/tentativas/reserva de disco com base na pesquisa da versão real e recursos medidos; registrar limites efetivos sem criar telas extras.
@@ -78,7 +78,7 @@ Responsabilidade desta fase: PRIV-01/02/03, SYNC-01 a SYNC-07, EVID-01, MEDIA-01
 - `.planning/research/FEATURES.md` — capacidades v1 e limites de pesquisa/consulta.
 
 ### Execução e continuidade
-- `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md` — contrato do piloto e comparação humana obrigatória.
+- `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md` — contrato do piloto atualizado para comparação autônoma com Web.
 - `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md` — preparo concluído, intervenção restante e retomada sem repetir os planos anteriores.
 - `.planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-SUMMARY.md` — resultados técnicos reais e aceite ainda interrompido.
 
@@ -95,7 +95,7 @@ Não há SPEC/ADR externo específico desta fase. As URLs técnicas citadas na p
 - `src/backup.ts`: snapshot privado, validação, restauração isolada e preflight antes do coletor.
 - `src/main.ts`, `src/auth.ts` e `public/`: serviço HTTP autenticado e leitor básico já implementados; reutilizar os contratos existentes. Não há maps em `.planning/codebase/`.
 - `.gitignore` já exclui dependências, build, configuração privada, banco, mídia, sessão, exportações e backups; novos arquivos privados precisam continuar fora do Git.
-- `test/` cobre autenticação, ingestão, revisões, sessão, somente leitura, mídia e recuperação. A última execução registrada passou 82 testes; fixtures não comprovam cobertura do celular.
+- `test/` cobre autenticação, ingestão, revisões, sessão, somente leitura, mídia e recuperação. A última suíte completa passou 86 testes; revisão incremental confirmou 12 testes e 29 verificações independentes. Fixtures não comprovam cobertura da conta.
 
 ### Established Patterns
 - Planejamento versionado no ramo `main`; repositório público, dados reais privados.

@@ -1,53 +1,32 @@
-# Checkpoint01-07-02 — comparação privada com o celular
+# Continuidade do plano 01-07
 
-**Type:** human-action
-**Gate:** blocking-human
-**Plan:** 01-07
-**Progress:** 1/3 tasks complete
-**Status:** proprietário ainda não conseguiu comparar as amostras
+Atualizado em 2026-10-11. **Três tarefas operacionais concluídas; verificação final da meta pendente. Nenhuma intervenção do proprietário pendente.**
 
-## Completed Tasks
+## Instrução atual
 
-| Task | Nome | Commit | Arquivos |
-|---|---|---|---|
-| 1 | QR lido, conexão e ingestão reais confirmadas | 00d4e38 | README.md |
+O usuário autorizou comparar autonomamente com WhatsApp Web já vinculado no Chrome e dispensou a conferência manual no celular. D-20, Plano07 e SYNC-03 refletem essa instrução posterior. Não pedir a comparação pelo celular novamente. O QR já foi lido e a conexão confirmada.
 
-Pareamento realizado pelo humano; HTTP privado conectado, QR409/indisponível e ingestão observados. Não pedir outro QR sem invalidade real da sessão.
+## Evidência concluída
 
-## Trabalho pronto
+- Conversa individual indicada: 26 mensagens comuns correlacionadas por ID;21 textos coincidem,20 datas originais coincidem e23 direções comparáveis coincidem. Uma edição não recebeu o instante original; horário da alteração coincide com Web e permanece separado. Uma notificação de fixação e três posições de mídia sem direção visível não foram aprovadas por inferência.
+- Grupo indicado:27 IDs correlacionados; dez datas e sete identidades de autores comparáveis conferidas. Oito de dez corpos coincidem literalmente; duas diferenças de apresentação envolvem menção/nome e formatação/trecho expandido. Texto bruto e citação recebidos permanecem preservados, sem prometer igualdade literal com renderização do Web.
+- Áudio, imagem, vídeo e documento encontrados no Web pelos mesmos IDs de origem e controles do respectivo tipo; horários visíveis de áudio/vídeo coincidem. Tamanho/hash recebido da origem, disco, HTTP autenticado e restore comprovam os quatro originais. Bytes baixados diretamente do Web não foram confirmados; duas tentativas de captura do download do documento expiraram.
+- Reparo de repetição de originais:244 projeções recuperadas ao reprocessar313 itens já recebidos, preservando referências, revisões, IDs de anexos e828 originais disponíveis; dois conflitos reais ou sem prova de equivalência continuam explícitos. Backup privado conferido precedeu o reparo.
+- Download após o reparo no Chrome normal: áudio de33.529 bytes, hash igual ao acervo e página ainda funcionando. Rótulo de direção corrigido para “Enviada por você”, sem inferir dispositivo de envio.
+- Nova cópia pós-reparo:8.684 mensagens e828 originais disponíveis. Todos os registros comparados de mensagens/revisões/anexos/fila/lotes/itens iguais à fonte parada; SQL/FK, login, paginação e downloads autenticados offline conferidos. Quatro IDs/referências/tamanhos/hashes originais preservados. Nenhum segundo coletor na restauração.
+- Três mensagens novas entre cópias: duas enviadas pela própria conta e uma recebida, sem envio pelo Zap MCP. Único coletor reiniciou no mesmo perfil, conectado sem novo QR.
+- Suíte completa anterior à mudança textual:86/86. Revisão incremental atual:12/12 testes e29 verificações adversariais, nenhum achado novo. Ledger anterior: cinco corrigidos, zero abertos.
 
-- Lote inicial8.924 itens confirmados,0falhas/pendentes após reparo do diário recebido;8.679mensagens distintas.470itens reprocessados com participant explícito do envelope rc14, conservando8.673referências e1.668IDs anteriores. Grupo conhecido indicado pelo humano:486mensagens,426recebidas/60enviadas e3autores recebidos.
-- Quatro originais do grupo disponíveis: áudio62.831B, imagem199.071B, vídeo8.304.865B e documento118.382B. Bytes/tamanho/SHA256 de origem, arquivo local e GET autenticado iguais. GET/HEAD/Range sem sessão401; Rangeautenticado206.
-- Conversa individual conhecida agora indicada pelo proprietário e localizada por correspondência única:270mensagens,192recebidas/78enviadas, sem direção desconhecida nem referências repetidas no recorte percorrido por HTTP. Janela privada autenticada aberta nas100mais recentes; título/identidade/amostra ficam somente na evidência operacional privada.
-- Snapshot privado posterior8.680mensagens/190originais disponíveis restaurado com fonte parada. Mesmos4IDs/referências/bytes/hash e486mensagens conferidos em HTTP offline com collectorEnabledfalse. Clone parado; perfil fonte reconectou sem QR e repetiu4downloads com hashes iguais.
--82/82 testes, zero failures/skips/todos; build e preflight passaram. Fixes mínimos DNS0315319/6b8337c e envelope8a2fd6f/72ee356, com RED_EVIDENCE_OK.
-- Durante a preparação, navegador privado visível e autenticado apresentou o grupo com100mensagens da página inicial; botão de mensagens anteriores conserva o restante. Detalhes da evidência mostram participante/direção/data/histórico recebido; “Baixar original” oferece os arquivos disponíveis.
+## Crash e navegador
 
-## Current Task
+O coredump de Chromium pertence ao navegador auxiliar separado usado para apresentar o piloto. SIGSEGV confirmado; nenhum OOM encontrado, símbolos insuficientes para determinar a causa nativa exata. Não houve alteração global de Chrome/GPU. O auxiliar não deve ser relançado; usar Chrome do proprietário para o site e Web somente como referência de comparação. O coletor continua Baileys sem navegador.
 
-**Task 2:** conferir conversa, grupo, direções/autoria e quatro originais conhecidos.
-**Status:** aguardando comparação humana.
-**Blocked by:** humano respondeu “Ainda não consegui comparar”. Grupo e conversa individual conhecida já foram indicados e preparados; indicação e provas técnicas não substituem a conferência das mensagens/autores/direções e originais com o celular.
+A política de navegação recusou chrome://downloads/ por admitir HTTP/HTTPS; não houve contorno por CDP/perfil/histórico. Capturas de tela do cabeçalho por API suportada expiraram; nenhuma imagem foi rotulada como evidência.
 
-Ação indispensável, quando disponível: comparar privadamente os itens existentes do grupo aberto com o WhatsApp no celular, indicar divergência/faltantes ou confirmar a correspondência; conferir áudio/imagem/vídeo/documento e uma conversa individual conhecida. Não publicar conteúdo, números ou arquivos no chat público. Nenhuma mensagem precisa ser enviada para fabricar amostra.
+## Retomada
 
-Tarefa3 tem provas técnicas independentes de backup/restore/restart/offline já feitas, mas permanece não concluída até satisfazer a comparação conhecida e o fechamento do aceite. Não repetir por ritual testes já comprovados sem nova alteração/divergência.
+Fonte local: http://127.0.0.1:3000, zap-mcp-pilot.service, um coletor. Caminhos, credencial, PIDs, snapshots e provas detalhadas estão no checkpoint operacional privado fora do checkout; não imprimir ou versionar seu conteúdo. O browser auxiliar foi retirado das instruções operacionais.
 
-## Retomada da discussão e revisão do piloto
+Próxima etapa: controles Nyquist/segurança/UI e verificação da meta da fase, depois reconciliar requisitos/ROADMAP/STATE com o veredito. Não repetir QR, reparo ou planos01–06. Não avançar à fase2 antes dos controles; VPS, backup externo e MCP continuam nas fases respectivas. Limites de histórico e mídia permanecem explícitos.
 
-A nova invocação `1 --all --auto` atualizou o contexto para refletir o produto existente e a indicação humana do grupo, mantendo D-01 a D-20. O gate canônico confirmou20/20decisões cobertas pelos planos; não houve mudança de capacidade nem reexecução dos planos concluídos. A cadeia reencontrou este checkpoint humano, que continua obrigatório.
-
-Revisão independente incremental de seis arquivos do piloto não comprovou defeito novo de produção; encontrou WR-02, um teste de DNS que podia passar por timeout. Corrigido em `f277bdfa2ee07af20307b915a194ff0a637cf141`, somente em `test/media.test.ts`: subprocesso isolado, request e lookup efetivamente alcançados, endereço/família conferidos e erro sintético por identidade, sem rede. Mutação em memória retirando `family: 4` falhou na assertiva específica. Suíte no checkout principal82/82; no worktree oculto81/82 por assets recusados pelo `sendFile`, resolvido ao executar no caminho normal sem mudar produção.
-
-Revisão final limpa: teste focado1/1 e quatro mutações rejeitadas (família ausente, erro arbitrário, timeout antecipado e lookup omitido). Relatórios canônicos `01-REVIEW.md`/`01-REVIEW-FIX.md` e ledger preservam cinco achados corrigidos, zero abertos. A comparação humana não foi realizada nem presumida por essa revisão; requisitos e tarefa2 permanecem pendentes.
-
-## Continuidade
-
-- Fonte local: http://127.0.0.1:3000, `zap-mcp-pilot.service`, mesmo perfil e único coletor.
-- Tela privada: após a indicação da conversa individual, `zap-mcp-pilot-browser.service` foi reaberto no mesmo perfil, autenticado e com100mensagens da amostra visíveis. Browser apenas apresenta o site; coletor não executa navegador.
-- Dados, credencial, diário, snapshots e provas ficam privados fora do checkout. Checkpoint operacional persistente registra caminhos/PIDs e provas sem imprimi-los publicamente.
-- SUMMARY mantém `status: halted`, requisitosPending e fase1 aberta. Limites individuais de mídia continuam explícitos; snapshot registra17indisponíveis, não indisponibilidade definitiva da conta. VPS/domínio, backup externo e Codex-MCP ainda não validados.
-
-Checagem final da retomada: fonte HTTP conectada, collectorEnabledtrue, pairingAvailablefalse, consulta sem autenticação401 e serviço coletor ativo. A preparação da conversa individual confirmou novamente conexão e tela autenticada, sem novo QR.
-
-O SDK conta um SUMMARY `halted` como plano resumido e deriva 7/7 nos contadores, embora reconheça o plano07 como interrompido. Os marcadores locais de conclusão foram corrigidos para6/7, conservando a sessão/decisões atualizadas pelos handlers. Não usar existência do SUMMARY ou esse contador derivado como aceite: o plano07 tem1/3 tarefas concluídas e exige a comparação humana registrada acima.
+Controles prévios ao verificador: Nyquist validado com zero lacunas automatizadas;17 ameaças planejadas mitigadas/zero abertas no nível1; UI22/24 sem blocker, dois warnings menores corrigidos e assertivas CUA atuais passaram. Build atual e13 testes auth/HTTP/security/readonly passaram em6,92s. Gate TDD:4 planos, zero violações. Gate de regressão cruzada não aplicável à primeira fase.

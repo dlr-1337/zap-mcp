@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Arquivo privado com mensagens e mídias reais
 status: executing
-stopped_at: "Checkpoint 01-07-02: contexto atualizado e revisão limpa; comparação humana pendente"
+stopped_at: "Plano01-07 concluído; controles finais da fase1"
 last_updated: "2026-10-11T02:29:09.622Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 1 execution started
@@ -12,7 +12,7 @@ progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -84,11 +84,11 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-05 mantém UI nativa50/100 e QR efêmero; respostas tardias e páginas restauradas exigem sessão atual.52 testes e QA browser320/768/1280 sintéticos; conta real continua pendente.
 - [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
 - [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
-- [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação humana pendente mantém plano07halted/fase1aberta.
+- [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 aguardando controles finais.
 
 ### Pending Todos
 
-Nenhum todo avulso registrado. Próxima ação: planejar a Phase 1.
+Nenhum todo avulso registrado. Próxima ação: validar Nyquist/segurança/UI e verificar a meta da Phase1.
 
 ### Blockers/Concerns
 
@@ -97,7 +97,7 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 1: Revalidar Baileys/auth/PN-LID/eventos; pareamento exige celular para QR e piloto com conversa/mídias conhecidas, após cópia privada recuperável.
 - Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
-- Plano01-07-02: grupo e conversa individual conhecida preparados; comparação humana de mensagens/autores/direções e quatro originais com o celular ainda pendente. Nenhum requisito concluído.
+- Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; nenhum requisito marcado antes do verificador. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
 
 ## Deferred Items
 
@@ -109,5 +109,7 @@ Nenhum impedimento para iniciar o planejamento.
 ## Session Continuity
 
 Last session: 2026-10-11T01:56:57.468Z
-Stopped at: Checkpoint 01-07-02: contexto atualizado e revisão limpa; comparação humana pendente
+Stopped at: Plano01-07 concluído; controles finais da fase1
 Resume file: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md
+
+- [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.

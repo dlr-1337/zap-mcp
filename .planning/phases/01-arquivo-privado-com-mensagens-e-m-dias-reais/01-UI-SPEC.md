@@ -143,7 +143,7 @@ Accent reserved for: botão “Entrar no acervo”, link “Baixar original”, 
 | Campo desconhecido | Não informado pela origem |
 | Autor desconhecido | Autor não informado pela origem |
 | Conversa sem nome | Conversa sem nome recebido |
-| Direções conhecidas | Recebida / Enviada pelo celular |
+| Direções conhecidas | Recebida / Enviada por você |
 | Direção desconhecida | Direção não informada pela origem |
 | Tipo desconhecido | Tipo não reconhecido; conteúdo disponível limitado aos campos recebidos. |
 | Citação incompleta | Citação recebida; original ainda não relacionado/conferido. |
@@ -194,7 +194,7 @@ Variáveis só usam valores do DTO seguro. Se motivo/tentativas/contagem não vi
 - **Cobertura:** mostrar última ingestão duravelmente confirmada separada de estado de conexão; intervalo usa datas originais mín/máx conhecidas. Lotes mostram recebidos/arquivados e falhas, com conclusão qualificada; relógio de edição/ingestão não substitui instante original. Falhas parciais permanecem acima do leitor sem apagar dados já carregados.
 - **Offline:** WhatsApp desconectado com servidor disponível mantém lista, mensagens e originais salvos operantes. Falta de conexão navegador–servidor mantém somente a leitura já renderizada com aviso de desatualização, oculta QR e permite nova tentativa; não promete download ou acervo offline no navegador. Ao retomar rede, consultar o servidor para validar sessão/estado, sem deduzir autenticação ou conexão pelo evento de rede.
 - **Originais:** disponibilidade exige finalização e integridade confirmadas pelo backend. Mostrar hash local e resultado da comparação com a origem separadamente; hash de origem ausente fica explícito. Download é resposta autenticada com `Content-Disposition: attachment`, inclusive para HTML/SVG; nunca abrir conteúdo ativo na origem do app. Falha não marca sucesso nem altera a mensagem.
-- **Campos/datas:** todas as datas exibidas em `dd/MM/yyyy HH:mm:ss`, 24h, com rótulo visível “America/Sao_Paulo” no leitor/cobertura e ISO original/UTC nos detalhes. Preservar instante; não usar data de ingestão como substituto. Ausência recebe copy explícita. IDs/nome/PN/LID não se fundem por semelhança. Autoria de grupo usa participante recebido; direção enviada deve dizer “Enviada pelo celular”.
+- **Campos/datas:** todas as datas exibidas em `dd/MM/yyyy HH:mm:ss`, 24h, com rótulo visível “America/Sao_Paulo” no leitor/cobertura e ISO original/UTC nos detalhes. Preservar instante; não usar data de ingestão como substituto. Ausência recebe copy explícita. IDs/nome/PN/LID não se fundem por semelhança. Autoria de grupo usa participante recebido; direção enviada deve dizer “Enviada por você”.
 - **Conteúdo:** inserir texto com escape/textContent; sem HTML de conversa, autoexecução, embeddeds remotos, imagens de perfil ou linkificação automática. Mensagens temporárias comuns recebidas são identificadas; visualização única tem apenas metadados permitidos e nenhum botão de recuperação. Erros mostram motivos sanitizados, sem stack trace, caminho do host, sessão ou segredo.
 
 ## Acessibilidade e verificação visual

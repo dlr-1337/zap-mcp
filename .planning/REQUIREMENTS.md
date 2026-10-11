@@ -15,7 +15,7 @@
 
 - [ ] **SYNC-01**: O proprietário pode vincular sua conta pessoal por QR em uma tela privada, sem executar navegador ou WhatsApp Web, e ver o estado da conexão.
 - [ ] **SYNC-02**: O proprietário pode consultar as mensagens de histórico que o dispositivo vinculado efetivamente receber, sem omitir itens de um lote recebido.
-- [ ] **SYNC-03**: Novas mensagens recebidas e enviadas pelo celular são arquivadas nas conversas individuais e de grupo quando entregues pela integração, sem envio pelo Zap MCP.
+- [ ] **SYNC-03**: Novas mensagens recebidas e enviadas pela própria conta são arquivadas nas conversas individuais e de grupo quando entregues pela integração, sem envio pelo Zap MCP. A origem não permite inferir qual dispositivo enviou a mensagem; comparação com WhatsApp Web autorizada pelo proprietário em 2026-10-11.
 - [ ] **SYNC-04**: Reinício e reconexão preservam as credenciais e todas as categorias de chaves da sessão; uma sessão ainda válida retoma com um único coletor ativo, sem exigir novo QR por perda de estado local.
 - [ ] **SYNC-05**: Reprocessar ou receber eventos repetidos ou fora de ordem não duplica mensagens, mescla contatos homônimos nem desfaz uma atualização mais recente; identidades PN/LID são conciliadas apenas com evidência recebida.
 - [ ] **SYNC-06**: Edições e revogações recebidas aparecem com indicação e momento de observação, preservando o conteúdo anteriormente capturado como registro histórico identificado; tipo desconhecido ou conteúdo temporário não recuperado aparece explicitamente.

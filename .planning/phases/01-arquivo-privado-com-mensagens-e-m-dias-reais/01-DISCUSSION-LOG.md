@@ -232,3 +232,7 @@ As decisões D-01 a D-20 foram mantidas em uma única revisão. O contexto descr
 **Evidência na checagem inicial da retomada:** HTTP privado conectado, coletor e navegador ativos, QR indisponível porque o vínculo está estabelecido. As provas registradas de quatro originais, restauração offline e reinício continuam válidas; não foram repetidas nesta revisão documental. Na checagem final, o coletor continuava conectado e o navegador de apoio havia encerrado normalmente; situação registrada no checkpoint.
 
 **Resposta humana ainda vigente:** “Ainda não consegui comparar”. Nenhum aceite foi inferido do modo automático. Planos 01–06 permanecem concluídos; plano 07 mantém o checkpoint humano, sem replanejamento da implementação existente.
+
+## Override explícito — 2026-10-11
+
+O proprietário relatou crash ao baixar áudio, indicou a sessão já vinculada no Chrome e pediu comparação autônoma com seu WhatsApp Web, dispensando conferência no celular. A instrução posterior "só faz oq tem q ser ferito" confirma continuar sem nova reconfirmação. D-20/Plano07 foram atualizados; isso substitui a condição manual anterior, mantendo conta real, quatro tipos, privacidade, somente leitura e limite de cobertura. SYNC-03 e o rótulo da direção passam a referir a própria conta, pois `fromMe` não prova o aparelho de envio. Não houve nova decisão de produto ou ampliação da fase2.
