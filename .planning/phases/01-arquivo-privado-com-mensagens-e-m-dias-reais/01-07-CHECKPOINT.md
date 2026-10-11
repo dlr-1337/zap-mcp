@@ -38,3 +38,5 @@ Tarefa3 tem provas técnicas independentes de backup/restore/restart/offline já
 - Tela privada: `zap-mcp-pilot-browser.service`, grupo aberto e sessão autenticada. Browser apenas apresenta o site; coletor não executa navegador.
 - Dados, credencial, diário, snapshots e provas ficam privados fora do checkout. Checkpoint operacional persistente registra caminhos/PIDs e provas sem imprimi-los publicamente.
 - SUMMARY mantém `status: halted`, requisitosPending e fase1 aberta. Limites individuais de mídia continuam explícitos; snapshot registra17indisponíveis, não indisponibilidade definitiva da conta. VPS/domínio, backup externo e Codex-MCP ainda não validados.
+
+O SDK conta um SUMMARY `halted` como plano resumido e deriva 7/7 nos contadores, embora reconheça o plano07 como interrompido. Os marcadores locais de conclusão foram corrigidos para6/7, conservando a sessão/decisões atualizadas pelos handlers. Não usar existência do SUMMARY ou esse contador derivado como aceite: o plano07 tem1/3 tarefas concluídas e exige a comparação humana registrada acima.

@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Arquivo privado com mensagens e mídias reais
 status: executing
-stopped_at: "Checkpoint 01-07-01: QR real privado preparado; aguarda leitura no celular"
-last_updated: "2026-10-11T00:52:22.650Z"
+stopped_at: "Checkpoint 01-07-02: conexão e originais reais comprovados; comparação humana pendente"
+last_updated: "2026-10-11T01:23:02.482Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 1 execution started
-state_head: f61e1786cd9372028ec6ec1860107120d3bfe3ab
+state_head: bd8b9a6c6385b8fd8e525ddb7f63e7395a38a107
 progress:
   total_phases: 4
   completed_phases: 0
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 
 Phase: 1 (Arquivo privado com mensagens e mídias reais) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Executing
 Last activity: 2026-10-10 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -84,6 +84,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-05 mantém UI nativa50/100 e QR efêmero; respostas tardias e páginas restauradas exigem sessão atual.52 testes e QA browser320/768/1280 sintéticos; conta real continua pendente.
 - [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
 - [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
+- [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação humana pendente mantém plano07halted/fase1aberta.
 
 ### Pending Todos
 
@@ -96,7 +97,7 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 1: Revalidar Baileys/auth/PN-LID/eventos; pareamento exige celular para QR e piloto com conversa/mídias conhecidas, após cópia privada recuperável.
 - Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
-- Plano01-07 aberto: usuário precisa ler QR vigente no celular; conexão da conta, recorte/quatro originais e reinício real ainda pendentes.
+- Plano01-07-02: conta vinculada e quatro originais/restauração/reinício comprovados; proprietário ainda não conseguiu comparar o grupo e falta conversa individual conhecida. Nenhum requisito concluído.
 
 ## Deferred Items
 
@@ -107,6 +108,6 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-11T00:52:22.326Z
-Stopped at: Checkpoint 01-07-01: QR real privado preparado; aguarda leitura no celular
+Last session: 2026-10-11T01:14:55.828Z
+Stopped at: Checkpoint 01-07-02: conexão e originais reais comprovados; comparação humana pendente
 Resume file: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md
