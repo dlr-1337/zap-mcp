@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { startMediaWorker } from '../src/media.js';
 import { tmpdir } from 'node:os';
@@ -13,6 +14,17 @@ import { createService } from '../src/main.js';
 
 const requireBrowser = createRequire(process.env.ZAP_BROWSER_MODULE ?? '/home/otavio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
 const { chromium } = requireBrowser('playwright');
+test('browser exporta conversa inteira além da página e conclui download ZIP', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ messages: Array.from({ length: 161 }, (_, i) => ({ key: { remoteJid: 'export@lid', id: 'm' + i, fromMe: false }, messageTimestamp: 1700000000 + i, message: { conversation: 'exportável ' + i } })) });
+  await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Preparar exportação', exact: true }).count(), 1, 'leitor deve oferecer exportação explícita');
+  await page.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
+  await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).waitFor();
+  const pending = page.waitForEvent('download'); await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).click(); const download = await pending;
+  assert.equal(await download.failure(), null); const path = await download.path();
+  assert.equal(spawnSync('unzip', ['-t', path]).status, 0); const manifest = spawnSync('unzip', ['-p', path, 'manifest.json']); assert.equal(manifest.status, 0); assert.equal(JSON.parse(manifest.stdout.toString()).messages.length, 161);
+});
 async function uiFixture(t: any) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-ui-')), s = createService({ dataDir: dir });
   const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening');
