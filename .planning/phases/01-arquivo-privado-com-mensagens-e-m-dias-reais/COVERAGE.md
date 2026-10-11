@@ -12,18 +12,18 @@ Cobertura começa completa e opt-outs têm razão explícita. Matriz por famíli
 | fetchMessageHistory / pedidos extras suportados | INTEGRATE | Somente quando necessários ao piloto e compatíveis com o pin; registrar alcance recebido — 01-07-02. |
 | getMessage para protocolo/retry | INTEGRATE | Lê proto permitido do arquivo privado, nunca do browser — 01-02/03. |
 | messages.update / delete / edit-revoke recebidos | INTEGRATE | Observações/revisões/tombstones sem mutação remota — 01-02. |
-| contacts.upsert/update / chats.upsert/update / groups.update / group-participants.update / lid-mapping | INTEGRATE | Metadados/aliases recebidos com proveniência, não merge por nome — 01-02/03. |
+| contacts/chats/groups updates; participants; LID mapping | INTEGRATE | Metadados/aliases recebidos com proveniência, não merge por nome — 01-02/03. |
 | downloadMediaMessage / downloadContentFromMessage (originais) | INTEGRATE | Áudio/imagem/vídeo/documento por stream validado — 01-04. |
 | updateMediaMessage / reuploadRequest | INTEGRATE | Renovação interna suportada de original permitido; não enviar mensagens — 01-04. |
 | thumbnail / profilePictureUrl / geração de mídia / transcodificação | OPT-OUT | D-13/D-17: preservar original; previews completos são fase2, sem avatar remoto. |
 | viewOnce unwrap/recovery | OPT-OUT | D-11 proíbe contornar restrição; somente metadados sem payload recuperável. |
-| sendMessage / relayMessage / edit / delete / reactions / polls / forwarding / scheduled messages | OPT-OUT | Usuário proíbe envio/edição/exclusão e automação de escrita no WhatsApp. |
+| message writes: send/relay/edit/delete/reactions/polls/forward/schedule | OPT-OUT | Usuário proíbe envio/edição/exclusão e automação de escrita no WhatsApp. |
 | readMessages / read/read-self/played receipts | OPT-OUT | Usuário proíbe confirmação de leitura; consulta não marca lida. |
 | delivery/sync acknowledgements e retries internos do protocolo | INTEGRATE | A biblioteca pode enviar acks necessários; distintos de leitura — 01-03-02. |
 | sendPresenceUpdate / typing / presenceSubscribe | OPT-OUT | Não anunciar leitura/typing nem construir monitoramento de presença; markOnlineOnConnect false. |
 | chatModify / archive / mute / pin / star / delete-chat / labels writes | OPT-OUT | Somente leitura remota; retenção local não altera conversa do WhatsApp. |
-| groupCreate / participant operations / subject/description/settings / invites / join/leave | OPT-OUT | Administração de grupos não é necessária ao arquivo e ampliaria escrita remota. |
-| onWhatsApp / fetchBlocklist / updateBlockStatus / contact-management / profile/status/privacy writes | OPT-OUT | Sem descoberta/gestão remota de contatos, perfil ou privacidade; usar metadados recebidos. |
+| group writes: create/participants/metadata/settings/invites/join/leave | OPT-OUT | Administração de grupos não é necessária ao arquivo e ampliaria escrita remota. |
+| contacts/blocklist/profile/status/privacy remote management | OPT-OUT | Sem descoberta/gestão remota de contatos, perfil ou privacidade; usar metadados recebidos. |
 | newsletter / channels subscription/create/manage / broadcast/status publication | OPT-OUT | Publicação/gestão de canais/status não foi solicitada; tipos recebidos sem suporte ficam explícitos. |
 | calls / rejectCall / offer / voice-video realtime | OPT-OUT | Chamadas ao vivo/administração não pertencem ao arquivo textual e anexos recebidos. |
 | business/catalog/product/order/payment APIs | OPT-OUT | CRM, comércio e pagamentos fora do escopo pessoal do usuário. |
@@ -214,3 +214,7 @@ C1/C2/C3 são mantidos por projectProhibitions de probe-core.cjs e projetados de
 Contribuições ativas into=planner foram lidas literalmente e aplicadas na ordem: API coverage→assumption-delta→schema-gate→security→TDD. assumption-delta scan1 retornou detected:false, não há promoção de entidade; schema-gate ORM não se aplica a SQLite direto, mas migrations/integrity reais constam no tracer/arquivo. Segurança usa ASVS5 nível1/high e threats únicos T-1-01..16; T-1-SC é reservado por plano.
 Não há sistema de IA nesta fase. Não foi feita implementação, instalação, build de produto, acesso VPS, pareamento ou download real. Nenhum requisito concluído. Provas reais pendentes permanecem explícitas no plano07.
 
+
+## Atualização para UAT — 2026-10-11
+
+A matriz acima foi escrita no planejamento; os parágrafos que descrevem ausência de build/piloto ou fallback judgment/unresolved registram aquele momento. A situação atual está em01-VERIFICATION.md e01-UAT.md: fase1 local implementada/verificada; proibições test/resolved com enforcement e flags históricos preservados. Para o guard atual, quatro rótulos de famílias de API foram abreviados para até80 caracteres sem mudar decisões, motivos ou escopo.27 capacidades,12 INTEGRATE e15 OPT-OUT, guard verify-pre passou.

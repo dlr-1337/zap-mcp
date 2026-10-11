@@ -1,14 +1,26 @@
 ---
 phase: 01-arquivo-privado-com-mensagens-e-m-dias-reais
-verified: 2026-10-11T04:33:23Z
+verified: 2026-10-11T16:54:09Z
 status: passed
 score: 88/88 must-haves verified
-covered_files: [".env.example",".gitignore",".planning/REQUIREMENTS.md",".planning/ROADMAP.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-CONTEXT.md","README.md","package-lock.json","package.json","public/app.js","public/index.html","public/style.css","src/archive.ts","src/auth.ts","src/backup.ts","src/main.ts","src/media.ts","src/whatsapp.ts","test/archive.test.ts","test/auth-state.test.ts","test/auth.test.ts","test/backup.test.ts","test/collector.test.ts","test/coverage.test.ts","test/http.test.ts","test/media.test.ts","test/readonly.test.ts","test/recovery.test.ts","test/revisions.test.ts","test/security.test.ts","tsconfig.json"]
-covered_digest: "v3:sha256:8a5e5e247f18811f9161710d936b7ca2b49f2654ee6b72d061d74d1705cba3d9"
+covered_files: [".env.example",".gitignore",".planning/REQUIREMENTS.md",".planning/ROADMAP.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-CONTEXT.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-UAT.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/COVERAGE.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/history/01-VERIFICATION.iter1.md","README.md","package-lock.json","package.json","public/app.js","public/index.html","public/style.css","src/archive.ts","src/auth.ts","src/backup.ts","src/main.ts","src/media.ts","src/whatsapp.ts","test/archive.test.ts","test/auth-state.test.ts","test/auth.test.ts","test/backup.test.ts","test/collector.test.ts","test/coverage.test.ts","test/http.test.ts","test/media.test.ts","test/readonly.test.ts","test/recovery.test.ts","test/revisions.test.ts","test/security.test.ts","tsconfig.json"]
+covered_digest: "v3:sha256:3f35f7d898a4d6905bbda4ecae5e02c606d1c0d3af9a5406983ef4f9638acb2b"
 behavior_unverified: 0
 overrides_applied: 0
 flagged_prohibitions: 0
 human_verification: []
+documentary_refresh:
+  previous_status: passed
+  previous_verified: 2026-10-11T04:33:23Z
+  implementation_unchanged_since: b5f7eef
+uat_validation:
+  status: complete
+  operator: agent-assisted
+  total: 28
+  passed: 28
+  automated_existing: 17
+  agent_observed: 11
+  human_acceptance_claimed: false
 decision_coverage:
   honored: 20
   total: 20
@@ -16,7 +28,7 @@ decision_coverage:
 re_verification:
   previous_status: gaps_found
   previous_score: 88/88
-  previous_report: 01-VERIFICATION.iter1.md
+  previous_report: history/01-VERIFICATION.iter1.md
   gaps_closed:
     - "Goal mode:mvp agora canônica e validada sem mudar meta ou critérios."
     - "Três proibições reclassificadas test/resolved com enforcement negativo anteriormente executado e disposição owner green."
@@ -50,14 +62,14 @@ prohibition_verification:
 # Fase 1: Arquivo privado com mensagens e mídias reais — Verification Report
 
 **Phase Goal:** As a proprietário da conta, I want to vincular minha conta sem navegador no coletor e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, so that eu possa recuperar esse material inclusive sem conexão com o WhatsApp.
-**Verified:** 2026-10-11T04:33:23Z
+**Verified:** 2026-10-11T16:54:09Z
 **Status:** passed
-**Re-verification:** Sim — focada na lacuna documental e nas três flags da primeira verificação, preservada em01-VERIFICATION.iter1.md. Código, dados, testes e evidência visual anterior foram mantidos sem reexecução.
+**Re-verification:** Sim — refresh documental/UAT após passed anterior; fonte, testes, assets e pins idênticos a b5f7eef. Histórico intacto em history/01-VERIFICATION.iter1.md; evidências atuais do orquestrador identificadas separadamente.
 
 
 A meta da fase foi alcançada no escopo local observado. Nesta reverificação, `query user-story.validate` retornou `valid:true`, sem errors e com os três slots da meta canônica; o resultado e as cinco SC permanecem equivalentes ao contrato anterior. As três proibições agora são `test/resolved`, com evidência de enforcement real já executada na primeira verificação. O owner `dispositionForProhibition` retornou `green/flagged:false` nas três e manteve `unverified/flagged:true` quando fornecido conjunto vazio, comprovando a regra fail-closed da classificação.
 
-As flags e os vereditos NÃO AUTORITATIVOS anteriores permanecem no relatório histórico01-VERIFICATION.iter1.md. Não houve atribuição de decisão humana, novo aceite no celular ou nova operação sobre a conta. O fechamento usa os testes negativos já verdes e as fronteiras de código inspecionadas, não apenas texto não vazio do descritor.
+As flags e os vereditos NÃO AUTORITATIVOS anteriores permanecem no relatório history/01-VERIFICATION.iter1.md. Nenhum aceite humano ou nova conferência no celular foi atribuído. As operações autorizadas atuais do orquestrador constam da UAT; este verificador não operou conta, navegador ou coletor. O enforcement permanece sustentado pelos testes negativos já verdes e pelo código inspecionado.
 ## User Flow Coverage
 
 User Story canônica validada do ROADMAP: «As a proprietário da conta, I want to vincular minha conta sem navegador no coletor e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, so that eu possa recuperar esse material inclusive sem conexão com o WhatsApp.»
@@ -71,7 +83,7 @@ User Story canônica validada do ROADMAP: «As a proprietário da conta, I want 
 | Recuperar sem WhatsApp | Leitor e bytes duráveis independentes do socket | Restore com8.684 mensagens/828 disponíveis; integridade/FK e seis tabelas idênticas ao snapshot; testes offline e prova operacional autenticada | ✓ VERIFIED |
 | Guard de modo | Goal canônica do ROADMAP válida | `query user-story.validate --story <Goal atual>` → valid:true; três slots; errors=[] | ✓ VERIFIED |
 
-O fluxo e as evidências técnicas abaixo foram verificados na execução inicial. A reverificação tratou somente formato, classificação/enforcement, fingerprint e owner de status; não repetiu os28 testes verdes ou as operações reais.
+O fluxo e as evidências técnicas abaixo foram verificados na execução inicial. Esta atualização preserva aqueles28 testes comportamentais sem reexecução e incorpora uma UAT distinta de28 itens:17 automatizados já verdes e11 observados atualmente pelo agente, sem aceite humano presumido.
 
 ## Goal Achievement
 
@@ -245,11 +257,11 @@ Reconciliação realizada pelo autor/orquestrador do01-07-PLAN, sem alteração 
 | 01-07-PLAN.md | prohibitions | test/resolved com enforcement real validado | RESOLVED |3flags anteriores preservadas emiter1; zero flags atuais; nenhuma decisão humana inventada |
 | 01-CONTEXT.md | specifics/code_context | Texto histórico antigo pede comparação celular | INFO | Instrução/D20 atuais prevalecem; não bloqueia nem justifica pedir telefone |
 | public/app.js/source | vários | null/[] defaults/guards | INFO | Initial state e ausência segura; SQL/fetch populam dados, não stub |
-| Evidência UI atual | N/A | Captura CUA timeout | INFO | Sem pixel atual; QA anterior e assertivas atuais identificados sem falsa certificação visual |
+| Evidência UI atual | N/A | Recorte de cabeçalho vazio descartado | INFO | Login completo pós-logout inspecionado pelo orquestrador; leitor atual observado no DOM sem certificar pixels de todo o leitor |
 
 ### Human Verification Required
 
-Nenhuma. QR já lido e comparação Web autorizada permanecem válidos. As três proibições têm enforcement determinístico confirmado e não exigem resolução humana. Não há verdade PRESENT_BEHAVIOR_UNVERIFIED nem item human_verification atual. Pixels atuais continuam não capturados; QA sintético anterior reinspecionado e assertivas atuais sustentam o escopo visual sem inventar nova captura.
+Nenhuma pendência no escopo autorizado. QR já lido e comparação Web autorizada permanecem válidos; o usuário autorizou testes pelo agente e dispensou conferência manual no celular. As três proibições mantêm enforcement determinístico; não há verdade PRESENT_BEHAVIOR_UNVERIFIED nem item human_verification atual. A UAT distingue observação do agente de aceite humano. Pixels atuais de todo o leitor não foram inspecionados; revisão visual anterior reutilizada com fonte idêntica.
 
 ### Deferred Items / Scope
 
@@ -259,7 +271,7 @@ Não surgiu lacuna de implementação claramente remetida a outra fase. Busca/fi
 
 Nenhuma lacuna permanece. A única lacuna anterior de formato foi fechada pelo Goal canônico equivalente, confirmado pelo guard. As três flags anteriores foram reconciliadas para test/resolved com enforcement comportamental já verde e fronteiras de código reais, confirmadas pela disposição determinística do owner. A prova com conjunto vazio continuou fail-closed.
 
-Reverificação focada: sem mudança de fonte, conta, UI, testes ou artefatos de implementação; nenhuma suíte, coleta, backup, reparo ou pareamento repetido. As verificações técnicas e os limites abaixo são os da execução inicial. Nenhuma aprovação humana foi inferida.
+Reverificação focada: nenhuma implementação alterada ou suíte repetida por este verificador. As provas técnicas anteriores continuam identificadas; a seção de UAT atual abaixo registra reinício, restauração isolada e operações do navegador realizadas pelo orquestrador. Nenhuma aprovação humana foi inferida.
 
 ### Advisory (New Scope, Unevidenced)
 
@@ -271,7 +283,30 @@ Delta documental conferido: ROADMAP registra Phase1 Complete com7/7 planos; REQU
 
 Nos SUMMARYs02/03/05, referências a comandos foram distinguidas de caminhos: ref aponta public/app.js e command conserva node --check; os dois artefatos compilados receberam dist/; menções históricas ao marcador volátil milestone.lock deixaram de ser referências de entrega. A evidência técnica e seus resultados não foram ampliados. O orquestrador informou VerifySummaryCore dos sete SUMs com missing=[], mesmos parâmetros Infinity/checkCommits:false do encerramento; esse gate não foi reexecutado pelo verificador. Nenhuma remoção manual da trava, execução de teste, operação de conta/UI/coletor ou mudança de fonte foi realizada nesta conferência documental.
 
-Fingerprint regenerado pelo owner com o mesmo conjunto44 arquivos. Escore88/88,15IDs e todos os limites de cobertura, pixels atuais e bytes diretamente baixados do Web foram preservados.
+Na rodada anterior, o owner regenerou o fingerprint com44 arquivos. Nesta atualização, foram adicionados01-UAT.md, COVERAGE.md e o histórico movido ao conjunto coberto:47 arquivos; verificação técnica mantida88/88 e15IDs.
+
+### Atualização documental e UAT assistida — 2026-10-11
+
+O diff de `b5f7eef` em src/, test/, public/, package.json, package-lock.json e tsconfig.json está vazio. Os artefatos e testes anteriormente verificados permanecem presentes. `cmp` confirmou history/01-VERIFICATION.iter1.md byte a byte idêntico ao histórico versionado anterior; PLAN07/SUMMARY07 mudaram somente referências para esse caminho. O histórico não é o veredito canônico atual.
+
+COVERAGE.md abreviou quatro rótulos longos preservando decisões/motivos. O guard executado nesta atualização retornou passed:true/block:false e27 capacidades,12 INTEGRATE/15 OPT-OUT. O gate de decisões reexecutado retornou20/20 honradas, not_honored=[]. Nenhum TBD/FIXME/XXX nos quatro documentos do delta.
+
+A leitura estruturada de01-UAT.md confirmou28 entradas pass:17 source:automated reutilizam evidência verde existente;11 source:agent-observed documentam operações atuais autorizadas do orquestrador. Esses28 itens de UAT são distintos dos28 testes nomeados iniciais. Provas privadas agregadas de runtime/sessão foram lidas em processo com saída restrita a contagens/booleanos; caminhos de restore, conteúdo, IDs, hashes e credenciais permanecem privados.
+
+| Checagem atual | Evidência agregada | Resultado |
+| --- | --- | --- |
+| Reinício frio com perfil preservado | referencesPreserved=8708; restartedWithoutQr=true; processo parado/reiniciado pelo orquestrador sem apagar perfil/cache/dados/travas | PASS |
+| Restore isolado offline | restoredMessages=8684; offlineKnownConversation=true; offlineOriginalFormats=4; coletor do restore desabilitado e GET/HEAD/Range anônimos401 documentados pelo orquestrador | PASS |
+| Leitor no Chrome |50 conversas; individual100→200 sem duplicatas; grupo100→200→300 e quatro formatos; citações/históricos/detalhes e desconhecidos observados no DOM | PASS, observação do orquestrador |
+| Volta, logout e reentrada | Seleção1→0 e foco restaurado; logout remove listas do DOM; logoutCleared=true/stillConnected=true após aguardar Conectado | PASS |
+| Download atual do produto | Áudio real62.831B com hash conferido; leitor manteve300 mensagens após download | PASS, observação do orquestrador |
+| Limites visíveis |196 lotes; limited=true; missingUnknown=true; received=true; completeAccount=false | PASS |
+
+A tela completa de login após logout foi inspecionada pelo orquestrador; o recorte de cabeçalho vazio não foi aceito como prova. Não houve nova inspeção integral de pixels do leitor, teste de outros navegadores ou leitor de tela físico; a revisão visual anterior é reutilizada com fonte idêntica. A checagem prematura de reentrada foi corrigida aguardando Conectado, sem falha reproduzida do produto.
+
+Fonte com8.708 referências e snapshot antigo com8.684 mensagens representam instantes distintos. A nova restauração comprova recuperação daquele snapshot, sem afirmar cópia integral do estado atual nem histórico integral da conta. Bytes baixados diretamente do WhatsApp Web continuam sem comparação; a conferência dos originais usa descritor preservado/disco/HTTP/restore. D20 e dispensa do celular permanecem, sem resposta humana fabricada.
+
+Gates técnicos anteriores reutilizados com código sem delta: Nyquist validated/compliant; segurança17 fechadas/0 abertas; revisão de código limpa; UI review22/24 sem blocker; TDD4 planos/0 violações. Não foram reexecutados neste refresh. VPS/HTTPS/MCP/busca/exportação completa permanecem fora desta fase. Nenhum novo gap/advisory ou item human_verification; status passed preservado.
 
 ## Apêndice — refinamentos dos PLANs
 
@@ -363,6 +398,6 @@ Fingerprint regenerado pelo owner com o mesmo conjunto44 arquivos. Escore88/88,1
 
 ---
 
-_Verified: 2026-10-11T04:33:23Z_
+_Verified: 2026-10-11T16:54:09Z_
 _Verifier: gsd-verifier_
 
