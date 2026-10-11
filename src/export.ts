@@ -140,6 +140,6 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
     },
     dropSession(session: string) { for (const row of db.prepare('SELECT id FROM jobs WHERE session=?').all(session) as { id: string }[]) remove(row.id); db.prepare('DELETE FROM jobs WHERE session=?').run(session); },
     purge() { for (const row of db.prepare('SELECT id FROM jobs WHERE expires<=?').all(Date.now()) as { id: string }[]) expire(row.id); db.prepare('DELETE FROM jobs WHERE expires<?').run(Date.now() - 24 * 3600_000); },
-    async close() { stopped = true; await active; db.close(); }
+    close() { stopped = true; if (active) return active.then(() => db.close()); db.close(); }
   };
 }

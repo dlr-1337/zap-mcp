@@ -232,7 +232,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     close() {
       const finish = () => { clearInterval(querySweep); archiveDb.close(); authDb.close(); lock.release(); };
       if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(() => exports.close()).then(finish);
-      return exports.close().then(finish);
+      const closing = exports.close(); if (closing) return closing.then(finish); finish();
     }
   };
 }
