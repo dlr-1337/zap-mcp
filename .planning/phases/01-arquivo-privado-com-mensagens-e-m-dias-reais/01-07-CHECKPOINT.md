@@ -32,6 +32,14 @@ Ação indispensável, quando disponível: comparar privadamente os itens existe
 
 Tarefa3 tem provas técnicas independentes de backup/restore/restart/offline já feitas, mas permanece não concluída até satisfazer a comparação conhecida e o fechamento do aceite. Não repetir por ritual testes já comprovados sem nova alteração/divergência.
 
+## Retomada da discussão e revisão do piloto
+
+A nova invocação `1 --all --auto` atualizou o contexto para refletir o produto existente e a indicação humana do grupo, mantendo D-01 a D-20. O gate canônico confirmou20/20decisões cobertas pelos planos; não houve mudança de capacidade nem reexecução dos planos concluídos. A cadeia reencontrou este checkpoint humano, que continua obrigatório.
+
+Revisão independente incremental de seis arquivos do piloto não comprovou defeito novo de produção; encontrou WR-02, um teste de DNS que podia passar por timeout. Corrigido em `f277bdfa2ee07af20307b915a194ff0a637cf141`, somente em `test/media.test.ts`: subprocesso isolado, request e lookup efetivamente alcançados, endereço/família conferidos e erro sintético por identidade, sem rede. Mutação em memória retirando `family: 4` falhou na assertiva específica. Suíte no checkout principal82/82; no worktree oculto81/82 por assets recusados pelo `sendFile`, resolvido ao executar no caminho normal sem mudar produção.
+
+Revisão final limpa: teste focado1/1 e quatro mutações rejeitadas (família ausente, erro arbitrário, timeout antecipado e lookup omitido). Relatórios canônicos `01-REVIEW.md`/`01-REVIEW-FIX.md` e ledger preservam cinco achados corrigidos, zero abertos. A comparação humana não foi realizada nem presumida por essa revisão; requisitos e tarefa2 permanecem pendentes.
+
 ## Continuidade
 
 - Fonte local: http://127.0.0.1:3000, `zap-mcp-pilot.service`, mesmo perfil e único coletor.
