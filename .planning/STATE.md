@@ -2,17 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Busca, contexto, abas e exportação no site
-status: "Phase 1 shipped — PR #1; Phase 2 ready to plan"
-stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-10-11T22:45:39.238Z"
+current_plan: 2
+status: Phase 2 in progress — 02-01 complete; next 02-02
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-11T23:06:17.771Z"
 last_activity: 2026-10-11
-last_activity_desc: "Phase 1 shipped — PR #1"
-state_head: 86e97ece8f3683eac14ffc629356284bead83fb4
+last_activity_desc: "02-01 verified: 97 tests passed"
+state_head: ca02db2d9316cdb5728fa889a5c0b749c774f8a5
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 12
-  completed_plans: 7
+  completed_plans: 8
   percent: 25
 ---
 
@@ -23,23 +24,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-10)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase2 — pronta para planejamento; Phase1 local concluída
+**Current focus:** Phase2 em execução — 02-01 concluído, próximo02-02; Phase1 local concluída
 
 **Publicação da Phase1:** [PR #1](https://github.com/dlr-1337/zap-mcp/pull/1), branch codex/phase-1-private-archive; fase local verificada, sem implantação na VPS.
 
 ## Current Position
 
 Phase: 2 (Busca, contexto, abas e exportação no site) — READY TO EXECUTE
-Plan: Not started
-Status: Phase 1 shipped — PR #1; Phase 2 ready to plan
-Last activity: 2026-10-11 — Phase 1 shipped — PR #1
+Current Plan: 2
+Total Plans in Phase: 5
+Status: Phase 2 in progress — 02-01 complete; next 02-02
+Last activity: 2026-10-11 — 02-01 verified: 97 tests passed
 
 Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: Não consolidada; plano07 teve piloto continuado
 - Total execution time:71min registrados nos planos01–06, além do piloto continuado01–07
 
@@ -48,7 +50,7 @@ Progress: [███░░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
-| 2 | 0 | 0 | - |
+| 2 | 1 | 14min | 14min |
 | 3 | 0 | 0 | - |
 | 4 | 0 | 0 | - |
 
@@ -66,6 +68,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 01 P04 | 14min | 2 tasks | 7 files |
 | Phase 01 P05 | 12min | 2 tasks | 7 files |
 | Phase 01 P06 | 15min | 2 tasks | 8 files |
+| Phase 02 P01 | 14min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -87,10 +90,11 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
 - [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
 - [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 local concluída após controles e verificador.
+- [Phase 02]: Busca usa FTS por revisão e snapshots sanitizados de sessão; período Temporal respeita DST, mantendo requisitos globais pendentes do aceite real.
 
 ### Pending Todos
 
-Nenhum todo avulso registrado. Próxima ação: planejar a Phase2; nenhuma execução iniciada.
+Nenhum todo avulso registrado. Próxima ação: executar02-02;02-01 concluído com97/97 testes, sem aplicar busca no acervo real.
 
 ### Blockers/Concerns
 
@@ -110,9 +114,9 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-11T22:16:15.798Z
-Stopped at: Phase 2 UI-SPEC approved
-Resume file: .planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-UI-SPEC.md
+Last session: 2026-10-11T23:05:26.288Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
 

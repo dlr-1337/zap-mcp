@@ -133,6 +133,7 @@ Mantidos módulos, HTML/CSS nativos e coletor existentes. Campos desconhecidos c
 - Bundle Playwright sem executável esperado: Chromium152 existente lançou antes doRED; não houve nova dependência de browser no produto.
 - Fixtures ajustadas para nomes de chats emsubject e para correspondência literal deOR/1 presentes no próprio texto hostil. Espera do route.fulfill controlada antes de remover interceptação.
 - Uma seleção de conversa aleatória na fixtureHTTP preexistente falhou na primeira regressão; passou nas duas seguintes. Limitação registrada emdeferred-items.md, sem mudar código/teste fora do escopo.
+- STATE anterior dizia Plan:Not started sem contador legível; rótulos1/5 restaurados antes de repetir o handlerstate.advance-plan para o próximo plano. Requisitos compartilhados retornaram0/3ready e não foram marcadosComplete.
 
 ## User Setup Required
 
