@@ -76,7 +76,7 @@ function attachmentBlock(article, attachment) {
 function messageItem(message) {
   const li = document.createElement('li'), article = document.createElement('article'); li.append(article); li.dataset.reference = message.reference;
   const header = document.createElement('header'); article.append(header);
-  addText(header, 'p', (message.author ?? 'Autor não informado pela origem') + ' · ' + (message.fromMe === true ? 'Enviada pelo celular' : message.fromMe === false ? 'Recebida' : 'Direção não informada pela origem'), 'meta');
+  addText(header, 'p', (message.author ?? 'Autor não informado pela origem') + ' · ' + (message.fromMe === true ? 'Enviada por você' : message.fromMe === false ? 'Recebida' : 'Direção não informada pela origem'), 'meta');
   const time = addText(header, 'time', date(message.originalTimestamp), 'meta'); if (message.originalTimestamp) time.dateTime = message.originalTimestamp;
   if (message.orderUncertain) addText(article, 'p', 'Ordem das alterações incerta; os registros recebidos foram preservados.');
   const change = [...message.revisions ?? []].reverse().find(r => r.kind === (message.revoked ? 'revoke' : 'edit'));
@@ -137,7 +137,7 @@ function back() {
   $('archive').classList.remove('reading'); $('back').hidden = true; $('messages').replaceChildren(); $('message-title').textContent = 'Mensagens arquivadas';
   $('reader-status').textContent = 'Abra uma conversa da lista para ler as mensagens arquivadas.'; $('more-messages').hidden = true; $('refresh-conversation').hidden = true;
   const link = [...$('conversations').querySelectorAll('a')].find(item => item.dataset.id === selected);
-  link?.focus({ preventScroll: true }); window.scrollTo(0, listPosition); selected = lastReference = undefined;
+  link?.removeAttribute('aria-current'); link?.focus({ preventScroll: true }); window.scrollTo(0, listPosition); selected = lastReference = undefined;
 }
 async function refreshStatus() {
   if (!authenticated) return;
@@ -151,7 +151,7 @@ async function refreshStatus() {
     if (coverage) {
       for (const [label, value] of [['Última ingestão confirmada — America/Sao_Paulo', coverage.lastIngestion ? date(coverage.lastIngestion) : 'Nenhuma ingestão confirmada ainda.'], ['Intervalo observado — America/Sao_Paulo', coverage.interval.oldest ? date(coverage.interval.oldest) + ' até ' + date(coverage.interval.newest) : 'Intervalo observado ainda desconhecido.'], ['Mensagens únicas arquivadas', String(coverage.uniqueMessages)]]) { addText($('coverage'), 'dt', label); addText($('coverage'), 'dd', value); }
       for (const batch of coverage.batches) {
-        const li = addText($('coverage-batches'), 'li', batch.confirmed + ' de ' + batch.received + ' mensagens recebidas arquivadas neste lote.'); detail(li, 'Falhas / pendentes', batch.failed + ' / ' + batch.pending);
+        const li = addText($('coverage-batches'), 'li', batch.confirmed + ' de ' + batch.received + (batch.received === 1 ? ' mensagem recebida arquivada neste lote.' : ' mensagens recebidas arquivadas neste lote.')); detail(li, 'Falhas / pendentes', batch.failed + ' / ' + batch.pending);
         addText(li, 'p', batch.failed || batch.pending ? 'Há itens deste lote ainda não arquivados. Confira as falhas conhecidas.' : 'Lote recebido concluído; a cobertura da conta continua limitada ao material recebido.');
         if (batch.stalled) addText(li, 'p', 'Coleta sem progresso há pelo menos 120 segundos. O acervo anterior permanece disponível.');
         if (batch.failure) addText(li, 'p', 'A captura encontrou uma falha. Alguns itens recebidos podem não ter sido arquivados. O acervo anterior permanece disponível.');
