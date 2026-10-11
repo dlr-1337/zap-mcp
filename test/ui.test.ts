@@ -20,6 +20,28 @@ async function uiFixture(t: any) {
   const login = async () => { await page.goto(base); await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click(); await page.locator('#archive').waitFor({ state: 'visible' }); await page.waitForFunction(() => document.getElementById('login-status')?.textContent === ''); };
   return { s, page, base, login, browser };
 }
+test('resultado distante abre âncora e duas leituras independentes', async t => {
+  const { s, page, login } = await uiFixture(t);
+  const a = Array.from({ length: 181 }, (_, i) => ({ key: { remoteJid: '1@lid', id: 'm' + i, fromMe: false }, messageTimestamp: 1700000000 + i, message: { conversation: i === 80 ? 'âncora orçamento' : 'vizinha ' + i } }));
+  s.archive.ingestHistory({ chats: [{ id: '1@lid', subject: 'Conversa A' }, { id: '2@lid', subject: 'Conversa B' }], messages: [...a, { key: { remoteJid: '2@lid', id: 'b', fromMe: false }, message: { conversation: 'leitura B' } }] });
+  const ref = s.archive.readStoredMessage(a[80].key)!.reference;
+  await login(); await page.locator('#search-terms').fill('orçamento'); await page.locator('#search-submit').click(); await page.waitForFunction(() => document.getElementById('search-results')?.children.length === 1);
+  await page.getByRole('button', { name: 'Abrir contexto' }).click();
+  await page.waitForFunction(() => document.getElementById('reader')?.getAttribute('aria-busy') !== 'true');
+  assert.equal(await page.locator('[data-anchor="true"][data-reference="' + ref + '"]').count(), 1, 'mensagem distante ancorada');
+  assert.equal(await page.locator('#messages > li').count(), 51);
+  await page.locator('#conversations a').filter({ hasText: 'Conversa B' }).click();
+  await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('leitura B'));
+  assert.equal(await page.getByRole('tab').count(), 2);
+  await page.getByRole('tab', { name: /Conversa A/ }).click();
+  assert.equal(await page.locator('#messages > li').count(), 51); assert.match(await page.locator('#messages').textContent(), /âncora orçamento/);
+  assert.equal(await page.locator('[data-anchor=true]').getAttribute('tabindex'), '-1');
+  await page.locator('#more-messages').click(); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 101);
+  await page.locator('#more-after').click(); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 151);
+  assert.equal(await page.locator('#messages > li').evaluateAll((els: any[]) => new Set(els.map(el => el.dataset.reference)).size), 151);
+  await page.getByRole('tab', { name: /Conversa B/ }).click(); assert.match(await page.locator('#messages').textContent(), /leitura B/);
+  await page.getByRole('tab', { name: /Conversa A/ }).click(); assert.equal(await page.locator('#messages > li').count(), 151);
+});
 test('site encontra termo literal em evidência congelada', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', name: 'Homônimo' }], messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'm', fromMe: false }, messageTimestamp: 123, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { conversation: 'Orçamento café <img src=x onerror=window.EXECUTED=1>' } }] });
