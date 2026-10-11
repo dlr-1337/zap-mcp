@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Arquivo privado com mensagens e mídias reais
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-10-10T22:25:51.691Z"
+stopped_at: "Checkpoint 01-07-01: QR real privado preparado; aguarda leitura no celular"
+last_updated: "2026-10-11T00:52:22.650Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 1 execution started
-state_head: a20c89e75e9269216800b3031c902d1709d5ae13
+state_head: f61e1786cd9372028ec6ec1860107120d3bfe3ab
 progress:
   total_phases: 4
   completed_phases: 0
@@ -83,6 +83,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-04 preserva originais por stream com hash e publicação exclusiva; fila2/5/120s, reserva max(256MiB,5%), recoverySIGKILL/ENOSPC conferidos por49 testes sintéticos; conta real continua pendente.
 - [Phase 01]: Plano01-05 mantém UI nativa50/100 e QR efêmero; respostas tardias e páginas restauradas exigem sessão atual.52 testes e QA browser320/768/1280 sintéticos; conta real continua pendente.
 - [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
+- [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
 
 ### Pending Todos
 
@@ -95,6 +96,7 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 1: Revalidar Baileys/auth/PN-LID/eventos; pareamento exige celular para QR e piloto com conversa/mídias conhecidas, após cópia privada recuperável.
 - Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
+- Plano01-07 aberto: usuário precisa ler QR vigente no celular; conexão da conta, recorte/quatro originais e reinício real ainda pendentes.
 
 ## Deferred Items
 
@@ -105,6 +107,6 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-10T22:25:51.652Z
-Stopped at: Completed 01-06-PLAN.md
-Resume file: None
+Last session: 2026-10-11T00:52:22.326Z
+Stopped at: Checkpoint 01-07-01: QR real privado preparado; aguarda leitura no celular
+Resume file: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md
