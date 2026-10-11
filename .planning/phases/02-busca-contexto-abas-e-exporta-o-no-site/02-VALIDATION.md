@@ -25,9 +25,9 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 ## Per-Task Verification Map
 | Task ID | Wave | Tipo | Verificação automatizada no checkout atual | Estado |
 |---|---:|---|---|---|
-| 02-01-01 | 1 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js dist/test/ui.test.js` | pending execution |
-| 02-01-02 | 1 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js` | pending execution |
-| 02-01-03 | 1 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/search.test.js` | pending execution |
+| 02-01-01 | 1 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js dist/test/ui.test.js` | passed — 4/4; tracer repetido 4/4 |
+| 02-01-02 | 1 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js` | passed — 5/5; DST23/25h e originalnull |
+| 02-01-03 | 1 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/search.test.js` | passed — 11/11; DOM real sintético |
 | 02-02-01 | 2 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/search.test.js` | pending execution |
 | 02-02-02 | 2 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/auth.test.js` | pending execution |
 | 02-02-03 | 2 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/context.test.js` | pending execution |
@@ -183,8 +183,8 @@ Sem SPEC, aplicar recall/precision aos requisitos: a evidência não deve se tor
 
 | ID | Requisito | Enforcement planejado | Disposição atual |
 |---|---|---|---|
-| P-02-01 | EVID-02 | period/search: null não usa ingestão | flagged-unverified |
-| P-02-02 | WEB-02 | search: AND entre versões não corresponde; histórico rotulado | flagged-unverified |
+| P-02-01 | EVID-02 | period/search: null não usa ingestão | enforced — search.test.ts originalnull/DST/Date.max passou |
+| P-02-02 | WEB-02 | search: AND entre versões não corresponde; histórico rotulado | enforced — search.test.ts AND entre versões e ui.test.ts histórico passaram |
 | P-02-03 | WEB-04 | browser races/storage/logout; duas leituras não misturam | flagged-unverified |
 | P-02-04 | WEB-05 | preview/codec mantém download; miniatura não satisfaz original | flagged-unverified |
 | P-02-05 | EXP-02 | manifest/texto com cobertura parcial, revisões e todos missing | flagged-unverified |
@@ -204,6 +204,10 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 - Ondas1→2→3→4→5 por dependência e arquivos compartilhados; nenhuma paralelização falsa. STATE/ROADMAP ficam comorquestrador.
 
 ## Artefatos e símbolos produzidos
+
+### Evidência executada do plano02-01 — 2026-10-11
+
+RED de HTTP404, formulário ausente, datasHTTP400 e seletor de contato ausente observado em TAP real e classificado RED_EVIDENCE_OK; commits RED/GREEN no02-01-SUMMARY.md. Suíte final `mise exec node@24.21.0 -- npm test`:97/97,0skip,11,095s. Correção de allowlists de mídia preservou getter legado, anexos/bytes e vinculou revisionId no DTO; subset afetado33/33. Browser Playwright do bundle com Chromium152 existente, fixtures privadas/efêmeras sem socket real;320/768/1280 e reflow de fonte200% sem overflow. Screenshots sintéticas ignoradas emdist/02-01-ui-*.png inspecionadas. Esta evidência cobre D-01..D-07 e UC-01..UC-22 da busca; contexto ancorado, abas, preview, exportação e aceite real pertencem aos planos seguintes. Não foi aplicado índice em dados reais; baseline6 sintética reabriu sem perda. Nenhum requisito global foi concluído por estes testes.
 | Plano | Caminhos/símbolos de produto | Testes/artefatos de evidência |
 |---|---|---|
 |02-01| src/archive.ts searchMessages/FTS/query_snapshots/parsePeriod/EffectivePeriod; /api/search; app formulário/candidatos/resultados | search.test.ts (busca/calendário/segurança),ui.test.ts |
