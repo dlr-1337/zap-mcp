@@ -139,7 +139,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   });
   const publicDir = fileURLToPath(new URL('../../public/', import.meta.url));
   for (const [route, filename] of [['/', 'index.html'], ['/app.js', 'app.js'], ['/style.css', 'style.css']]) {
-    app.get(route, (_req, res) => res.sendFile(join(publicDir, filename), { cacheControl: false, lastModified: false, etag: false }));
+    app.get(route, (_req, res) => res.sendFile(filename, { root: publicDir, cacheControl: false, lastModified: false, etag: false }));
   }
   app.use((_req, res) => { res.status(404).json({ error: 'Não encontrado no acervo' }); });
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => { const status = (error as { status?: number }).status; res.status(status === 413 ? 413 : status === 400 ? 400 : 500).json({ error: 'Solicitação não concluída' }); });
