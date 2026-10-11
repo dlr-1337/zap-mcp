@@ -42,6 +42,42 @@ test('resultado distante abre âncora e duas leituras independentes', async t =>
   await page.getByRole('tab', { name: /Conversa B/ }).click(); assert.match(await page.locator('#messages').textContent(), /leitura B/);
   await page.getByRole('tab', { name: /Conversa A/ }).click(); assert.equal(await page.locator('#messages > li').count(), 151);
 });
+
+test('resposta retida de A não ativa A sobre B e fechar A invalida sua geração', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ chats: [{ id: '1@lid', subject: 'A' }, { id: '2@lid', subject: 'B' }], messages: ['1@lid', '2@lid'].map((id, i) => ({ key: { remoteJid: id, id: 'm', fromMe: false }, messageTimestamp: 123, message: { conversation: 'leitura ' + (i ? 'B' : 'A') } })) });
+  await login(); await page.locator('#conversations a').filter({ hasText: /^A/ }).click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('leitura A'));
+  await page.locator('#conversations a').filter({ hasText: /^B/ }).click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('leitura B'));
+  await page.getByRole('tab', { name: /^A ·/ }).click();
+  const ref = s.archive.readStoredMessage({ remoteJid: '1@lid', id: 'm', fromMe: false })!.reference;
+  let release!: () => void, started!: () => void; let gate = new Promise<void>(r => release = r), begun = new Promise<void>(r => started = r);
+  await page.route('**/api/context/' + ref + '?*', async (route: any) => { const response = await route.fetch(); started(); await gate; await route.fulfill({ response }); });
+  await page.locator('#refresh-conversation').click(); await begun; await page.getByRole('tab', { name: /^B ·/ }).click(); release();
+  await page.waitForFunction(() => ![...document.querySelectorAll('[role=tabpanel]')].some(p => p.getAttribute('aria-busy') === 'true'));
+  assert.match(await page.getByRole('tab', { selected: true }).textContent(), /^B ·/, 'resposta A não troca seleção B');
+  assert.match(await page.locator('#messages').textContent(), /leitura B/);
+  await page.getByRole('tab', { name: /^A ·/ }).click(); gate = new Promise<void>(r => release = r); begun = new Promise<void>(r => started = r);
+  await page.locator('#refresh-conversation').click(); await begun;
+  assert.equal(await page.getByRole('button', { name: /^Fechar conversa: A ·/ }).count(), 1, 'fechamento explícito disponível');
+  await page.getByRole('button', { name: /^Fechar conversa: A ·/ }).click(); release(); await page.waitForTimeout(100);
+  assert.equal(await page.getByRole('tab').count(), 1); assert.match(await page.locator('#messages').textContent(), /leitura B/);
+  assert.deepEqual(await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } })), { local: {}, session: {} });
+});
+
+test('logout vence resposta de contexto retida e bfcache exige sessão atual', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ messages: [{ key: { remoteJid: '1@lid', id: 'm', fromMe: false }, messageTimestamp: 123, message: { conversation: 'privado da aba' } }] });
+  await login(); await page.locator('#conversations a').click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('privado da aba'));
+  let release!: () => void, started!: () => void; const gate = new Promise<void>(r => release = r), begun = new Promise<void>(r => started = r);
+  await page.route('**/api/context/*?*', async (route: any) => { const response = await route.fetch(); started(); await gate; await route.fulfill({ response }); });
+  await page.locator('#refresh-conversation').click(); await begun; await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); release(); await page.waitForTimeout(100);
+  assert.equal(await page.getByRole('tab').count(), 0); assert.equal(await page.locator('#messages > li').count(), 0); assert.doesNotMatch(await page.locator('body').textContent(), /privado da aba/);
+  await page.unroute('**/api/context/*?*'); await login(); await page.locator('#conversations a').click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('privado da aba'));
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))); assert.equal(await page.locator('#archive').isVisible(), false);
+  s.authDb.exec('UPDATE web_sessions SET touched_at=0');
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))); await page.waitForFunction(() => document.getElementById('login-error')?.textContent?.includes('expirou'));
+  assert.equal(await page.getByRole('tab').count(), 0); assert.equal(await page.locator('#archive').isVisible(), false); assert.doesNotMatch(await page.locator('body').textContent(), /privado da aba/);
+});
 test('site encontra termo literal em evidência congelada', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', name: 'Homônimo' }], messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'm', fromMe: false }, messageTimestamp: 123, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { conversation: 'Orçamento café <img src=x onerror=window.EXECUTED=1>' } }] });

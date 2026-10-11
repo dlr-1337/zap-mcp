@@ -56,3 +56,17 @@ test('contexto conserva correspondência histórica e resolve redirect recebido'
   assert.ok(page.messages[0].attachments.length); assert.ok(page.messages[0].revisions.length);
   assert.doesNotMatch(JSON.stringify(page), /PRIVATE_SENTINEL|mediaKey|descriptor|payload|https:\/\//);
 });
+
+test('expiração e reset eliminam snapshots privados além de recusar sessão velha', async t => {
+  const { s, read, base, headers, login } = await contextFixture(t);
+  s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 123, message: { conversation: 'privado' } }] });
+  const ref = s.archive.readStoredMessage(key)!.reference, page = await read(ref);
+  const other = await login();
+  assert.equal((await fetch(base + '/api/context/' + ref + '?sourceSnapshotId=' + page.snapshotId, { headers })).status, 400, 'contexto não é snapshot de busca');
+  assert.equal((await fetch(base + '/api/context/' + ref + '?sourceSnapshotId=' + page.snapshotId, { headers: other })).status, 410, 'outra sessão não revela snapshot');
+  s.authDb.exec('UPDATE web_sessions SET touched_at=0');
+  assert.equal((await fetch(base + '/api/context/' + ref, { headers })).status, 401);
+  assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM query_snapshots WHERE id=?').get(page.snapshotId) as any).n, 0, 'expiração purga derivados da sessão');
+  const fresh = await login(); const r = await fetch(base + '/api/context/' + ref, { headers: fresh }); assert.equal(r.status, 200);
+  await s.setPassword('nova sintética'); assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM query_snapshots').get() as any).n, 0, 'reset purga todos recortes');
+});
