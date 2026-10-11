@@ -1,30 +1,40 @@
-# Checkpoint01-07-01 — pareamento pelo celular
+# Checkpoint01-07-02 — comparação privada com o celular
 
 **Type:** human-action
 **Gate:** blocking-human
 **Plan:** 01-07
-**Progress:** 0/3 tasks complete
-**Status:** aguardando leitura do QR pelo proprietário
+**Progress:** 1/3 tasks complete
+**Status:** proprietário ainda não conseguiu comparar as amostras
 
-## Trabalho preparado
+## Completed Tasks
 
-Perfil persistente privado novo, senha forte por stdin e arquivos privados; snapshot/restore do perfil fonte e preflight passaram antes do socket. Um serviço normal Node24/Baileysrc14 supervisionado em loopback, navegador visível já autenticado e QR real atual renderizado. HTTP sem sessão e processo concorrente recusados. Evidências/credenciais/QR permanecem privadas fora do checkout.
+| Task | Nome | Commit | Arquivos |
+|---|---|---|---|
+| 1 | QR lido, conexão e ingestão reais confirmadas | 00d4e38 | README.md |
 
-Correçãof61e178 troca somente a identidade de protocolo recusada pelo servidor, preserva fullSync e coleta sem navegador;79/79 testes passam. A tarefa do plano ainda não concluiu: conexão da conta não observada, amostras/restart reais pendentes. SUMMARY tem statushalted e requirements-completed[].
+Pareamento realizado pelo humano; HTTP privado conectado, QR409/indisponível e ingestão observados. Não pedir outro QR sem invalidade real da sessão.
 
-## Serviço de retomada
+## Trabalho pronto
 
-- URL local: http://127.0.0.1:3000
-- Serviço: `zap-mcp-pilot.service`; comando normal `mise exec node@24.21.0 -- node dist/src/main.js serve --collect`.
-- Navegador privado já autenticado: `zap-mcp-pilot-browser.service`.
-- A supervisão local permanece disponível nesta sessão; não é implantação/aceite na VPS. O agente confere unit/PID e QR vigente antes de retomar. Se o QR/budget expirar, o agente renova o mesmo serviço/perfil sem remover a trava nem iniciar segundo coletor.
+- Lote inicial8.924 itens confirmados,0falhas/pendentes após reparo do diário recebido;8.679mensagens distintas.470itens reprocessados com participant explícito do envelope rc14, conservando8.673referências e1.668IDs anteriores. Grupo conhecido indicado pelo humano:486mensagens,426recebidas/60enviadas e3autores recebidos.
+- Quatro originais do grupo disponíveis: áudio62.831B, imagem199.071B, vídeo8.304.865B e documento118.382B. Bytes/tamanho/SHA256 de origem, arquivo local e GET autenticado iguais. GET/HEAD/Range sem sessão401; Rangeautenticado206.
+- Snapshot privado posterior8.680mensagens/190originais disponíveis restaurado com fonte parada. Mesmos4IDs/referências/bytes/hash e486mensagens conferidos em HTTP offline com collectorEnabledfalse. Clone parado; perfil fonte reconectou sem QR e repetiu4downloads com hashes iguais.
+-82/82 testes, zero failures/skips/todos; build e preflight passaram. Fixes mínimos DNS0315319/6b8337c e envelope8a2fd6f/72ee356, com RED_EVIDENCE_OK.
+- Navegador privado visível e autenticado, grupo aberto com100mensagens da página inicial; botão de mensagens anteriores conserva o restante. Detalhes da evidência mostram participante/direção/data/histórico recebido; “Baixar original” oferece os arquivos disponíveis.
 
-## Ação indispensável
+## Current Task
 
-No WhatsApp do celular: **Dispositivos conectados → Conectar dispositivo → ler o QR vigente na tela privada já aberta**. Responder quando tiver sido lido; o agente confere connection.open/estado e início de ingestão. QR ou pareamento isolado não aceitam os requisitos de sincronização/mídia.
+**Task 2:** conferir conversa, grupo, direções/autoria e quatro originais conhecidos.
+**Status:** aguardando comparação humana.
+**Blocked by:** humano respondeu “Ainda não consegui comparar”. A indicação do grupo e as provas técnicas não substituem conhecimento do celular. Conversa individual conhecida ainda não identificada/conferida.
 
-Depois, o plano pede comparação privada de conversa/grupo/direções e quatro originais existentes conhecidos; somente então testes de restart/offline/novo backup. Nenhuma mensagem enviada/editada/apagada ou marcada como lida pelo Zap MCP.
+Ação indispensável, quando disponível: comparar privadamente os itens existentes do grupo aberto com o WhatsApp no celular, indicar divergência/faltantes ou confirmar a correspondência; conferir áudio/imagem/vídeo/documento e uma conversa individual conhecida. Não publicar conteúdo, números ou arquivos no chat público. Nenhuma mensagem precisa ser enviada para fabricar amostra.
 
-## Limites
+Tarefa3 tem provas técnicas independentes de backup/restore/restart/offline já feitas, mas permanece não concluída até satisfazer a comparação conhecida e o fechamento do aceite. Não repetir por ritual testes já comprovados sem nova alteração/divergência.
 
-Tarefas01-07-02/03 não iniciadas. Conta/cobertura/quatro originais/restart remoto e VPS/Codex reais ainda não validados. A disponibilidade do celular é satisfeita pelo proprietário no checkpoint; não foi presumida como conexão já realizada.
+## Continuidade
+
+- Fonte local: http://127.0.0.1:3000, `zap-mcp-pilot.service`, mesmo perfil e único coletor.
+- Tela privada: `zap-mcp-pilot-browser.service`, grupo aberto e sessão autenticada. Browser apenas apresenta o site; coletor não executa navegador.
+- Dados, credencial, diário, snapshots e provas ficam privados fora do checkout. Checkpoint operacional persistente registra caminhos/PIDs e provas sem imprimi-los publicamente.
+- SUMMARY mantém `status: halted`, requisitosPending e fase1 aberta. Limites individuais de mídia continuam explícitos; snapshot registra17indisponíveis, não indisponibilidade definitiva da conta. VPS/domínio, backup externo e Codex-MCP ainda não validados.
