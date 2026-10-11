@@ -95,8 +95,8 @@ status: complete
 
 ## Verification
 
-- Task1: `mise exec node@24.21.0 -- npm run build` e `node --test --test-reporter=tap dist/test/auth-state.test.js dist/test/collector.test.js dist/test/archive.test.js`: **13/13 pass**,1332ms.
-- Task2: build e `node --test --test-reporter=tap dist/test/collector.test.js dist/test/readonly.test.js dist/test/auth-state.test.js dist/test/auth.test.js`: **21/21 pass**,8759ms após isolamento final de credenciais.
+- Task1: `mise exec node@24.21.0 -- npm run build` e node --test --test-reporter=tap dist/test/auth-state.test.js dist/test/collector.test.js dist/test/archive.test.js: **13/13 pass**,1332ms.
+- Task2: build e node --test --test-reporter=tap dist/test/collector.test.js dist/test/readonly.test.js dist/test/auth-state.test.js dist/test/auth.test.js: **21/21 pass**,8759ms após isolamento final de credenciais.
 - Plano/suíte completa: `mise exec node@24.21.0 -- npm test`: **34 tests,34 pass,0 fail,0 skipped**,9363ms. Arquivos alvo foram executados; nenhum zero-test passou como êxito.
 - `git diff --check` passou. Inspeção dos módulos não encontrou chamadas de sendMessage/chatModify/readMessages/sendReceipt/presença/logout WhatsApp, multifile auth ou TODO/FIXME. Logger de protocolo é silent; QR/payload/auth permanecem privados. Nenhuma dependência foi instalada ou alterada.
 - `check evaluation-scope --plan01-03 --commits-only --raw` resolveu os quatro commits desta branch. Arquivos criados e ancestralidade dos quatro hashes conferidos.
@@ -122,7 +122,7 @@ Requisitos do plano estão em requirements-supported; requirements-completed con
 
 ## Issues Encountered
 
-Nenhum bloqueio à capacidade deste plano. Trava depende de `/proc` e boot ID no Linux usado pelo projeto; falha de leitura ambígua é recusa segura. O arquivo desconhecido `.planning/milestone.lock` foi preservado.
+Nenhum bloqueio à capacidade deste plano. Trava depende de `/proc` e boot ID no Linux usado pelo projeto; falha de leitura ambígua é recusa segura. O arquivo desconhecido .planning/milestone.lock foi preservado.
 
 ## Known Limits / Next Phase Readiness
 

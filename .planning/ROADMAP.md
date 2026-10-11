@@ -6,7 +6,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ## Phases
 
-- [ ] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício.
+- [x] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício. (completed 2026-10-11)
 - [ ] **Phase 2: Busca, contexto, abas e exportação no site** - Encontrar evidências, comparar conversas e exportar o recorte completo com seus arquivos.
 - [ ] **Phase 3: Consulta e arquivos reais no Codex** - Usar o MCP privado no Codex instalado e comprovar recebimento ou download dos binários.
 - [ ] **Phase 4: Operação e restauração na VPS** - Manter o serviço supervisionado, backup privado fora da VPS e o fluxo real verificável após restauração.
@@ -15,7 +15,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ### Phase 1: Arquivo privado com mensagens e mídias reais
 
-**Goal:** O proprietário consegue vincular sua conta sem navegador e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, inclusive sem conexão com o WhatsApp.
+**Goal:** As a proprietário da conta, I want to vincular minha conta sem navegador no coletor e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, so that eu possa recuperar esse material inclusive sem conexão com o WhatsApp.
 **Mode:** mvp
 **Depends on**: Nothing (primeira fase)
 **Requirements**: PRIV-01, PRIV-02, PRIV-03, SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, EVID-01, MEDIA-01, MEDIA-02, MEDIA-03, WEB-01
@@ -34,7 +34,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 - [x] 01-04-PLAN.md
 - [x] 01-05-PLAN.md
 - [x] 01-06-PLAN.md
-- [ ] 01-07-PLAN.md
+- [x] 01-07-PLAN.md
 
 **UI hint**: yes
 
@@ -109,7 +109,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Arquivo privado com mensagens e mídias reais | 6/7 | In Progress | - |
+| 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 0/0 | Not started | - |
 | 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |

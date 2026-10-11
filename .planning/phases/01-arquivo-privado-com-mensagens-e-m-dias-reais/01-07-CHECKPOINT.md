@@ -1,6 +1,6 @@
 # Continuidade do plano 01-07
 
-Atualizado em 2026-10-11. **Três tarefas operacionais concluídas; verificação final da meta pendente. Nenhuma intervenção do proprietário pendente.**
+Atualizado em 2026-10-11. **Três tarefas operacionais concluídas; fase1 local concluída. Nenhuma intervenção do proprietário pendente.**
 
 ## Instrução atual
 
@@ -27,6 +27,6 @@ A política de navegação recusou chrome://downloads/ por admitir HTTP/HTTPS; n
 
 Fonte local: http://127.0.0.1:3000, zap-mcp-pilot.service, um coletor. Caminhos, credencial, PIDs, snapshots e provas detalhadas estão no checkpoint operacional privado fora do checkout; não imprimir ou versionar seu conteúdo. O browser auxiliar foi retirado das instruções operacionais.
 
-Próxima etapa: controles Nyquist/segurança/UI e verificação da meta da fase, depois reconciliar requisitos/ROADMAP/STATE com o veredito. Não repetir QR, reparo ou planos01–06. Não avançar à fase2 antes dos controles; VPS, backup externo e MCP continuam nas fases respectivas. Limites de histórico e mídia permanecem explícitos.
+Verificador independente passou88/88 verdades e15/15 requisitos, sem gaps/flags/ações humanas pendentes; phase.complete concluiu fase1 em2026-10-11. Próxima etapa: planejar fase2; nenhuma execução iniciada. Não repetir QR, reparo ou planos01–06. Não avançar à fase2 antes dos controles; VPS, backup externo e MCP continuam nas fases respectivas. Limites de histórico e mídia permanecem explícitos.
 
 Controles prévios ao verificador: Nyquist validado com zero lacunas automatizadas;17 ameaças planejadas mitigadas/zero abertas no nível1; UI22/24 sem blocker, dois warnings menores corrigidos e assertivas CUA atuais passaram. Build atual e13 testes auth/HTTP/security/readonly passaram em6,92s. Gate TDD:4 planos, zero violações. Gate de regressão cruzada não aplicável à primeira fase.

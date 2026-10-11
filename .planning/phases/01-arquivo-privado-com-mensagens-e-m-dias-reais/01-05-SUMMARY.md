@@ -100,14 +100,14 @@ status: complete
 ## Verification
 
 - `mise exec node@24.21.0 -- npm test`: **52/52**, zero falhas, skipped ou todo; 11,137s. Log externo: `/tmp/zap05-full-suite.log`.
-- Alvos HTTP/cobertura/mídia e segurança/auth/readonly executados; build Node24, `node --check public/app.js` e `git diff --check` passaram.
+- Alvos HTTP/cobertura/mídia e segurança/auth/readonly executados; build Node24, node --check public/app.js e `git diff --check` passaram.
 - Browser plugin not available no catálogo. Fallback previsto na skill frontend-testing-debugging: Playwright já instalado no runtime externo; nenhuma dependência de browser entrou no package/lock.
 - Chromium headless local, URL final sintética `http://127.0.0.1:36069` (servidor encerrado após QA), viewports320/768/1280, escala de texto200%. Página correta, conteúdo significativo, sem overlay, zero page errors/console errors relevantes. Erros HTTP500/rede intencionalmente injetados foram classificados como parte da verificação.
 - Fluxos: login vazio/recusado/autorizado; lista50+6; leitor100+anteriores; detalhes por Enter; volta/foco; nova mensagem oferece ação sem mover leitura/foco; consulta500 mantém leitura; download500 informa falha; logout500 mantém leitura; logout200 remove DOM; resposta200 atrasada após logout é ignorada.
 - Seis conexões simuladas, QR vigente/vencido/bloqueado e imagem real do encoder; WhatsApp offline mantém consulta, browser offline preserva só leitura renderizada/oculta QR. Retomada e pagehide/pageshow verificam sessão antes de revelar página. Expiração remove dados e retorna ao login.
 - Zero/uma/muitas conversas/mensagens, conversa sem nome, conversa sem mensagens e ID desconhecido conferidos. Unicode/RTL, texto multilinha, nomes/IDs/hashes longos sem rolagem horizontal nos tamanhos testados.
 - Download original HTML/SVG sintético passou por interação real, conferência de bytes e SHA-256 `97ba26a8d216233d97e356d624fcb0d04179c5e24cf6bc131e2d7a967266a273`; nenhum script/HTML recebido executou.
-- QA final repetido após correção nativa: evento Playwright download concluído sem failure em320/768/1280, servidor recebeu sequênciaHEAD→GET com `Sec-Fetch-Mode: navigate` noGET e os mesmos bytes/hash. HEAD500 preserva mensagem/informa erro; HEAD401 após revogação limpa DOM/login; HEAD200 retido até após logout terminou sem iniciarGET. Nenhum `.blob()`, Blob ou ObjectURL permanece em public/app.js. `test/http.test.js` + `test/security.test.js`:3/3 verdes (~2,014s), sintaxe/diff verdes; backend sem alteração desde a suíte52/52.
+- QA final repetido após correção nativa: evento Playwright download concluído sem failure em320/768/1280, servidor recebeu sequênciaHEAD→GET com `Sec-Fetch-Mode: navigate` noGET e os mesmos bytes/hash. HEAD500 preserva mensagem/informa erro; HEAD401 após revogação limpa DOM/login; HEAD200 retido até após logout terminou sem iniciarGET. Nenhum `.blob()`, Blob ou ObjectURL permanece em public/app.js. `dist/test/http.test.js` + `dist/test/security.test.js`:3/3 verdes (~2,014s), sintaxe/diff verdes; backend sem alteração desde a suíte52/52.
 - Anônimo/cookie vazio/inválido/expirado/revogado negado antes de IDs/HEAD/Range. Range primeiro/último/sufixo, malformados e múltiplos; path/Unicode/SQL/symlink; headers/caches; payload/quote restritos e erros simultâneos sem sentinelas privadas em DTO/headers/logs.
 - Evidência externa: `/tmp/zap05-browser-qa.mjs`, `/tmp/zap05-browser-result.json`; 13 screenshots `/tmp/zap05-{qr,reader,zoom}-{320,768,1280}.png`, `qr-expired.png`, `server-offline.png`, `session-expired.png`, `empty-320.png` com prefixo zap05. Somente dados sintéticos.
 
@@ -161,7 +161,7 @@ Nenhuma intervenção para este plano. Conta/celular/VPS/cópia continuam separa
 
 Pronto para01-06: preparar snapshot/restore privado e o gate real. Não executado aqui. Todos requisitos v1 continuam Pending até a evidência real prevista; testes sintéticos não estabelecem cobertura histórica da conta nem integração no Codex.
 
-Limites: Chromium local e escala de texto200%, sem certificação de acessibilidade ou prova de zoom/chrome nativo de outros browsers. Originais grandes usam transferência nativa do navegador, sem buffering JavaScript; vazão e custo do hash não foram medidos em volume real. Nenhum dado/QR real foi coletado/publicado; temporários e screenshots permanecem fora do repositório. `.planning/milestone.lock` preexistente desconhecido foi preservado.
+Limites: Chromium local e escala de texto200%, sem certificação de acessibilidade ou prova de zoom/chrome nativo de outros browsers. Originais grandes usam transferência nativa do navegador, sem buffering JavaScript; vazão e custo do hash não foram medidos em volume real. Nenhum dado/QR real foi coletado/publicado; temporários e screenshots permanecem fora do repositório. .planning/milestone.lock preexistente desconhecido foi preservado.
 
 ## Self-Check: PASSED
 

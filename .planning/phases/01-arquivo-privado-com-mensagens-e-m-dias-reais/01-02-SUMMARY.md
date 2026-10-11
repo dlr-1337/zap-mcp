@@ -42,7 +42,8 @@ coverage:
     description: Evidência, citações e histórico renderizados no leitor
     verification:
       - kind: other
-        ref: node --check public/app.js
+        ref: public/app.js
+        command: node --check public/app.js
         status: pass
     human_judgment: true
     rationale: Conferência visual no browser da wave ainda necessária; sintaxe e respostas HTTP não provam a apresentação.
@@ -90,10 +91,10 @@ Documentação/estado: `e1e5700`, `7ff52bc`, `42afe39` — SUMMARY antes da atua
 
 ## Verification
 
-- Task1: `mise exec node@24.21.0 -- npm run build` seguido de `node --test --test-reporter=tap dist/test/archive.test.js dist/test/revisions.test.js dist/test/auth.test.js`: **18/18 pass**, cerca de7.5s.
-- Task2/plan: build seguido de `node --test --test-reporter=tap dist/test/coverage.test.js dist/test/archive.test.js dist/test/revisions.test.js dist/test/auth.test.js`: **22/22 pass**, cerca de7.5s.
+- Task1: `mise exec node@24.21.0 -- npm run build` seguido de node --test --test-reporter=tap dist/test/archive.test.js dist/test/revisions.test.js dist/test/auth.test.js: **18/18 pass**, cerca de7.5s.
+- Task2/plan: build seguido de node --test --test-reporter=tap dist/test/coverage.test.js dist/test/archive.test.js dist/test/revisions.test.js dist/test/auth.test.js: **22/22 pass**, cerca de7.5s.
 - Última execução após ajustes finais: `mise exec node@24.21.0 -- npm test`: **22 tests,22 pass,0 fail,0 skipped**, 8459ms. Os quatro arquivos de alvo executaram; nenhum zero-test foi tratado como êxito.
-- `node --check public/app.js` e `git diff --check`: pass. Busca de TODO/FIXME/placeholder e chamadas sendMessage/readMessages/chatModify nos arquivos do plano: nenhum resultado.
+- node --check public/app.js e `git diff --check`: pass. Busca de TODO/FIXME/placeholder e chamadas sendMessage/readMessages/chatModify nos arquivos do plano: nenhum resultado.
 - Falha SQL injetada prova rollback de mensagem/revisão/origem/job, contagem de falha e erro sanitizado. Migração real v2, FK/integrity, 130 itens empatados, replay e lote vazio, homônimos/PN-LID/grupo, Long/buffer, update-before-original, revogação/replay, viewOnce/citação/recibos e retomada após reabrir banco foram exercitados.
 - `check evaluation-scope --plan 01-02 --commits-only --raw`: resolved, quatro commits alcançáveis neste ramo.
 
@@ -117,7 +118,7 @@ Sem novas bibliotecas, ORM, socket, fila externa ou infraestrutura. Mídia tem s
 
 ## Issues Encountered
 
-Nenhum bloqueio remanescente no escopo. Uma consulta prematura ao classificador apontou registro inexistente após build de teste falho; somente o relatório TAP real posterior recebeu aprovação para GREEN. Trava preexistente `.planning/milestone.lock` preservada, sem staging.
+Nenhum bloqueio remanescente no escopo. Uma consulta prematura ao classificador apontou registro inexistente após build de teste falho; somente o relatório TAP real posterior recebeu aprovação para GREEN. Trava preexistente .planning/milestone.lock preservada, sem staging.
 
 ## User Setup Required
 

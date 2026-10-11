@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 1
-current_phase_name: Arquivo privado com mensagens e mídias reais
-status: executing
-stopped_at: "Plano01-07 concluído; controles finais da fase1"
-last_updated: "2026-10-11T02:29:09.622Z"
-last_activity: 2026-10-10
-last_activity_desc: Phase 1 execution started
-state_head: da4f159d1b4afc305a21943783e00d158f7d839e
+current_phase: 2
+current_phase_name: Busca, contexto, abas e exportação no site
+status: planning
+stopped_at: Phase 1 complete, ready to plan Phase 2
+last_updated: "2026-10-11T04:27:42.517Z"
+last_activity: 2026-10-11
+last_activity_desc: Phase 1 complete, transitioned to Phase 2
+state_head: b5f7eeffc99a6ddb3cb032f2608eb857715d5551
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
   completed_plans: 7
-  percent: 0
+  percent: 25
 ---
 
 # Project State
@@ -23,36 +23,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-10)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase 1 — Arquivo privado com mensagens e mídias reais
+**Current focus:** Phase2 — pronta para planejamento; Phase1 local concluída
 
 ## Current Position
 
-Phase: 1 (Arquivo privado com mensagens e mídias reais) — EXECUTING
-Plan: 7 of 7
-Status: Executing
-Last activity: 2026-10-10 — Phase 1 execution started
+Phase: 2 — Busca, contexto, abas e exportação no site
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-11 — Phase 1 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: Sem execução
-- Total execution time: 0 horas
+- Total plans completed: 7
+- Average duration: Não consolidada; plano07 teve piloto continuado
+- Total execution time:71min registrados nos planos01–06, além do piloto continuado01–07
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 0 | 0 | - |
+| 1 | 7 | - | - |
 | 2 | 0 | 0 | - |
 | 3 | 0 | 0 | - |
 | 4 | 0 | 0 | - |
 
 **Recent Trend:**
-- Last 5 plans: Nenhum plano executado
-- Trend: Ainda não mensurada
+- Last 5 plans:01-03,01-04,01-05,01-06,01-07
+- Trend: Piloto real concluído, sem nova medição global
 
 **Per-Plan Metrics:**
 
@@ -84,20 +84,20 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-05 mantém UI nativa50/100 e QR efêmero; respostas tardias e páginas restauradas exigem sessão atual.52 testes e QA browser320/768/1280 sintéticos; conta real continua pendente.
 - [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
 - [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
-- [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 aguardando controles finais.
+- [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 local concluída após controles e verificador.
 
 ### Pending Todos
 
-Nenhum todo avulso registrado. Próxima ação: validar Nyquist/segurança/UI e verificar a meta da Phase1.
+Nenhum todo avulso registrado. Próxima ação: planejar a Phase2; nenhuma execução iniciada.
 
 ### Blockers/Concerns
 
 Nenhum impedimento para iniciar o planejamento.
 
-- Phase 1: Revalidar Baileys/auth/PN-LID/eventos; pareamento exige celular para QR e piloto com conversa/mídias conhecidas, após cópia privada recuperável.
+- Phase1 concluída: Baileys/chaves/identidades/eventos, QR, comparaçãoWeb e restore/restart verificados; histórico permanece limitado ao recebido. Crash do auxiliar sem causa exata determinada; download Chrome normal passou.
 - Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
-- Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; nenhum requisito marcado antes do verificador. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
+- Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
 
 ## Deferred Items
 
@@ -109,7 +109,9 @@ Nenhum impedimento para iniciar o planejamento.
 ## Session Continuity
 
 Last session: 2026-10-11T01:56:57.468Z
-Stopped at: Plano01-07 concluído; controles finais da fase1
+Stopped at: Phase 1 complete, ready to plan Phase 2
 Resume file: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
+
+- Encerramento2026-10-11: verificador88/88,15 requisitos,28 testes focados; fonte conectada e cópia privada8.684/828 restaurada. Nenhuma intervenção do usuário pendente.

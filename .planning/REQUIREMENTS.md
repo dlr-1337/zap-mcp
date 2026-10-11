@@ -7,34 +7,34 @@
 
 ### Acesso privado
 
-- [ ] **PRIV-01**: O proprietário pode entrar e sair do site com uma sessão privada; uma pessoa não autenticada não obtém dados do acervo.
-- [ ] **PRIV-02**: QR de pareamento, conversas, buscas, anexos, exportações e MCP exigem a credencial apropriada em todos os caminhos de acesso, incluindo requisições diretas por ID ou URL.
-- [ ] **PRIV-03**: Credenciais e chaves de WhatsApp, segredos de login e token MCP ficam fora do Git, logs, exportações e respostas das interfaces; mensagens e arquivos recebidos não são executados como código ou instruções privilegiadas.
+- [x] **PRIV-01**: O proprietário pode entrar e sair do site com uma sessão privada; uma pessoa não autenticada não obtém dados do acervo.
+- [x] **PRIV-02**: QR de pareamento, conversas, buscas, anexos, exportações e MCP exigem a credencial apropriada em todos os caminhos de acesso, incluindo requisições diretas por ID ou URL.
+- [x] **PRIV-03**: Credenciais e chaves de WhatsApp, segredos de login e token MCP ficam fora do Git, logs, exportações e respostas das interfaces; mensagens e arquivos recebidos não são executados como código ou instruções privilegiadas.
 
 ### Sincronização sem navegador
 
-- [ ] **SYNC-01**: O proprietário pode vincular sua conta pessoal por QR em uma tela privada, sem executar navegador ou WhatsApp Web, e ver o estado da conexão.
-- [ ] **SYNC-02**: O proprietário pode consultar as mensagens de histórico que o dispositivo vinculado efetivamente receber, sem omitir itens de um lote recebido.
-- [ ] **SYNC-03**: Novas mensagens recebidas e enviadas pela própria conta são arquivadas nas conversas individuais e de grupo quando entregues pela integração, sem envio pelo Zap MCP. A origem não permite inferir qual dispositivo enviou a mensagem; comparação com WhatsApp Web autorizada pelo proprietário em 2026-10-11.
-- [ ] **SYNC-04**: Reinício e reconexão preservam as credenciais e todas as categorias de chaves da sessão; uma sessão ainda válida retoma com um único coletor ativo, sem exigir novo QR por perda de estado local.
-- [ ] **SYNC-05**: Reprocessar ou receber eventos repetidos ou fora de ordem não duplica mensagens, mescla contatos homônimos nem desfaz uma atualização mais recente; identidades PN/LID são conciliadas apenas com evidência recebida.
-- [ ] **SYNC-06**: Edições e revogações recebidas aparecem com indicação e momento de observação, preservando o conteúdo anteriormente capturado como registro histórico identificado; tipo desconhecido ou conteúdo temporário não recuperado aparece explicitamente.
-- [ ] **SYNC-07**: O proprietário vê última sincronização, intervalo observado e falhas conhecidas; o site e o MCP descrevem ausência como “não encontrado no acervo” e não apresentam conclusão de lote como histórico integral da conta.
+- [x] **SYNC-01**: O proprietário pode vincular sua conta pessoal por QR em uma tela privada, sem executar navegador ou WhatsApp Web, e ver o estado da conexão.
+- [x] **SYNC-02**: O proprietário pode consultar as mensagens de histórico que o dispositivo vinculado efetivamente receber, sem omitir itens de um lote recebido.
+- [x] **SYNC-03**: Novas mensagens recebidas e enviadas pela própria conta são arquivadas nas conversas individuais e de grupo quando entregues pela integração, sem envio pelo Zap MCP. A origem não permite inferir qual dispositivo enviou a mensagem; comparação com WhatsApp Web autorizada pelo proprietário em 2026-10-11.
+- [x] **SYNC-04**: Reinício e reconexão preservam as credenciais e todas as categorias de chaves da sessão; uma sessão ainda válida retoma com um único coletor ativo, sem exigir novo QR por perda de estado local.
+- [x] **SYNC-05**: Reprocessar ou receber eventos repetidos ou fora de ordem não duplica mensagens, mescla contatos homônimos nem desfaz uma atualização mais recente; identidades PN/LID são conciliadas apenas com evidência recebida.
+- [x] **SYNC-06**: Edições e revogações recebidas aparecem com indicação e momento de observação, preservando o conteúdo anteriormente capturado como registro histórico identificado; tipo desconhecido ou conteúdo temporário não recuperado aparece explicitamente.
+- [x] **SYNC-07**: O proprietário vê última sincronização, intervalo observado e falhas conhecidas; o site e o MCP descrevem ausência como “não encontrado no acervo” e não apresentam conclusão de lote como histórico integral da conta.
 
 ### Evidência e consulta básica
 
-- [ ] **EVID-01**: Cada mensagem arquivada preserva referência estável, chave de origem, conversa, autor/direção, instante original, tipo, texto/legenda, citação recebida e estados dos anexos; campos desconhecidos não são inventados.
+- [x] **EVID-01**: Cada mensagem arquivada preserva referência estável, chave de origem, conversa, autor/direção, instante original, tipo, texto/legenda, citação recebida e estados dos anexos; campos desconhecidos não são inventados.
 - [ ] **EVID-02**: Datas permanecem no instante original e filtros por período usam America/Sao_Paulo de forma explícita; site, exportação e MCP permitem conferir UTC ou offset sem trocar a data da mensagem pela data de ingestão.
 
 ### Arquivos reais
 
-- [ ] **MEDIA-01**: A ingestão inicia a preservação de áudios, imagens, vídeos e documentos acessíveis junto com as mensagens, salvando bytes originais disponíveis em armazenamento privado, em vez de apenas URLs ou miniaturas.
-- [ ] **MEDIA-02**: Cada anexo distingue pendente, disponível, falha recuperável e indisponível; só um binário finalizado e verificado por tamanho/hash é declarado disponível e permanece acessível sem WhatsApp conectado.
-- [ ] **MEDIA-03**: Downloads interrompidos podem retomar de uma fila persistente com tentativas e concorrência limitadas; falha de mídia ou falta de espaço é informada e preserva as mensagens e os arquivos já armazenados.
+- [x] **MEDIA-01**: A ingestão inicia a preservação de áudios, imagens, vídeos e documentos acessíveis junto com as mensagens, salvando bytes originais disponíveis em armazenamento privado, em vez de apenas URLs ou miniaturas.
+- [x] **MEDIA-02**: Cada anexo distingue pendente, disponível, falha recuperável e indisponível; só um binário finalizado e verificado por tamanho/hash é declarado disponível e permanece acessível sem WhatsApp conectado.
+- [x] **MEDIA-03**: Downloads interrompidos podem retomar de uma fila persistente com tentativas e concorrência limitadas; falha de mídia ou falta de espaço é informada e preserva as mensagens e os arquivos já armazenados.
 
 ### Consulta pelo site
 
-- [ ] **WEB-01**: O proprietário pode listar e reabrir conversas com mensagens e anexos já arquivados em uma interface privada básica, inclusive com o coletor WhatsApp desconectado.
+- [x] **WEB-01**: O proprietário pode listar e reabrir conversas com mensagens e anexos já arquivados em uma interface privada básica, inclusive com o coletor WhatsApp desconectado.
 - [ ] **WEB-02**: O proprietário pode combinar busca por contato, palavra e período sobre texto, legendas e nomes de arquivo recebidos; nomes homônimos aparecem como candidatos distintos e o alcance da busca fica explícito.
 - [ ] **WEB-03**: O proprietário pode percorrer mensagens por páginas e abrir o contexto de um resultado por referência estável; um recorte paginado não pula nem repete registros quando novas mensagens chegam.
 - [ ] **WEB-04**: O proprietário pode manter pelo menos duas conversas abertas em abas independentes dentro do site, alternando entre elas sem perder a conversa e o ponto de leitura de cada aba.
@@ -88,26 +88,28 @@ Na implementação, testes de replay, reconexão, autenticação, fuso/paginaç�
 
 ## Traceability
 
+Complete significa evidência da fase responsável nas superfícies já implementadas. Privacidade/segredos/somente leitura devem ser verificados novamente quando busca/exportação/MCP/HTTPS forem adicionados nas fases seguintes.
+
 Cada requisito v1 pertence a exatamente uma fase responsável. Requisitos transversais são verificados novamente nas integrações sem duplicar responsabilidade; privacidade e somente leitura valem desde a primeira exposição, e a cópia recuperável anterior ao piloto antecipa a proteção de OPS-02, cuja responsabilidade final é da Phase 4. Planejamento não conclui requisitos.
 
 | Requirement | Phase | Status |
 |---|---|---|
-| PRIV-01 | Phase 1 | Pending |
-| PRIV-02 | Phase 1 | Pending |
-| PRIV-03 | Phase 1 | Pending |
-| SYNC-01 | Phase 1 | Pending |
-| SYNC-02 | Phase 1 | Pending |
-| SYNC-03 | Phase 1 | Pending |
-| SYNC-04 | Phase 1 | Pending |
-| SYNC-05 | Phase 1 | Pending |
-| SYNC-06 | Phase 1 | Pending |
-| SYNC-07 | Phase 1 | Pending |
-| EVID-01 | Phase 1 | Pending |
+| PRIV-01 | Phase 1 | Complete |
+| PRIV-02 | Phase 1 | Complete |
+| PRIV-03 | Phase 1 | Complete |
+| SYNC-01 | Phase 1 | Complete |
+| SYNC-02 | Phase 1 | Complete |
+| SYNC-03 | Phase 1 | Complete |
+| SYNC-04 | Phase 1 | Complete |
+| SYNC-05 | Phase 1 | Complete |
+| SYNC-06 | Phase 1 | Complete |
+| SYNC-07 | Phase 1 | Complete |
+| EVID-01 | Phase 1 | Complete |
 | EVID-02 | Phase 2 | Pending |
-| MEDIA-01 | Phase 1 | Pending |
-| MEDIA-02 | Phase 1 | Pending |
-| MEDIA-03 | Phase 1 | Pending |
-| WEB-01 | Phase 1 | Pending |
+| MEDIA-01 | Phase 1 | Complete |
+| MEDIA-02 | Phase 1 | Complete |
+| MEDIA-03 | Phase 1 | Complete |
+| WEB-01 | Phase 1 | Complete |
 | WEB-02 | Phase 2 | Pending |
 | WEB-03 | Phase 2 | Pending |
 | WEB-04 | Phase 2 | Pending |
@@ -130,8 +132,8 @@ Cada requisito v1 pertence a exatamente uma fase responsável. Requisitos transv
 - Mapped to phases: 32/32 (100%)
 - Unmapped: 0
 - Duplicate phase assignments: 0
-- Requirement status: 32 Pending; nenhum implementado ou verificado
+- Requirement status: 15 Complete (Phase1 local),17 Pending (Phases2–4); verificação88/88 registrada em01-VERIFICATION.md
 
 ---
 *Requirements defined: 2026-10-10*
-*Last updated: 2026-10-10 after research and user clarification*
+*Last updated: 2026-10-11 após piloto real e verificação da Phase1*

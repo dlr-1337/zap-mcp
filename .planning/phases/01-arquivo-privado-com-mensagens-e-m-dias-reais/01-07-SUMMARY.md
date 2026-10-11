@@ -22,7 +22,7 @@ key-decisions:
   - "Override explícito de 2026-10-11 dispensa comparação manual no celular e autoriza referência WhatsApp Web."
   - "fromMe identifica a própria conta, sem inferir aparelho; UI diz Enviada por você."
   - "Originais equivalentes no mesmo relógio/evidence ignoram somente messageContextInfo de raiz; diferenças reais continuam conflito."
-requirements-completed: []
+requirements-completed: [PRIV-01, PRIV-02, PRIV-03, SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, EVID-01, MEDIA-01, MEDIA-02, MEDIA-03, WEB-01]
 requirements-supported: [PRIV-01, PRIV-02, PRIV-03, SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, EVID-01, MEDIA-01, MEDIA-02, MEDIA-03, WEB-01]
 actuals:
   tasks: 3
@@ -33,7 +33,7 @@ status: complete
 
 # Plano 01-07: piloto real comparado e restaurado
 
-**Três tarefas concluídas. Conta vinculada, comparação com Web autorizada pelo usuário, originais disponíveis conferidos e restore/restart após correção. Requisitos aguardam o verificador da fase; conclusão do plano não equivale à conclusão da fase.**
+**Três tarefas concluídas. Conta vinculada, comparação com Web autorizada pelo usuário, originais disponíveis conferidos e restore/restart após correção. Verificador independente passou88/88 verdades e15/15 requisitos; fase1 local concluída.**
 
 ## Resultados
 
@@ -60,6 +60,10 @@ VPS/HTTPS, backup externo, exportação/busca completa e Codex-MCP pertencem às
 
 ## Próximo controle
 
-Nyquist, segurança, UI e verificação da meta devem reconciliar requisitos/ROADMAP/STATE. Nenhuma comparação manual no celular permanece pendente.
+Nyquist/segurança/UI concluídos; verificador passou sem gaps/flags/humanos pendentes. phase.complete marcou7/7 planos e15 requisitos. Nenhuma comparação manual no celular permanece pendente; fase2 pronta para planejamento.
 
 Controles prévios ao verificador: Nyquist validado com zero lacunas automatizadas;17 ameaças planejadas mitigadas/zero abertas no nível1; UI22/24 sem blocker, dois warnings menores corrigidos e assertivas CUA atuais passaram. Build atual e13 testes auth/HTTP/security/readonly passaram em6,92s. Gate TDD:4 planos, zero violações. Gate de regressão cruzada não aplicável à primeira fase.
+
+## Encerramento —2026-10-11
+
+Verificação88/88 e15/15,28 testes focados executados pelo verificador e provas privadas SQL/arquivos conferidas independentemente. Guard MVP e3 proibições reconciliados com enforcement determinístico;01-VERIFICATION.iter1.md preserva os flags anteriores. Fonte conectada e único coletor ativo; nenhuma fase seguinte executada. SDK inicialmente interpretou comandos inline como arquivos ausentes e duas referências de artefatos compilados estavam sem dist/: referências foram normalizadas sem mudar provas ou fontes, sem correção global do SDK.
