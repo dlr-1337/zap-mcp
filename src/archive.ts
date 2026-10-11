@@ -438,6 +438,43 @@ export function openArchive(dataDir: string) {
       return { messages, effectiveFilters: JSON.parse(snapshot.filters), snapshotId: snapshot.id, expiresAt: new Date(snapshot.expires_at).toISOString(), nextOrdinal: ordinal + messages.length < snapshot.count ? ordinal + messages.length : null };
     })();
   }
+  function openContext(reference: string, session: string, sourceSnapshotId?: string) {
+    return db.transaction(() => {
+      db.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+      const anchor = dto(reference);
+      if (!anchor) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
+      let matchedEvidence: Obj[] = [];
+      if (sourceSnapshotId) {
+        const source = db.prepare('SELECT filters FROM query_snapshots WHERE id=? AND session=?').get(sourceSnapshotId, session) as { filters: string } | undefined;
+        if (!source) throw Object.assign(Error('Este recorte expirou. Atualize a busca para criar um novo recorte.'), { status: 410 });
+        if (JSON.parse(source.filters).kind) throw Object.assign(Error('Recorte de origem inválido'), { status: 400 });
+        const item = db.prepare("SELECT dto FROM query_items WHERE snapshot_id=? AND json_extract(dto,'$.reference')=?").get(sourceSnapshotId, reference) as { dto: string } | undefined;
+        if (!item) throw Object.assign(Error('Referência fora do recorte de origem'), { status: 400 });
+        matchedEvidence = (JSON.parse(item.dto).matchingRevisions as Obj[]).map(r => ({ ...r, historical: Boolean(r.historical) || !anchor.revisions.some(current => current.fingerprint === r.fingerprint && current.text === anchor.text) }));
+      }
+      if ((db.prepare('SELECT count(*) AS n FROM query_snapshots WHERE session=?').get(session) as { n: number }).n >= 20) throw Object.assign(Error('Limite de 20 recortes ativos. Aguarde a expiração para atualizar.'), { status: 429 });
+      const rows = db.prepare('SELECT reference FROM messages WHERE conversation_id=? ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp),reference COLLATE BINARY LIMIT 50001').all(anchor.conversationId) as { reference: string }[];
+      if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja os filtros.'), { status: 413 });
+      let bytes = 0;
+      const items = rows.map(r => { const json = JSON.stringify(dto(r.reference)); bytes += Buffer.byteLength(json); if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja os filtros.'), { status: 413 }); return json; });
+      const ordinal = rows.findIndex(r => r.reference === anchor.reference), snapshotId = randomUUID();
+      const metadata = { kind: 'context', conversation: conversationEvidence(anchor.conversationId), anchorReference: anchor.reference, requestedReference: reference, matchedEvidence, anchorOrdinal: ordinal };
+      db.prepare('INSERT INTO query_snapshots(id,session,filters,expires_at,count) VALUES(?,?,?,?,?)').run(snapshotId, session, JSON.stringify(metadata), Date.now() + 30 * 60_000, items.length);
+      const insert = db.prepare('INSERT INTO query_items(snapshot_id,ordinal,dto) VALUES(?,?,?)'); items.forEach((json, i) => insert.run(snapshotId, i, json));
+      return readContextPage({ reference, session, snapshotId, ordinal: Math.max(0, ordinal - 25), limit: Math.min(items.length - Math.max(0, ordinal - 25), ordinal + 26 - Math.max(0, ordinal - 25)) });
+    })();
+  }
+  function readContextPage({ reference, session, snapshotId, ordinal, limit = 50, direction = 'after' }: { reference: string; session: string; snapshotId: string; ordinal: number; limit?: number; direction?: 'before' | 'after' }) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(ordinal) || ordinal < 0 || !['before', 'after'].includes(direction)) throw Object.assign(Error('Continuação inválida'), { status: 400 });
+    const snapshot = db.prepare('SELECT filters,expires_at,count FROM query_snapshots WHERE id=? AND session=? AND expires_at>?').get(snapshotId, session, Date.now()) as { filters: string; expires_at: number; count: number } | undefined;
+    if (!snapshot) throw Object.assign(Error('Este recorte expirou. Atualize a conversa para criar um novo recorte.'), { status: 410 });
+    const metadata = JSON.parse(snapshot.filters);
+    if (metadata.kind !== 'context' || metadata.requestedReference !== reference || ordinal > snapshot.count) throw Object.assign(Error('Continuação inválida'), { status: 400 });
+    const start = direction === 'before' ? Math.max(0, ordinal - limit) : ordinal, end = direction === 'before' ? ordinal : Math.min(snapshot.count, ordinal + limit);
+    const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? AND ordinal<? ORDER BY ordinal').all(snapshotId, start, end) as { dto: string }[]).map(r => JSON.parse(r.dto));
+    const { kind: _kind, anchorOrdinal: _anchorOrdinal, ...safe } = metadata;
+    return { ...safe, messages, snapshotId, expiresAt: new Date(snapshot.expires_at).toISOString(), previousOrdinal: start > 0 ? start : null, nextOrdinal: end < snapshot.count ? end : null };
+  }
   try {
     db.transaction(() => {
       db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(reference UNINDEXED,revision_id UNINDEXED,content,tokenize='unicode61 remove_diacritics 2'); CREATE TABLE IF NOT EXISTS query_snapshots(id TEXT PRIMARY KEY,session TEXT NOT NULL,filters TEXT NOT NULL,expires_at INTEGER NOT NULL,count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS query_items(snapshot_id TEXT NOT NULL REFERENCES query_snapshots(id) ON DELETE CASCADE,ordinal INTEGER NOT NULL,dto TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal)); DELETE FROM query_snapshots; DELETE FROM search_fts;");
@@ -453,7 +490,7 @@ export function openArchive(dataDir: string) {
   }
   return {
     db,
-    searchMessages, indexMessage, conversationEvidence,
+    searchMessages, openContext, readContextPage, indexMessage, conversationEvidence,
     dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
       db.transaction(() => { for (const m of batch.lidPnMappings ?? []) ingestIdentity(m); for (const c of batch.contacts ?? []) ingestIdentity(c); for (const c of batch.chats ?? []) ingestIdentity(c, true); })();

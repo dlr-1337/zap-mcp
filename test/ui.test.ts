@@ -35,7 +35,7 @@ test('resultado distante abre âncora e duas leituras independentes', async t =>
   assert.equal(await page.getByRole('tab').count(), 2);
   await page.getByRole('tab', { name: /Conversa A/ }).click();
   assert.equal(await page.locator('#messages > li').count(), 51); assert.match(await page.locator('#messages').textContent(), /âncora orçamento/);
-  assert.equal(await page.locator('[data-anchor=true]').getAttribute('tabindex'), '-1');
+  assert.equal(await page.locator('#messages [data-anchor=true]').getAttribute('tabindex'), '-1');
   await page.locator('#more-messages').click(); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 101);
   await page.locator('#more-after').click(); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 151);
   assert.equal(await page.locator('#messages > li').evaluateAll((els: any[]) => new Set(els.map(el => el.dataset.reference)).size), 151);

@@ -6,6 +6,7 @@ let csrfToken, listCursor, messageCursor, selected, listPosition = 0, reading = 
 let readVersion = 0, navigationVersion = 0, statusVersion = 0, qrTimer, lastReference, attemptsLimit;
 let searchVersion = 0, searchCursor, searchFilters;
 let contactVersion = 0, contactSelection, candidateCursor, candidateQuery;
+const tabs = new Map();
 const searchPanel = $('search-panel'), searchForm = $('search-form'), termInput = $('search-terms'), searchButton = $('search-submit');
 const searchStatus = $('search-status'), searchError = $('search-error'), searchScope = $('search-scope'), searchResults = $('search-results');
 const moreResults = $('more-results'), refreshSearch = $('refresh-search');
@@ -64,7 +65,7 @@ async function search(append = false) {
         addText(article, 'p', revision.text ?? unknown).dir = 'auto'; detail(article, 'Revisão correspondente', revision.revisionId);
       }
       const open = addText(article, 'button', 'Abrir contexto'); open.dataset.reference = message.reference;
-      open.addEventListener('click', () => { history.pushState({}, '', '/?conversation=' + encodeURIComponent(message.conversationId) + '&reference=' + encodeURIComponent(message.reference)); openConversation(message.conversationId); });
+      open.addEventListener('click', () => { listPosition = window.scrollY; openContext(message.reference, data.snapshotId, message.conversationId); });
       searchResults.append(li);
     }
     searchCursor = data.nextCursor; moreResults.hidden = !searchCursor; refreshSearch.hidden = false;
@@ -88,7 +89,9 @@ function signedOut(message = '') {
   authenticated = reading = false; selected = listCursor = messageCursor = csrfToken = lastReference = attemptsLimit = undefined;
   hideQr();
   $('archive').hidden = true; $('archive').classList.remove('reading'); $('login-panel').hidden = false;
-  for (const id of ['conversations', 'messages', 'coverage', 'coverage-batches']) $(id).replaceChildren();
+  for (const tab of tabs.values()) { ++tab.generation; tab.panel.remove(); tab.button.parentElement.remove(); } tabs.clear();
+  for (const id of ['conversations', 'coverage', 'coverage-batches']) $(id).replaceChildren();
+  resetReader();
   for (const id of ['connection', 'qr-status', 'media-status', 'archive-error', 'list-status', 'status-loading']) $(id).textContent = '';
   for (const id of ['pairing', 'back', 'more-conversations', 'more-messages', 'refresh-conversation', 'retry', 'empty-list']) $(id).hidden = true;
   for (const id of ['reader', 'conversation-panel']) $(id).removeAttribute('aria-busy');
@@ -188,34 +191,103 @@ async function list(append = false) {
   } catch (error) { if (version === readVersion) failure(error); }
   finally { if (version === readVersion) { $('conversation-panel').removeAttribute('aria-busy'); $('more-conversations').disabled = false; } }
 }
-async function openConversation(id, append = false, refresh = false) {
-  if (!authenticated || append && reading) return;
-  reading = true; const version = readVersion, navigation = ++navigationVersion;
-  $('reader-status').textContent = 'Carregando mensagens…'; $('reader').setAttribute('aria-busy', 'true'); $('more-messages').disabled = true;
+const readerIds = ['reader-status', 'messages', 'more-messages', 'more-after', 'refresh-conversation'];
+function resetReader() {
+  for (const id of readerIds) $(id)?.remove();
+  addText($('reader'), 'p', 'Abra uma conversa ou um resultado para ler o contexto.', 'reader-empty').id = 'reader-status';
+  for (const id of readerIds.slice(1)) { const el = addText($('reader'), id === 'messages' ? 'ol' : 'button', ''); el.id = id; el.hidden = true; }
+}
+function createTab(conversation) {
+  if (!tabs.size) for (const id of readerIds) $(id)?.remove();
+  const panel = document.createElement('section'); panel.id = 'panel-' + conversation.id; panel.hidden = true; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'tab-' + conversation.id); $('conversation-panels').append(panel);
+  const holder = document.createElement('div'); $('conversation-tabs').append(holder);
+  const button = addText(holder, 'button', conversationLabel(conversation)); button.id = 'tab-' + conversation.id; button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-selected', 'false'); button.tabIndex = -1;
+  const status = addText(panel, 'p', ''); status.setAttribute('role', 'status');
+  const messages = addText(panel, 'ol', '');
+  const before = addText(panel, 'button', 'Carregar mensagens anteriores'), after = addText(panel, 'button', 'Carregar mensagens posteriores'), refresh = addText(panel, 'button', 'Atualizar conversa'); before.hidden = after.hidden = refresh.hidden = true;
+  const tab = { conversation, panel, button, status, messages, before, after, refresh, generation: 0, loading: false, scroll: 0, anchor: null };
+  tabs.set(conversation.id, tab); button.addEventListener('click', () => activateTab(tab)); before.addEventListener('click', () => contextPage(tab, 'before')); after.addEventListener('click', () => contextPage(tab, 'after')); refresh.addEventListener('click', () => openContext(tab.requestedReference, undefined, conversation.id));
+  return tab;
+}
+function activateTab(tab, restore = true) {
+  const previous = tabs.get(selected); if (previous && !previous.panel.hidden) previous.scroll = window.scrollY;
+  for (const other of tabs.values()) {
+    other.panel.hidden = other !== tab; other.button.setAttribute('aria-selected', String(other === tab)); other.button.tabIndex = other === tab ? 0 : -1;
+    for (const el of [other.status, other.messages, other.before, other.after, other.refresh]) el.removeAttribute('id');
+  }
+  [tab.status, tab.messages, tab.before, tab.after, tab.refresh].forEach((el, i) => el.id = readerIds[i]);
+  selected = tab.conversation.id; lastReference = tab.lastReference; reading = tab.loading;
+  $('reader').setAttribute('aria-busy', String(tab.loading)); $('message-title').textContent = tab.conversation.name ?? 'Conversa sem nome recebido'; $('archive').classList.add('reading'); $('back').hidden = false;
+  for (const link of $('conversations').querySelectorAll('a')) { if (link.dataset.id === selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
+  history.replaceState({}, '', '/?conversation=' + encodeURIComponent(selected) + (tab.anchor ? '&reference=' + encodeURIComponent(tab.anchor) : ''));
+  if (restore) window.scrollTo(0, tab.scroll);
+}
+function renderContext(tab, data, direction) {
+  const anchor = direction ? tab.messages.querySelector('[data-anchor=true]') ?? tab.messages.firstElementChild : null, offset = anchor?.getBoundingClientRect().top;
+  if (!direction) { tab.messages.replaceChildren(); tab.references = new Set(); tab.snapshotId = data.snapshotId; tab.anchor = data.anchorReference; tab.requestedReference = data.requestedReference; tab.matchedEvidence = data.matchedEvidence; }
+  const fragment = document.createDocumentFragment();
+  for (const message of data.messages) {
+    if (tab.references.has(message.reference)) continue; tab.references.add(message.reference);
+    const li = messageItem(message);
+    if (message.reference === tab.anchor) {
+      li.dataset.anchor = 'true'; li.tabIndex = -1; addText(li.querySelector('article'), 'p', 'Mensagem localizada');
+      for (const revision of tab.matchedEvidence) { addText(li.querySelector('article'), 'p', revision.historical ? 'Correspondência em conteúdo anteriormente capturado — registro histórico' : 'Correspondência no conteúdo atual'); addText(li.querySelector('article'), 'p', revision.text ?? unknown).dir = 'auto'; detail(li.querySelector('article'), 'Revisão correspondente', revision.revisionId); }
+    }
+    fragment.append(li);
+  }
+  if (direction === 'before') tab.messages.prepend(fragment); else tab.messages.append(fragment);
+  if (direction !== 'after') tab.previousCursor = data.previousCursor;
+  if (direction !== 'before') tab.nextCursor = data.nextCursor;
+  tab.before.hidden = !tab.previousCursor; tab.after.hidden = !tab.nextCursor; tab.refresh.hidden = false; tab.lastReference = tab.messages.lastElementChild?.dataset.reference;
+  const n = tab.messages.children.length; tab.status.textContent = n + (n === 1 ? ' mensagem carregada.' : ' mensagens carregadas.') + (!tab.previousCursor || !tab.nextCursor ? ' Não há mais mensagens arquivadas nesta direção.' : '');
+  if (selected === tab.conversation.id) { lastReference = tab.lastReference; if (anchor) window.scrollBy(0, anchor.getBoundingClientRect().top - offset); }
+}
+async function openContext(reference, sourceSnapshotId, conversationId) {
+  if (!authenticated) return;
+  const version = readVersion, navigation = ++navigationVersion; let tab = tabs.get(conversationId);
+  if (tab?.loading) return;
+  const ticket = tab ? ++tab.generation : 0;
+  if (tab) { tab.loading = true; tab.status.textContent = 'Carregando contexto…'; tab.panel.setAttribute('aria-busy', 'true'); }
+  $('reader').setAttribute('aria-busy', 'true');
   try {
-    const response = await request('/api/conversations/' + encodeURIComponent(id) + '/messages' + (append && messageCursor ? '?cursor=' + encodeURIComponent(messageCursor) : ''));
-    if (version !== readVersion || navigation !== navigationVersion) return;
-    if (response.status === 404) { $('archive').classList.add('reading'); $('back').hidden = false; $('messages').replaceChildren(); $('more-messages').hidden = true; $('reader-status').textContent = 'Não encontrado no acervo. Volte à lista de conversas.'; $('message-title').textContent = 'Mensagens arquivadas'; $('message-title').focus(); return; }
-    if (!response.ok) throw Error('server'); const data = await response.json(); if (version !== readVersion || navigation !== navigationVersion) return;
-    const anchor = append ? $('messages').firstElementChild : null, offset = anchor?.getBoundingClientRect().top;
-    selected = id; $('archive').classList.add('reading'); $('back').hidden = false; $('message-title').textContent = data.conversation.name ?? 'Conversa sem nome recebido';
-    for (const link of $('conversations').querySelectorAll('a')) { if (link.dataset.id === id) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
-    if (!append) { $('messages').replaceChildren(); lastReference = data.messages.at(-1)?.reference; }
-    const fragment = document.createDocumentFragment(); for (const message of data.messages) fragment.append(messageItem(message));
-    if (append) $('messages').prepend(fragment); else $('messages').append(fragment);
-    messageCursor = data.nextCursor; $('more-messages').hidden = !messageCursor; $('refresh-conversation').hidden = true;
-    $('reader-status').textContent = data.messages.length ? (messageCursor ? '' : 'Não há mais mensagens arquivadas nesta direção.') : 'Não encontrado no acervo. Esta conversa ainda não tem mensagens arquivadas.';
-    if (anchor) window.scrollBy(0, anchor.getBoundingClientRect().top - offset);
-    if (!append && !refresh) $('message-title').focus();
+    const query = new URLSearchParams(); if (sourceSnapshotId) query.set('sourceSnapshotId', sourceSnapshotId);
+    const response = await request('/api/context/' + encodeURIComponent(reference) + '?' + query);
+    if (version !== readVersion || navigation !== navigationVersion || tab && ticket !== tab.generation) return;
+    const data = await response.json(); if (version !== readVersion || navigation !== navigationVersion || tab && ticket !== tab.generation) return;
+    if (!response.ok) { if (tab) tab.status.textContent = response.status === 410 ? data.error : response.status === 404 ? 'Não encontrado no acervo. Volte aos resultados.' : 'Não foi possível carregar o contexto. Tente abrir novamente.'; else $('reader-status').textContent = response.status === 404 ? 'Não encontrado no acervo. Volte aos resultados.' : 'Não foi possível carregar o contexto. Tente abrir novamente.'; return; }
+    tab = tabs.get(data.conversation.id) ?? createTab(data.conversation); renderContext(tab, data); activateTab(tab, false); tab.messages.querySelector('[data-anchor=true]')?.focus();
   } catch (error) { if (version === readVersion && navigation === navigationVersion) failure(error); }
-  finally { if (version === readVersion && navigation === navigationVersion) { reading = false; $('reader').removeAttribute('aria-busy'); $('more-messages').disabled = false; } }
+  finally { if (version === readVersion && navigation === navigationVersion) { if (tab) { tab.loading = false; tab.panel.removeAttribute('aria-busy'); } reading = false; $('reader').removeAttribute('aria-busy'); } }
+}
+async function contextPage(tab, direction) {
+  if (!authenticated || tab.loading) return;
+  const cursor = direction === 'before' ? tab.previousCursor : tab.nextCursor; if (!cursor) return;
+  const version = readVersion, ticket = ++tab.generation; tab.loading = true; tab.panel.setAttribute('aria-busy', 'true'); tab.status.textContent = 'Carregando contexto…'; tab.before.disabled = tab.after.disabled = true;
+  try {
+    const response = await request('/api/context/' + encodeURIComponent(tab.requestedReference) + '?direction=' + direction + '&cursor=' + encodeURIComponent(cursor));
+    if (version !== readVersion || ticket !== tab.generation || tabs.get(tab.conversation.id) !== tab) return;
+    const data = await response.json(); if (version !== readVersion || ticket !== tab.generation || tabs.get(tab.conversation.id) !== tab) return;
+    if (!response.ok) { tab.status.textContent = response.status === 410 ? data.error : 'Não foi possível carregar o contexto. Tente abrir novamente.'; return; } renderContext(tab, data, direction);
+  } catch (error) { if (version === readVersion && ticket === tab.generation) failure(error); }
+  finally { if (version === readVersion && ticket === tab.generation) { tab.loading = false; tab.panel.removeAttribute('aria-busy'); tab.before.disabled = tab.after.disabled = false; } }
+}
+async function openConversation(id) {
+  if (!authenticated) return;
+  if (tabs.has(id)) { activateTab(tabs.get(id)); return; }
+  const version = readVersion, navigation = ++navigationVersion;
+  $('reader').setAttribute('aria-busy', 'true');
+  try {
+    const response = await request('/api/conversations/' + encodeURIComponent(id) + '/messages?limit=1'); const data = await response.json();
+    if (version !== readVersion || navigation !== navigationVersion) return;
+    if (!response.ok || !data.messages.length) { $('reader-status').textContent = 'Não encontrado no acervo. Esta conversa ainda não tem mensagens arquivadas.'; return; }
+    const existing = tabs.get(data.conversation.id); if (existing) activateTab(existing); else await openContext(data.messages[0].reference, undefined, data.conversation.id);
+  } catch (error) { if (version === readVersion && navigation === navigationVersion) failure(error); }
+  finally { if (version === readVersion) $('reader').removeAttribute('aria-busy'); }
 }
 function back() {
-  ++navigationVersion; reading = false; $('reader').removeAttribute('aria-busy'); $('more-messages').disabled = false;
-  $('archive').classList.remove('reading'); $('back').hidden = true; $('messages').replaceChildren(); $('message-title').textContent = 'Mensagens arquivadas';
-  $('reader-status').textContent = 'Abra uma conversa da lista para ler as mensagens arquivadas.'; $('more-messages').hidden = true; $('refresh-conversation').hidden = true;
-  const link = [...$('conversations').querySelectorAll('a')].find(item => item.dataset.id === selected);
-  link?.removeAttribute('aria-current'); link?.focus({ preventScroll: true }); window.scrollTo(0, listPosition); selected = lastReference = undefined;
+  const tab = tabs.get(selected); if (tab) tab.scroll = window.scrollY;
+  $('archive').classList.remove('reading'); $('back').hidden = true;
+  const link = [...$('conversations').querySelectorAll('a')].find(item => item.dataset.id === selected); link?.focus({ preventScroll: true }); window.scrollTo(0, listPosition);
 }
 async function refreshStatus() {
   if (!authenticated) return;
@@ -282,8 +354,6 @@ $('logout-button').addEventListener('click', async () => {
 });
 $('back').addEventListener('click', event => { event.preventDefault(); history.pushState({}, '', '/'); back(); });
 $('more-conversations').addEventListener('click', () => list(true));
-$('more-messages').addEventListener('click', () => openConversation(selected, true));
-$('refresh-conversation').addEventListener('click', () => openConversation(selected, false, true));
 $('retry').addEventListener('click', async () => {
   try { if (!(await challenge()).authenticated) { signedOut(expired); return; } $('archive-error').textContent = ''; $('retry').hidden = true; await refreshStatus(); await list(); if (selected) await openConversation(selected, false, true); }
   catch (error) { failure(error); }
