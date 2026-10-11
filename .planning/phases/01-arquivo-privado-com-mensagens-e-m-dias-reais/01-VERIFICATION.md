@@ -1,15 +1,22 @@
 ---
 phase: 01-arquivo-privado-com-mensagens-e-m-dias-reais
-verified: 2026-10-11T16:54:09Z
+verified: 2026-10-11T19:14:54Z
 status: passed
 score: 88/88 must-haves verified
-covered_files: [".env.example",".gitignore",".planning/REQUIREMENTS.md",".planning/ROADMAP.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-CONTEXT.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-UAT.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/COVERAGE.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/history/01-VERIFICATION.iter1.md","README.md","package-lock.json","package.json","public/app.js","public/index.html","public/style.css","src/archive.ts","src/auth.ts","src/backup.ts","src/main.ts","src/media.ts","src/whatsapp.ts","test/archive.test.ts","test/auth-state.test.ts","test/auth.test.ts","test/backup.test.ts","test/collector.test.ts","test/coverage.test.ts","test/http.test.ts","test/media.test.ts","test/readonly.test.ts","test/recovery.test.ts","test/revisions.test.ts","test/security.test.ts","tsconfig.json"]
-covered_digest: "v3:sha256:3f35f7d898a4d6905bbda4ecae5e02c606d1c0d3af9a5406983ef4f9638acb2b"
+covered_files: [".env.example",".github/workflows/ci.yml",".gitignore",".planning/REQUIREMENTS.md",".planning/ROADMAP.md",".planning/SHIP.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-01-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-02-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-03-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-04-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-05-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-06-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-PLAN.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-SUMMARY.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-CONTEXT.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-REVIEW.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-UAT.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/COVERAGE.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/history/01-VERIFICATION.iter1.md",".planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/history/01-pre-ship-review.md","README.md","package-lock.json","package.json","public/app.js","public/index.html","public/style.css","src/archive.ts","src/auth.ts","src/backup.ts","src/main.ts","src/media.ts","src/whatsapp.ts","test/archive.test.ts","test/auth-state.test.ts","test/auth.test.ts","test/backup.test.ts","test/collector.test.ts","test/coverage.test.ts","test/http.test.ts","test/media.test.ts","test/readonly.test.ts","test/recovery.test.ts","test/revisions.test.ts","test/security.test.ts","tsconfig.json"]
+covered_digest: "v3:sha256:2ea8fec707ef235410663fb17c6bf5ca69b86f973834178ea792369ca4533e6b"
 behavior_unverified: 0
 overrides_applied: 0
 flagged_prohibitions: 0
 human_verification: []
-documentary_refresh:
+shipping_refresh:
+  previous_status: passed
+  previous_verified: 2026-10-11T16:54:09Z
+  author: orchestrator
+  delta: "Resolução pública confinada à raiz, regressão HTTP real e publicação sanitizada."
+  new_behavioral_probe: "1/1 PASS pelo verificador delegado antes da interrupção; 2/2 PASS pela revisão independente."
+  full_suite_evidence: "87/87 PASS do orquestrador; não repetida neste refresh."
+historical_documentary_refresh:
   previous_status: passed
   previous_verified: 2026-10-11T04:33:23Z
   implementation_unchanged_since: b5f7eef
@@ -62,9 +69,9 @@ prohibition_verification:
 # Fase 1: Arquivo privado com mensagens e mídias reais — Verification Report
 
 **Phase Goal:** As a proprietário da conta, I want to vincular minha conta sem navegador no coletor e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, so that eu possa recuperar esse material inclusive sem conexão com o WhatsApp.
-**Verified:** 2026-10-11T16:54:09Z
+**Verified:** 2026-10-11T19:14:54Z
 **Status:** passed
-**Re-verification:** Sim — refresh documental/UAT após passed anterior; fonte, testes, assets e pins idênticos a b5f7eef. Histórico intacto em history/01-VERIFICATION.iter1.md; evidências atuais do orquestrador identificadas separadamente.
+**Re-verification:** Sim — delta de publicação conferido após passed anterior. Correção de uma linha e regressão HTTP real; assets/pins preservados. Histórico e evidências anteriores mantidos, com autoria da atualização descrita na seção incremental.
 
 
 A meta da fase foi alcançada no escopo local observado. Nesta reverificação, `query user-story.validate` retornou `valid:true`, sem errors e com os três slots da meta canônica; o resultado e as cinco SC permanecem equivalentes ao contrato anterior. As três proibições agora são `test/resolved`, com evidência de enforcement real já executada na primeira verificação. O owner `dispositionForProhibition` retornou `green/flagged:false` nas três e manteve `unverified/flagged:true` quando fornecido conjunto vazio, comprovando a regra fail-closed da classificação.
@@ -308,6 +315,20 @@ Fonte com8.708 referências e snapshot antigo com8.684 mensagens representam ins
 
 Gates técnicos anteriores reutilizados com código sem delta: Nyquist validated/compliant; segurança17 fechadas/0 abertas; revisão de código limpa; UI review22/24 sem blocker; TDD4 planos/0 violações. Não foram reexecutados neste refresh. VPS/HTTPS/MCP/busca/exportação completa permanecem fora desta fase. Nenhum novo gap/advisory ou item human_verification; status passed preservado.
 
+### Reverificação incremental de publicação — 2026-10-11
+
+O delta de produção desde a verificação anterior é uma linha em src/main.ts: os três arquivos da allowlist agora usam sendFile(filename,{root:publicDir,...}). A causa reproduzida era o caminho absoluto incluir um ancestral oculto, levando o filtro de dotfiles de send a recusar a UI e o middleware sanitizado a responder500. A resolução relativa mantém a raiz confinada e não habilita dotfiles, entrada arbitrária, rota estática genérica nem acesso anônimo ao acervo.
+
+O novo caso de test/auth.test.ts usa checkout temporário sob .checkout e HTTP real. Exige200/no-store/corpo não vazio em /, /app.js e /style.css;404 para .env, bancos e caminho não allowlisted;401 no acervo anônimo. RED8790602 e GREENfcdd6a7 na publicação registram a regressão real e a correção; a suíte completa do orquestrador passou87/87, zero falhas/skips, em12,63s. A revisão independente incremental dos três arquivos da publicação está clean e executou os dois casos HTTP relevantes:2/2 verdes. O verificador delegado confirmou a igualdade do delta nos dois checkouts e executou somente o caso novo:1/1 verde,0,869s. Sua execução foi interrompida antes da escrita dos relatórios; esta atualização foi concluída pelo orquestrador, sem atribuir uma conclusão terminal ao agente.
+
+Esta branch contém uma réplica sanitizada da sequência real de implementação; a sanitização documental não alterou fontes, assets ou pins. IDs históricos dos SUMMARYs conservam proveniência local privada sob implementation_history. CI somente na publicação: Ubuntu, Node24.21.0, actions oficiais fixadas por SHA, contents:read e checkout sem credenciais persistidas. Runner GitHub ainda não executado.
+
+A leitura do código e das assertivas mantém o enforcement anterior: allowlist constante, autorização antes das rotas privadas, fallback404, no-store e sanitização. Foram preservadas as88 verdades,15 requisitos e UAT28/28; não há novo gap, regressão demonstrada, flag de proibição ou aceite humano presumido. A revisão visual anterior é reutilizada porque os assets não mudaram. TDD preserva a sequência histórica real:4 planos,0 violações; segurança17 fechadas/0 abertas e Nyquist compliant permanecem sustentados pelos controles anteriores e pela revisão do delta.
+
+Fingerprint gerado pelo owner verification.fingerprint neste checkout, com51 paths declarados; PLAN/SUMMARYs são incluídos pelo owner e o próprio relatório é excluído. Não foi copiado digest entre checkouts. A consulta verification.status após a escrita confirma o estado atual do relatório.
+
+As observações anteriores de conta, UAT e restauração permanecem históricas, sem repetir navegador/coletor/backup ou suíte completa neste refresh. Histórico integral, comparação de bytes baixados diretamente do Web, causa exata do crash auxiliar e estabilidade prolongada do Chrome não foram comprovados. VPS/HTTPS/MCP/busca/exportação completa e backup externo continuam nas fases futuras.
+
 ## Apêndice — refinamentos dos PLANs
 
 | # | Plano | Truth | Status | Evidence |
@@ -398,6 +419,6 @@ Gates técnicos anteriores reutilizados com código sem delta: Nyquist validated
 
 ---
 
-_Verified: 2026-10-11T16:54:09Z_
-_Verifier: gsd-verifier_
+_Verified: 2026-10-11T19:14:54Z_
+_Verifier: gsd-verifier (evidência anterior e probe incremental); refresh de publicação concluído pelo orquestrador_
 

@@ -1,12 +1,12 @@
 ---
 phase: 01-arquivo-privado-com-mensagens-e-m-dias-reais
-reviewed: 2026-10-11T04:00:30Z
+reviewed: 2026-10-11T19:02:43Z
 depth: standard
 files_reviewed: 3
 files_reviewed_list:
-  - src/archive.ts
-  - test/revisions.test.ts
-  - public/app.js
+  - src/main.ts
+  - test/auth.test.ts
+  - .github/workflows/ci.yml
 findings:
   critical: 0
   warning: 0
@@ -17,54 +17,44 @@ status: clean
 
 # Fase 1: relatório de revisão de código
 
-**Reviewed:** 2026-10-11T04:00:30Z
+**Reviewed:** 2026-10-11T19:02:43Z
 **Depth:** standard
 **Files Reviewed:** 3
 **Status:** clean
 
 ## Summary
 
-Revisão incremental da correção de equivalência dos originais (`a292dd316da76fa3e524ba9cac1a80166900091c`), dos quatro testes de regressão (`fdce71e77592e7c5f421213fc7e16d6453baa40e`) e da alteração local de `public/app.js` para “Enviada por você”. Os três arquivos foram relidos integralmente, com rastreamento dos pontos de ingestão, projeção, leitura privada e consumo de mídia. O diff de `a292dd3`, o de `fdce71e` e o diff local do rótulo foram examinados separadamente; `b35aa85^` já contém a correção e os testes, sendo base apenas do incremento documental/local. Nenhum prepass estrutural ou evidência de revisor externo foi fornecido. Nenhum arquivo em escopo é ignorado.
+Revisão incremental da entrega: correção de `sendFile` sob ancestrais ocultos, regressão HTTP correspondente e CI mínima. Os três arquivos em escopo foram relidos integralmente e comparados com a base privada fornecida pelo orquestrador. O diff de produção contém uma linha, o teste acrescenta um caso e a CI é nova. Nenhum arquivo em escopo é ignorado; não existem `.codexignore`, `.codex/skills/` ou `.agents/skills/` neste checkout. Nenhum prepass estrutural ou evidência externa de revisor foi fornecido.
 
-Nenhum BLOCKER ou WARNING introduzido por esse incremento foi comprovado. `status: clean` indica ausência de achados abertos no escopo; não comprova cobertura da conta nem aceite operacional da fase.
+Nenhum BLOCKER ou WARNING novo foi comprovado. `clean` corresponde ao incremento revisado, sem afirmar ausência de defeitos no restante do produto ou aceite operacional de fases futuras.
 
-A revisão anterior permanece preservada em [01-REVIEW.iter3.md](01-REVIEW.iter3.md). O ledger [01-REVIEW-DISPOSITION.md](01-REVIEW-DISPOSITION.md), com cinco achados corrigidos e zero abertos, e [01-REVIEW-FIX.md](01-REVIEW-FIX.md) permanecem históricos e intactos. Nenhum identificador anterior foi reutilizado.
+A revisão anterior está preservada em [history/01-pre-ship-review.md](history/01-pre-ship-review.md). [01-REVIEW-DISPOSITION.md](01-REVIEW-DISPOSITION.md) continua com cinco achados corrigidos e zero abertos. Ledger, relatórios históricos e demais documentos não foram alterados; nenhum identificador anterior foi reutilizado.
 
 ## Narrative Findings (AI reviewer)
 
 Nenhum achado aberto.
 
-O comparador em `src/archive.ts:81-85` exclui somente `messageContextInfo` da raiz do corpo armazenado. O restante do corpo, incluindo descritores completos de mídia, campos não projetados e contextos aninhados, participa de `isDeepStrictEqual`. Em `src/archive.ts:163-175`, apenas originais empatados no maior relógio confiável, com payloads presentes e evidence idêntica, podem deixar de ser incertos. Ausência de relógio em qualquer candidato mantém incerteza; edições não recebem essa exceção. Revogação e restrição continuam cumulativas, sem apagar revisões ou liberar leitura privada.
+Em `src/main.ts:140-144`, as três associações entre rota e arquivo são constantes; nenhuma entrada da requisição participa de `filename` ou `publicDir`. `root: publicDir` mantém a resolução confinada ao diretório público, sem `dotfiles: allow` nem montagem de `express.static`. As rotas de acervo continuam passando por `requireOwner` em `src/main.ts:59-62`; o fallback continua sendo 404. A leitura de `node_modules/express/lib/response.js:375-415` e `node_modules/send/index.js:400-479` confirma que, com `root`, a checagem de dotfiles examina os componentes do nome relativo antes de juntá-lo à raiz. Assim, ancestrais ocultos não são tratados como o arquivo solicitado. O middleware `no-store` e a sanitização de erros permanecem nos mesmos pontos.
 
-O rótulo em `public/app.js:79` deriva somente de `fromMe === true`; `false` e direção ausente preservam seus rótulos próprios. A mudança deixa de inferir o dispositivo usado para enviar. O autor recebido continua inserido via `textContent`.
+Em `test/auth.test.ts:245-270`, o teste cria um checkout real sob `.checkout`, copia módulos compilados e arquivos públicos e usa symlink somente para dependências. O diretório de dados sintéticos é irmão do checkout, preservando o guard de armazenamento externo. O subprocesso recebe código constante, usa o mesmo runtime e tem timeout; a saída e o exit status são verificados. As assertivas exigem 200, corpo não vazio e `no-store` nos três assets, 404 nas quatro rotas recusadas e 401 no acervo anônimo. O temporário é removido em `finally`. O teste adjacente em `test/auth.test.ts:197-243` também exige 404 para arquivos existentes do checkout e verifica o gate privado, conteúdo hostil e paginação.
+
+Em `.github/workflows/ci.yml:3-25`, a CI usa `pull_request` e pushes especificados, `contents: read`, checkout sem persistir credenciais, Node24.21.0 e comandos fixos. Não há `pull_request_target`, segredo de runtime, interpolação de título/branch em shell ou publicação. `npm test` chama build e os testes compilados segundo `package.json`. Os pins foram conferidos nas páginas oficiais dos commits de [actions/checkout v7.0.1](https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1) e [actions/setup-node v7.1.0](https://github.com/actions/setup-node/commit/949feb2413d6458794dcd2491c4babbbce0c15c1). A revisão do YAML não equivale a executar um runner GitHub.
 
 ## Verificação desta execução
 
-Todos os checks executados foram sintéticos e usaram Node24.21.0. Não houve build, alteração de fonte/teste/artefato compilado, navegador, rede externa, perfil WhatsApp ou conta real.
-
-- **Testes de revisão atuais: 12/12**, zero falhas, skips ou cancelamentos. Um `node:module.registerHooks` em memória carregou `src/archive.ts` e `test/revisions.test.ts` atuais nos URLs de `dist/src/archive.js` e `dist/test/revisions.test.js`, usando `stripTypeScriptTypes(..., { mode: 'transform' })`; os demais módulos usaram os artefatos existentes. Assim, o teste exercitou os dois arquivos fonte atuais sem recompilar ou modificar `dist`.
-- **Matriz adversarial independente: 29 verificações**, marcador `REPLAY_MATRIX_AND_LABEL_OK checks=29`, código zero. Importação direta de `./src/archive.ts`, SQLite e dados sintéticos temporários removidos em `finally`. Conferiu referências e primeira revisão intactas; contexto da raiz e ordem das propriedades equivalentes; diferenças em contexto aninhado, campo adicional, citação, URL, directPath, chave de mídia, hash, tamanho e miniatura ainda conflitantes; evidence divergente mesmo com corpo igual; relógio ausente, inválido e mistura de candidato datado/sem relógio; edição, revogação e restrição após replay equivalente; empate real de edições datadas; e relógio posterior resolvendo conflito anterior sem eliminar o histórico.
-- Na mesma matriz, cinco entradas de direção (`true`, `false`, `null`, `undefined` e string `"true"`) exercitaram as funções reais de renderização em VM com DOM mínimo sintético. Os rótulos corresponderam às condições estritas; texto hostil de autoria permaneceu no `textContent`. Essa prova não avalia renderização ou interação em navegador.
-- **Integridade da matriz:** `foreign_key_check=[]` e `integrity_check=ok`.
-- A primeira tentativa da matriz falhou por um argumento `undefined` que ativava o relógio default do próprio harness. O caso sem relógio foi corrigido para `null`, sem mudar o código sob revisão, e a matriz completa passou.
-- **Escopo:** `git diff fdce71e^ --stat -- src/archive.ts test/revisions.test.ts public/app.js` mostrou os três arquivos esperados. `git diff --check` não apontou erros.
-
-A leitura dos testes `test/revisions.test.ts:17-97` confirmou que as assertivas verificam preservação da primeira revisão, ID e linhas existentes do anexo/job, bytes salvos, referências e chaves estrangeiras. A divergência de hash com a mesma legenda exige conflito, evitando que igualdade da evidence pública seja tomada como prova de equivalência da mídia. Os oito testes restantes conferem os protocolos rc14 e estados protegidos adjacentes.
+- Node24.21.0 confirmado via `mise`.
+- `mise exec node@24.21.0 -- node --test --test-name-pattern='arquivos públicos|UI HTTP' dist/test/auth.test.js`: **2/2 pass**, zero falhas, skips ou cancelamentos; duração total 1,437s. Foram usados os artefatos compilados já existentes, sem rebuild; a linha corrigida de `dist/src/main.js` foi inspecionada e coincide com o incremento da fonte.
+- Busca dos callers encontrou somente o loop das três rotas públicas em `src/main.ts:141-143`, sem static genérica nas fontes/testes. `git diff --check` nos três paths não apontou problemas.
+- Duas tentativas auxiliares de comparar integralmente a emissão compilada em memória foram inconclusivas: o pacote TypeScript instalado não expõe `ts.sys` nesse import, e os emissores de TypeScript e `stripTypeScriptTypes` produzem diferenças de sintaxe/formatação. Nenhuma dessas tentativas comprova divergência funcional ou foi contabilizada como teste aprovado; nenhum arquivo foi emitido ou alterado.
 
 ## Evidência anterior e limites
 
-Os **86/86** testes da suíte completa, a prova de retorno das duas falhas ao retirar a correção e o reaplique verde estão registrados em [.planning/debug/resolved/original-replay-conflict.md](../../debug/resolved/original-replay-conflict.md); são evidência anterior, não nova execução desta revisão.
+AGENTS.md, SHIP.md, revisão pré-entrega, SECURITY, UAT e VERIFICATION foram carregados como contexto. O RED da regressão, GREEN e a suíte completa **87/87** estão registrados em [SHIP.md](../../SHIP.md); são evidência do orquestrador, sem nova execução da suíte completa por este revisor. As evidências anteriores de conta real, restauração e aceitação da fase permanecem históricas e distintas desta revisão sintética.
 
-O reparo operacional e os quantitativos de material real informados pelo orquestrador não foram usados como prova de correção nesta revisão. A comparação autorizada com WhatsApp Web e a atualização dos documentos de aceite pertencem ao trabalho do orquestrador. Esta revisão não cria uma nova exigência de comparação no celular ou uma etapa de participação do usuário.
-
-Somente este `01-REVIEW.md` foi escrito pelo revisor, sem commits. Não houve alteração do ledger, `milestone.lock`, documentos alheios, fontes, testes, dados ou serviços privados. Suíte completa, build, conta real, implantação, backup externo e MCP no Codex real não foram verificados nesta execução.
+Somente este relatório foi escrito pelo revisor, sem commit. Não houve alteração de fontes, testes, CI, artefatos compilados, ledger, fingerprint ou documentos alheios. Não foram acessados dados privados, conta WhatsApp, serviços persistentes ou navegador. Build, mutation check, suíte completa, execução remota da CI, VPS, HTTPS, backup externo e MCP no Codex real não foram repetidos ou verificados nesta execução.
 
 ---
 
-_Reviewed: 2026-10-11T04:00:30Z_
+_Reviewed: 2026-10-11T19:02:43Z_
 _Reviewer: gsd-code-reviewer_
-_Depth: standard; re-review incremental_
-
-## Incremento textual/de navegação após a revisão independente
-
-O orquestrador corrigiu dois warnings menores da auditoria UI no mesmo public/app.js: removeAttribute('aria-current') em back() mantendo foco e pluralização explícita quando o lote tem1 item. Inspeção do diff, node --check e assertivas CUA atuais passaram:1→0 marca de seleção, foco conservado e143 lotes unitários no singular. São verificações do orquestrador posteriores à revisão acima, sem afirmar nova revisão independente. Nenhuma mudança adicional em archive.ts/revisions.test.ts.
+_Depth: standard; revisão incremental da entrega_

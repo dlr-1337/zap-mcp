@@ -10,7 +10,7 @@ Verificação funcional anterior:88/88 condições,15 requisitos da fase1 e UAT2
 
 Na instalação isolada,85/86 testes passaram inicialmente; o teste HTTP revelou500 para a UI quando o código estava sob diretório oculto. Causa: caminho absoluto em sendFile incluía .codex, interpretado pelo pacote send como dotfile; middleware sanitizado devolvia500.
 
-Regressão independente usa uma cópia dos módulos sob .checkout, dados sintéticos fora do checkout e chamadas HTTP reais: três arquivos públicos devem responder200/no-store, arquivos privados404 e acervo sem sessão401. RED6de4f61 demonstrou500!=200. GREEN9220ca3 usa somente filename allowlisted com root:publicDir; não habilita dotfiles nem amplia rotas. Suíte completa do snapshot87/87, zero failures/skips em12,63s. Fix e regressão foram integrados ao checkout original, preservando o coletor existente.
+Regressão independente usa uma cópia dos módulos sob .checkout, dados sintéticos fora do checkout e chamadas HTTP reais: três arquivos públicos devem responder200/no-store, arquivos privados404 e acervo sem sessão401. RED8790602 demonstrou500!=200. GREENfcdd6a7 usa somente filename allowlisted com root:publicDir; não habilita dotfiles nem amplia rotas. Suíte completa do snapshot87/87, zero failures/skips em12,63s. Fix e regressão foram integrados ao checkout original, preservando o coletor existente.
 
 CI mínima: Ubuntu, Node24.21.0, actions oficiais fixadas por SHA, token contents:read e credenciais de checkout não persistidas. npm ci, sintaxe de public/app.js e npm test; sem conta real ou segredos de runtime no runner.
 
