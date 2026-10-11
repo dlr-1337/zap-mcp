@@ -26,7 +26,7 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | Task ID | Wave | Tipo | Verificação automatizada no checkout atual | Estado |
 |---|---:|---|---|---|
 | 02-01-01 | 1 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js dist/test/ui.test.js` | pending execution |
-| 02-01-02 | 1 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/period.test.js dist/test/search.test.js` | pending execution |
+| 02-01-02 | 1 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js` | pending execution |
 | 02-01-03 | 1 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/security.test.js dist/test/search.test.js` | pending execution |
 | 02-02-01 | 2 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/search.test.js` | pending execution |
 | 02-02-02 | 2 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/context.test.js dist/test/ui.test.js dist/test/auth.test.js` | pending execution |
@@ -35,7 +35,7 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | 02-03-02 | 3 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/preview.test.js dist/test/security.test.js dist/test/readonly.test.js` | pending execution |
 | 02-03-03 | 3 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/preview.test.js` | pending execution |
 | 02-04-01 | 4 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/ui.test.js` | pending execution |
-| 02-04-02 | 4 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/security.test.js dist/test/period.test.js` | pending execution |
+| 02-04-02 | 4 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/security.test.js dist/test/search.test.js` | pending execution |
 | 02-04-03 | 4 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/readonly.test.js dist/test/export.test.js` | pending execution |
 | 02-05-01 | 5 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-offline` | pending execution |
 | 02-05-02 | 5 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js dist/test/ui.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-browser` | pending execution |
@@ -69,10 +69,10 @@ Fonte: probe determinístico fornecido pelo orquestrador sobre os oito requisito
 
 | Requisito | Categoria | Status | Verification | Critério de resolução | Teste / tarefa |
 |---|---|---|---|---|---|
-| EVID-02 | boundary | resolved | explicit | InícioUTC incluído, início−1ms excluído; fimUTC−1ms incluído, fim excluído;23h/25h históricos; datas iguais aceitas, invertidas400. | test/period.test.ts;02-01-02 |
-| EVID-02 | empty | resolved | explicit | De/Até ausentes/vazios abrem lado; originalnull fica desconhecido e só corresponde sem período; um limite filtra o outro lado. | test/period.test.ts;02-01-02 |
-| EVID-02 | encoding | resolved | explicit | Calendário ASCII YYYY-MM-DD,0001..9999; Unicode digits/notação expandida/repeated params400; instanteISO/offset preservado e rótulo America/Sao_Paulo explícito. | test/period.test.ts;02-01-02 |
-| EVID-02 | precision | resolved | explicit | Instantes em epoch ms inteiros seguros; null não ézero; Date.max/outside não vira ingestão; nenhum arredondamento de segundo/offset altera o match. | test/period.test.ts;02-01-02 |
+| EVID-02 | boundary | resolved | explicit | InícioUTC incluído, início−1ms excluído; fimUTC−1ms incluído, fim excluído;23h/25h históricos; datas iguais aceitas, invertidas400. | test/search.test.ts;02-01-02 |
+| EVID-02 | empty | resolved | explicit | De/Até ausentes/vazios abrem lado; originalnull fica desconhecido e só corresponde sem período; um limite filtra o outro lado. | test/search.test.ts;02-01-02 |
+| EVID-02 | encoding | resolved | explicit | Calendário ASCII YYYY-MM-DD,0001..9999; Unicode digits/notação expandida/repeated params400; instanteISO/offset preservado e rótulo America/Sao_Paulo explícito. | test/search.test.ts;02-01-02 |
+| EVID-02 | precision | resolved | explicit | Instantes em epoch ms inteiros seguros; null não ézero; Date.max/outside não vira ingestão; nenhum arredondamento de segundo/offset altera o match. | test/search.test.ts;02-01-02 |
 | WEB-02 | boundary | resolved | explicit | limit1/50/100 aceitos;0/101/não inteiro400; q até2000 code points/25tokens, acima400; snapshot50000itens/64MiB completo ou413 sem truncar. | test/search.test.ts;02-01-01 |
 | WEB-02 | adjacency | resolved | explicit | Homônimos separados porID; AND só entre campos da mesma revisão; termos em versões diferentes não combinam; merge só com PN/LID recebido. | test/search.test.ts;02-01-01/03 |
 | WEB-02 | empty | resolved | explicit | Campos vazios consultam todo acervo; candidato digitado sem selecionar impede busca silenciosa; seleção404 seausente; nenhuma correspondência lista vazia explícita. | test/search.test.ts,test/ui.test.ts;02-01-01/03 |
@@ -95,7 +95,7 @@ Fonte: probe determinístico fornecido pelo orquestrador sobre os oito requisito
 | WEB-05 | ordering | resolved | explicit | Ordem de anexos capturada/IDs estável; abrir/fechar preview não reordena mensagens/anexos; visibilidadeseparada dodownload. | test/ui.test.ts;02-03-03 |
 | WEB-05 | idempotency | resolved | explicit | HEAD não transfere corpo, GET/Range repetidos dofdverificado retornam mesmos bytes/hash;previewerror não muda availability; sem novo downloadremoto. | test/preview.test.ts;02-03-02 |
 | WEB-05 | concurrency | resolved | explicit | Abort/close/switch/logout liberamfd/players, respostaHEAD tardia não iniciaGET; binarymissing duranteopen retorna404 sem perdermensagem. | test/preview.test.ts,test/ui.test.ts;02-03-02/03 |
-| EXP-01 | boundary | resolved | explicit | Todosregistros além50/100; início/fim exatos e23/25h mesmosdeparsePeriod; limite50000/64MiB/2GiB excedido falhaclara sem truncamento. | test/export.test.ts,test/period.test.ts;02-04-01/02 |
+| EXP-01 | boundary | resolved | explicit | Todosregistros além50/100; início/fim exatos e23/25h mesmosdeparsePeriod; limite50000/64MiB/2GiB excedido falhaclara sem truncamento. | test/export.test.ts,test/search.test.ts;02-04-01/02 |
 | EXP-01 | adjacency | resolved | explicit | Períodos consecutivos exclusivos não duplicam instante nafronteira; IDs/filenamesiguais pororigem não colidem; somenteconversa selecionada. | test/export.test.ts;02-04-02 |
 | EXP-01 | empty | resolved | explicit | Recorte0mensagens422 eUIajustadatas;1exporta;datasvazias selecionamtoda conversa e unknown; convo404não criajob. | test/export.test.ts,test/ui.test.ts;02-04-01/03 |
 | EXP-01 | ordering | resolved | explicit | Todo recorte cronológico pororiginal/refASC, unknownfim, ingestãonão éordem; seleção iniciada ignora retroativo/edição/merge posterior. | test/export.test.ts;02-04-01/02 |
@@ -206,9 +206,9 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 ## Artefatos e símbolos produzidos
 | Plano | Caminhos/símbolos de produto | Testes/artefatos de evidência |
 |---|---|---|
-|02-01| src/archive.ts searchMessages/FTS/query_snapshots; src/period.ts parsePeriod; /api/search; app formulário/candidatos/resultados | search.test.ts,period.test.ts,ui.test.ts; security expandido |
+|02-01| src/archive.ts searchMessages/FTS/query_snapshots/parsePeriod/EffectivePeriod; /api/search; app formulário/candidatos/resultados | search.test.ts (busca/calendário/segurança),ui.test.ts |
 |02-02| src/archive.ts openContext/readContextPage; /api/context/:reference; tabsMap/session/local generation | context.test.ts; ui/security/auth cenários |
 |02-03| src/media.ts classifyPreview; /api/attachments/:id/preview; controles nativos | preview.test.ts; ui/security/readonly |
-|02-04| src/archive.ts freezeExportSelection; src/export.ts createExportManager/createExportJob/getExportJob/openExport/buildZip/verifyZip; /api/exports | export.test.ts; ui/security/readonly |
+|02-04| src/archive.ts freezeExportSelection; src/export.ts createExportManager/createExportJob/getExportJob/openExport/buildZip/verifyZip; /api/exports | export.test.ts (inclui readonly novo); ui/security; readonly existente só regressão |
 |02-05| scripts/phase2-acceptance.mjs --mode real-offline/real-browser | acceptance.test.ts;02-ACCEPTANCE.md; ledgerVALIDATION |
 
