@@ -229,6 +229,6 @@ As decisões D-01 a D-20 foram mantidas em uma única revisão. O contexto descr
 
 **Escolha automática:** operacionalizar a indicação já recebida, mantendo D-20 e a necessidade de uma conversa individual conhecida. Não foi solicitada nova resposta para uma escolha já resolvida.
 
-**Evidência atual:** HTTP privado conectado, coletor e navegador ativos, QR indisponível porque o vínculo está estabelecido. As provas registradas de quatro originais, restauração offline e reinício continuam válidas; não foram repetidas nesta revisão documental.
+**Evidência na checagem inicial da retomada:** HTTP privado conectado, coletor e navegador ativos, QR indisponível porque o vínculo está estabelecido. As provas registradas de quatro originais, restauração offline e reinício continuam válidas; não foram repetidas nesta revisão documental. Na checagem final, o coletor continuava conectado e o navegador de apoio havia encerrado normalmente; situação registrada no checkpoint.
 
 **Resposta humana ainda vigente:** “Ainda não consegui comparar”. Nenhum aceite foi inferido do modo automático. Planos 01–06 permanecem concluídos; plano 07 mantém o checkpoint humano, sem replanejamento da implementação existente.
