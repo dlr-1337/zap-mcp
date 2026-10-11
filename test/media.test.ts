@@ -344,6 +344,18 @@ test('erros antes/tarde e cancelamento mantêm parcial indisponível e viewOnce 
   assert.equal((archive.readStoredMessage({ ...view.key, id: 'quote' }) as any).attachments.length, 0);
 });
 
+test('dispatcher aceita DNS público fixado no Node24 sem erro de formato IP', async () => {
+  const { mediaDispatcher } = await moduleMedia();
+  const signal = AbortSignal.timeout(200);
+  const dispatcher = mediaDispatcher(signal, async () => [{ address: '8.8.8.8', family: 4 }]);
+  try {
+    const response = await fetch('https://mmg.whatsapp.net/file', { dispatcher } as any);
+    await response.body?.cancel();
+  } catch (error) {
+    assert.notEqual((error as Error & { cause?: { code?: string } }).cause?.code, 'ERR_INVALID_IP_ADDRESS', 'DNS já validado deve passar pelo contrato de lookup do Node24');
+  }
+});
+
 test('dispatcher bloqueia URL interna, redirect host e DNS privado antes de conexão', async () => {
   const { mediaDispatcher } = await moduleMedia(); let dns = 0;
   const dispatcher = mediaDispatcher(new AbortController().signal, async () => { dns++; return [{ address: '127.0.0.1', family: 4 }]; });
