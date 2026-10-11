@@ -41,6 +41,35 @@ test('PN/LID tardio conserva referências, origens, homônimos e chaves de grupo
   assert.equal((s.archiveDb.prepare('SELECT count(*) AS n FROM messages').get() as any).n, 4);
 });
 
+test('histórico rc14 usa participante explícito do envelope para grupo e edição', t => {
+  const s = fixture(t), a = s.archive, key = { remoteJid: 'g@g.us', id: 'same', fromMe: false };
+  a.ingestHistory({ messages: ['alice@s.whatsapp.net', 'bob@s.whatsapp.net'].map(participant => item('same', { key, participant })) });
+  assert.equal(a.getCoverage().uniqueMessages, 2, 'mesmo ID de autores diferentes não deve ser fundido');
+  const target = { ...key, participant: 'alice@s.whatsapp.net' };
+  assert.equal(a.readStoredMessage(target)?.author, target.participant);
+  a.ingestHistory({ messages: [item('edit', { key: { ...key, id: 'edit' }, participant: target.participant, message: { protocolMessage: { type: 14, key: { ...target, fromMe: true }, timestampMs: 1700000020000, editedMessage: { conversation: 'editado' } } } })] });
+  assert.equal(a.readStoredMessage(target)?.text, 'editado');
+  assert.equal(a.readStoredMessage({ ...key, participant: 'bob@s.whatsapp.net' })?.text, 'Olá 🧪');
+  assert.equal(a.getCoverage().batches.at(-1).failed, 0);
+});
+
+test('replay do envelope enriquece registro legado sem trocar referência ou mídia', t => {
+  const s = fixture(t), a = s.archive;
+  const key = { remoteJid: 'g@g.us', id: 'legacy', fromMe: false }, participant = 'alice@s.whatsapp.net';
+  const message = item('legacy', { key, participant, message: { imageMessage: { url: 'https://mmg.whatsapp.net/file', mediaKey: Buffer.alloc(32) } } });
+  a.ingestHistory({ messages: [message] });
+  const row = s.archiveDb.prepare('SELECT reference FROM messages').get() as { reference: string };
+  const attachments = s.archiveDb.prepare('SELECT id FROM attachments').all();
+  s.archiveDb.prepare('UPDATE origins SET origin=?,key_json=? WHERE reference=?').run(JSON.stringify([key.remoteJid,key.id,key.fromMe,null]),JSON.stringify({ ...key, participant: null }),row.reference);
+  s.archiveDb.prepare('UPDATE messages SET logical_key=?,author=NULL WHERE reference=?').run(JSON.stringify([key.remoteJid,key.id,key.fromMe,null]),row.reference);
+  a.ingestHistory({ messages: [message, message] });
+  assert.equal(a.getCoverage().uniqueMessages, 1);
+  assert.equal(a.readStoredMessage({ ...key, participant })?.reference, row.reference);
+  assert.equal(a.readStoredMessage({ ...key, participant })?.author, participant);
+  assert.deepEqual(s.archiveDb.prepare('SELECT id FROM attachments').all(), attachments);
+  assert.deepEqual(s.archiveDb.pragma('foreign_key_check'), []);
+});
+
 test('ausências, Long, buffer privado e citação não fabricam original', t => {
   const s = fixture(t), a = s.archive;
   a?.ingestHistory({ messages: [item('long', { messageTimestamp: { low: 1700000000, high: 0, unsigned: true }, message: { extendedTextMessage: { text: 'á <script>', contextInfo: { stanzaId: 'missing', participant: '2@s.whatsapp.net', quotedMessage: { conversation: 'Citação' } } } }, binary: Buffer.from([255, 0]) }), { key: { remoteJid: '1@s.whatsapp.net', id: 'unknown' } }, {}] });
