@@ -139,7 +139,7 @@ export function mediaDispatcher(signal: AbortSignal, resolveDns: (hostname: stri
       if (!addresses.length || addresses.some(a => a.family !== 4 || !publicAddress(a.address))) throw Error('Endereço de mídia recusado');
       const raw = options.headers;
       const headers = Array.isArray(raw) ? Object.fromEntries(Array.from({ length: raw.length / 2 }, (_, i) => [raw[i * 2], raw[i * 2 + 1]])) : raw;
-      const req = request(url, { method: 'GET', headers: { ...headers as Record<string, string>, 'accept-encoding': 'identity' }, agent: false, lookup: (_host, _opts, callback) => callback(null, addresses[0].address, 4) }, response => {
+      const req = request(url, { method: 'GET', headers: { ...headers as Record<string, string>, 'accept-encoding': 'identity' }, agent: false, family: 4, lookup: (_host, _opts, callback) => callback(null, addresses[0].address, 4) }, response => {
         if (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') { response.destroy(); fail(Error('Codificação de mídia recusada')); return; }
         headersReceived = true;
         const resume = () => response.resume();
