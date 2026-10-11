@@ -4,7 +4,7 @@ Arquivo privado de WhatsApp com uma conta, um proprietário e um coletor, por di
 
 ## Status
 
-A implementação técnica da fase1 está testada localmente com dados sintéticos. O preparo do piloto local passou no snapshot, na restauração autenticada do perfil privado e no preflight; o coletor real emitiu QR na tela autenticada. A leitura no celular, a conexão da conta, a cobertura, os quatro originais conhecidos e o reinício real continuam pendentes. A fase1 permanece aberta. VPS/domínio ainda não foram identificados. Busca, abas e exportação pertencem à fase2; MCP no Codex à fase3; operação e backup externo recorrente à fase4.
+A implementação técnica da fase1 está testada localmente; o piloto privado já vinculou a conta por QR e confirmou conexão e ingestão reais. O lote observado contém 8.924 itens confirmados e 8.679 mensagens distintas, sem falhas de persistência após recuperar seis edições de grupo do diário recebido. Referências e IDs dos anexos anteriores foram preservados. A retomada do mesmo coletor confirmou conexão sem novo QR. Áudios, imagens, vídeos e documentos do grupo conhecido responderam ao download real; a fila está preservando os originais com integridade. A comparação com o celular e a prova final dos quatro originais persistidos/offline continuam pendentes; lote confirmado não garante histórico integral. A fase1 permanece aberta. VPS/domínio ainda não foram identificados. Busca, abas e exportação pertencem à fase2; MCP no Codex à fase3; operação e backup externo recorrente à fase4.
 
 ## Escopo da primeira versão
 
