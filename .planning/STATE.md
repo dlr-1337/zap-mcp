@@ -2,12 +2,12 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Busca, contexto, abas e exportação no site
-status: planning
+status: "Phase 1 shipped — PR #1; Phase 2 ready to plan"
 stopped_at: Phase 1 complete, ready to plan Phase 2
-last_updated: "2026-10-11T04:27:42.517Z"
+last_updated: "2026-10-11T19:20:57.146Z"
 last_activity: 2026-10-11
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: b5f7eeffc99a6ddb3cb032f2608eb857715d5551
+last_activity_desc: "Phase 1 shipped — PR #1"
+state_head: 6af18f73f4e299d97d014fd2269c8ad017fd3264
 progress:
   total_phases: 4
   completed_phases: 1
@@ -25,12 +25,14 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
 **Current focus:** Phase2 — pronta para planejamento; Phase1 local concluída
 
+**Publicação da Phase1:** [PR #1](https://github.com/dlr-1337/zap-mcp/pull/1), branch codex/phase-1-private-archive; fase local verificada, sem implantação na VPS.
+
 ## Current Position
 
 Phase: 2 — Busca, contexto, abas e exportação no site
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-11 — Phase 1 complete, transitioned to Phase 2
+Status: Phase 1 shipped — PR #1; Phase 2 ready to plan
+Last activity: 2026-10-11 — Phase 1 shipped — PR #1
 
 Progress: [███░░░░░░░] 25%
 
