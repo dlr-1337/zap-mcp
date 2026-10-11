@@ -27,12 +27,13 @@ test('HTTP privado nega HEAD/Range, paths e vazamentos; revalida expiração ant
   s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 123, privateEnvelope: secret, message: { documentMessage: { caption: html, fileName: '../../x\r\nHeader:evil.svg', url: 'https://mmg.whatsapp.net/' + secret, mediaKey: Buffer.alloc(32, 1), mimetype: 'text/html' } } }, { key: { ...key, id: 'quoted' }, message: { extendedTextMessage: { text: html, contextInfo: { quotedMessage: { viewOnceMessage: { message: { conversation: secret } } } } } } }, {}] });
   const worker = startMediaWorker({ archive: s.archive, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([html]) }); await worker.drain(); await worker.stop();
   const stored = s.archive.readStoredMessage(key)!, attachment = stored.attachments[0]!, id = stored.conversationId;
-  const paths = ['/api/status', '/api/qr', '/api/conversations', `/api/conversations/${id}/messages`, '/api/attachments/' + attachment.id, '/api/attachments/unknown', '/api/context/' + stored.reference, '/api/context/unknown', '/api/conversations/%ZZ/messages'];
+  const paths = ['/api/status', '/api/qr', '/api/conversations', `/api/conversations/${id}/messages`, '/api/attachments/' + attachment.id, '/api/attachments/unknown', '/api/attachments/' + attachment.id + '/preview', '/api/attachments/unknown/preview', '/api/attachments/%2Fetc%2Fpasswd/preview', '/api/context/' + stored.reference, '/api/context/unknown', '/api/conversations/%ZZ/messages'];
   for (const cookie of ['', 'zap.sid=', 'zap.sid=invalid']) for (const path of paths) for (const method of ['GET', 'HEAD']) {
     const r = await fetch(base + path, { method, headers: { Cookie: cookie, Range: 'bytes=0-0' } }); assert.equal(r.status, 401, path); assert.equal(r.headers.get('cache-control'), 'no-store'); assert.equal(r.headers.get('content-range'), null);
   }
   const body = await (await fetch(base + `/api/conversations/${id}/messages`, { headers })).text(); assert.match(body, /caption|script/); assert.doesNotMatch(body, /PRIVATE_SENTINEL|mediaKey|descriptor|privateEnvelope|https:\/\/|path/);
   const file = '/api/attachments/' + attachment.id;
+  assert.equal((await fetch(base + file + '/preview', { headers })).status, 415, 'HTML recebido nunca é inline');
   for (const range of ['bytes=0-0', 'bytes=-1', `bytes=${Buffer.byteLength(html) - 1}-`]) { const r = await fetch(base + file, { headers: { ...headers, Range: range } }); assert.equal(r.status, 206); assert.equal((await r.arrayBuffer()).byteLength, 1); }
   for (const range of ['bytes=0-0,1-1', 'bytes=-0', 'bytes=2-1', 'bytes=999-', 'bytes=NaN-1', 'bytes=9007199254740992-', 'items=0-1']) assert.equal((await fetch(base + file, { headers: { ...headers, Range: range } })).status, 416, range);
   const head = await fetch(base + file, { method: 'HEAD', headers }); assert.equal(head.status, 200); assert.equal(await head.text(), ''); assert.equal(head.headers.get('content-length'), String(Buffer.byteLength(html))); assert.equal(head.headers.get('content-type'), 'application/octet-stream'); assert.match(head.headers.get('content-disposition')!, /^attachment;/); assert.doesNotMatch(head.headers.get('content-disposition')!, /[\r\n]|\.\.\//); assert.equal(head.headers.get('x-content-type-options'), 'nosniff');
@@ -44,7 +45,7 @@ test('HTTP privado nega HEAD/Range, paths e vazamentos; revalida expiração ant
   try {
     s.archiveDb.exec(`CREATE TRIGGER hostile_insert BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'${secret}'); END`);
     s.archive.ingestUpsert({ type: 'notify', messages: [{ key: { ...key, id: 'failure' }, message: { conversation: secret } }] });
-    const outputs = await Promise.all(['/api/status', `/api/conversations/${id}/messages`, file].map(async path => (await fetch(base + path, { headers })).text())); assert.doesNotMatch(outputs.join(''), /PRIVATE_SENTINEL/); assert.doesNotMatch(logs.join(''), /PRIVATE_SENTINEL/);
+    const outputs = await Promise.all(['/api/status', `/api/conversations/${id}/messages`, file, file + '/preview'].map(async path => (await fetch(base + path, { headers })).text())); assert.doesNotMatch(outputs.join(''), /PRIVATE_SENTINEL/); assert.doesNotMatch(logs.join(''), /PRIVATE_SENTINEL/);
   } finally { console.error = before; }
   const ev = new EventEmitter(), collector = s.startCollector({ newProfile: true, socketFactory: () => ({ ev, end() {} }) as unknown as ReturnType<SocketFactory> }); ev.emit('connection.update', { qr: 'SYNTHETIC_QR_SECRET' });
   let release!: () => void, started!: () => void; const held = new Promise<void>(r => release = r), begun = new Promise<void>(r => started = r), pairing = collector.pairing;
