@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
+import { startMediaWorker } from '../src/media.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -20,6 +23,23 @@ async function uiFixture(t: any) {
   const login = async () => { await page.goto(base); await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click(); await page.locator('#archive').waitFor({ state: 'visible' }); await page.waitForFunction(() => document.getElementById('login-status')?.textContent === ''); };
   return { s, page, base, login, browser };
 }
+test('imagem preservada abre somente após clique e download conserva hash', async t => {
+  const { s, page, login } = await uiFixture(t);
+  const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1kAAAAASUVORK5CYII=', 'base64');
+  const key = { remoteJid: '1@lid', id: 'png', fromMe: false };
+  s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 123, message: { imageMessage: { mimetype: 'image/png', caption: 'imagem preservada', fileName: 'imagem.png', url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32, 1), fileLength: bytes.length, fileSha256: createHash('sha256').update(bytes).digest() } } }] });
+  const worker = startMediaWorker({ archive: s.archive, mediaDir: join(s.archiveDb.name, '..', 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
+  let gets = 0; page.on('request', (r: any) => { if (/\/api\/attachments\//.test(r.url()) && r.method() === 'GET') gets++; });
+  await login(); await page.locator('#conversations a').click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('imagem preservada'));
+  assert.equal(gets, 0, 'lista/contexto não transfere binários');
+  assert.equal(await page.getByRole('button', { name: 'Visualizar imagem', exact: true }).count(), 1, 'imagem tem ação explícita');
+  await page.getByRole('button', { name: 'Visualizar imagem', exact: true }).click();
+  await page.waitForFunction(() => { const img = document.querySelector('#messages .preview img') as HTMLImageElement; return img?.naturalWidth === 1; }); assert.equal(gets, 1);
+  assert.equal(await page.locator('#messages .preview img').getAttribute('alt'), 'imagem.png');
+  const saved = page.waitForEvent('download'); await page.locator('#messages .download').click(); const download = await saved; const path = await download.path(); assert.deepEqual(readFileSync(path), bytes); assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'), createHash('sha256').update(bytes).digest('hex'));
+  await page.getByRole('button', { name: 'Fechar visualização', exact: true }).click(); assert.equal(await page.locator('#messages .preview [src]').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Visualizar imagem', exact: true }).evaluate((el: any) => el === document.activeElement), true);
+});
 test('resultado distante abre âncora e duas leituras independentes', async t => {
   const { s, page, login } = await uiFixture(t);
   const a = Array.from({ length: 181 }, (_, i) => ({ key: { remoteJid: '1@lid', id: 'm' + i, fromMe: false }, messageTimestamp: 1700000000 + i, message: { conversation: i === 80 ? 'âncora orçamento' : 'vizinha ' + i } }));
