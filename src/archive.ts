@@ -3,6 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync } from 'node:
 import { join, resolve } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { serialize, deserialize } from 'node:v8';
+import { isDeepStrictEqual } from 'node:util';
 
 type Obj = Record<string, unknown>;
 export type Attachment = { id: string; reference: string; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
@@ -77,6 +78,11 @@ function projection(input: unknown, blocked: boolean) {
 }
 type Revision = { id: number; fingerprint: string; kind: string; source_time: string | null; observed_at: string; evidence: string; payload: Buffer | null; restricted: number };
 type MessageRow = { reference: string; conversation_id: string; text: string | null; original_timestamp: string | null; logical_key: string | null; author: string | null; from_me: number | null; restricted: number; order_uncertain: number; revoked: number; evidence: string | null };
+function originalBody(payload: Buffer) {
+  // Envelope replay context may differ while the captured body and media remain identical.
+  const { messageContextInfo, ...body } = obj(obj(deserialize(payload)).message);
+  return body;
+}
 
 export function openArchive(dataDir: string) {
   const location = resolve(dataDir);
@@ -161,7 +167,9 @@ export function openArchive(dataDir: string) {
     const blocked = revisions.some(r => r.restricted === 1), revoked = revisions.some(r => r.kind === 'revoke');
     const timed = candidates.filter(r => r.source_time !== null).sort((a, b) => b.source_time!.localeCompare(a.source_time!));
     const latest = timed[0];
-    const uncertain = candidates.length > 1 && (timed.length !== candidates.length || timed.filter(r => r.source_time === latest?.source_time).length > 1);
+    const tied = timed.filter(r => r.source_time === latest?.source_time);
+    const uncertain = candidates.length > 1 && (timed.length !== candidates.length || tied.length > 1 && tied.some(r =>
+      r.kind !== 'original' || !r.payload || !latest?.payload || r.evidence !== latest.evidence || !isDeepStrictEqual(originalBody(r.payload), originalBody(latest.payload))));
     const current = uncertain ? undefined : latest ?? candidates[0];
     const evidence = current ? JSON.parse(current.evidence) as Obj : { type: 'unknown', text: null };
     db.prepare('UPDATE messages SET text=?,restricted=?,order_uncertain=?,revoked=?,evidence=? WHERE reference=?').run(blocked || revoked || uncertain ? null : evidence.text ?? null, Number(blocked), Number(uncertain), Number(revoked), JSON.stringify({ ...evidence, restricted: blocked }), reference);
