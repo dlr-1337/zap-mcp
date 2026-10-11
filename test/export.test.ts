@@ -34,6 +34,12 @@ export async function entries(path: string) {
     }); zip.readEntry();
   }); return result;
 }
+test('fechar serviço sem geração ativa libera perfil imediatamente', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-export-close-')); t.after(() => rmSync(dir, { recursive: true }));
+  const s = createService({ dataDir: dir }), closing = s.close(); let reopened = false;
+  try { const next = createService({ dataDir: dir }); reopened = true; await next.close(); } catch {} finally { await closing; }
+  assert.equal(reopened, true, 'fechamento ocioso precisa conservar contrato síncrono');
+});
 async function fixture(t: any) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-export-')), s = createService({ dataDir: dir });
   const key = { remoteJid: '1@lid', id: 'file', fromMe: false }, bytes = Buffer.from('original Unicode 🧪');
