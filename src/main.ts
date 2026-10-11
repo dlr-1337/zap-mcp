@@ -1,6 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createWebAuth, setOwnerPassword } from './auth.js';
-import { openArchive, type Archive } from './archive.js';
+import { openArchive, searchTerms, type Archive } from './archive.js';
 import Database from 'better-sqlite3';
 import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync, createReadStream } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -55,10 +55,11 @@ export function createService({ dataDir }: { dataDir: string }) {
   const requireOwner = auth.requireOwner;
   app.get('/api/session', auth.sessionInfo);
   app.post('/login', auth.csrf, auth.login);
-  app.post('/logout', auth.csrf, async (req, res) => { await auth.logout(req, res); collector?.hidePairing(); });
+  app.post('/logout', auth.csrf, async (req, res) => { const scope = searchSession(req); await auth.logout(req, res); archive.dropQueries(scope); collector?.hidePairing(); });
   app.use('/api/status', requireOwner);
   app.use('/api/qr', requireOwner);
   app.use('/api/conversations', requireOwner);
+  app.use('/api/search', requireOwner);
   app.use('/api/attachments', requireOwner);
   app.get('/api/attachments/:id', (req, res, next) => {
     const file = openVerifiedAttachment(archive, mediaDir, req.params.id);
@@ -102,7 +103,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) throw Object.assign(Error('cursor'), { status: 400 });
     let parts: unknown;
     try { parts = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { throw Object.assign(Error('cursor'), { status: 400 }); }
-    if (!Array.isArray(parts) || !parts.every(p => typeof p === 'string') || parts[0] !== kind || parts[1] !== scope || parts.length !== (kind === 'conversations' ? 3 : 4)) throw Object.assign(Error('cursor'), { status: 400 });
+    if (!Array.isArray(parts) || !parts.every(p => typeof p === 'string') || parts[0] !== kind || parts[1] !== scope || parts.length !== (kind === 'conversations' ? 3 : kind === 'search' ? 5 : 4)) throw Object.assign(Error('cursor'), { status: 400 });
     return parts;
   };
   const limit = (input: unknown, maximum: number) => {
@@ -118,11 +119,29 @@ export function createService({ dataDir }: { dataDir: string }) {
     const identity = row.source_id && /@(g\.us|s\.whatsapp\.net|lid)$/.test(row.source_id) ? row.source_id : null;
     return { ...conversation, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity?.endsWith('@s.whatsapp.net') || identity?.endsWith('@lid') ? 'individual' : null };
   };
+  const searchSession = (req: Request) => createHmac('sha256', signingKey).update(JSON.stringify([req.sessionID, req.session.ownerGeneration])).digest('hex');
+  app.get('/api/search', (req, res) => {
+    if (Object.keys(req.query).some(k => !['q', 'conversationId', 'limit', 'cursor'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
+    const terms = searchTerms(req.query.q), conversationId = typeof req.query.conversationId === 'string' && req.query.conversationId ? req.query.conversationId : null;
+    const filters = { terms, conversationId, zone: 'America/Sao_Paulo', from: null, to: null, startUtc: null, endUtc: null, dateUnknownPolicy: 'Sem período, instantes desconhecidos aparecem por último.' };
+    const session = searchSession(req), scope = createHmac('sha256', signingKey).update(JSON.stringify([session, filters])).digest('hex');
+    const cursor = decodeCursor(req.query.cursor, 'search', scope);
+    if (cursor && (cursor[3] !== 'next' || !/^\d+$/.test(cursor[4]) || !Number.isSafeInteger(Number(cursor[4])))) throw Object.assign(Error('cursor'), { status: 400 });
+    try {
+      const { nextOrdinal, ...page } = archive.searchMessages({ terms, conversationId, session, filters, limit: req.query.limit === undefined ? 50 : limit(req.query.limit, 100), snapshotId: cursor?.[2], ordinal: cursor ? Number(cursor[4]) : 0 });
+      res.json({ ...page, nextCursor: nextOrdinal !== null ? encodeCursor(['search', scope, page.snapshotId, 'next', String(nextOrdinal)]) : null });
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if ([400, 404, 410, 413, 429].includes(status ?? 0)) { res.status(status!).json({ error: (error as Error).message }); return; }
+      throw error;
+    }
+  });
   app.get('/api/conversations', (req, res) => {
-    pageQuery(req);
-    const cursor = decodeCursor(req.query.cursor, 'conversations', '');
-    const page = archive.listConversations({ cursor: cursor?.[2], limit: limit(req.query.limit, 50) });
-    res.json({ conversations: page.conversations.map(conversationEvidence), nextCursor: page.nextCursor ? encodeCursor(['conversations', '', page.nextCursor]) : null });
+    if (Object.keys(req.query).some(k => !['q', 'limit', 'cursor'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''; if ([...q].length > 2000) throw Object.assign(Error('query'), { status: 400 });
+    const cursor = decodeCursor(req.query.cursor, 'conversations', q);
+    const page = archive.listConversations({ q, cursor: cursor?.[2], limit: limit(req.query.limit, 50) });
+    res.json({ conversations: page.conversations.map(conversationEvidence), nextCursor: page.nextCursor ? encodeCursor(['conversations', q, page.nextCursor]) : null });
   });
   app.get('/api/conversations/:id/messages', (req, res) => {
     pageQuery(req);
@@ -151,6 +170,7 @@ export function createService({ dataDir }: { dataDir: string }) {
       const id = existing?.id ?? randomUUID();
       archiveDb.prepare('INSERT INTO conversations(id, name, source_id) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET name = excluded.name').run(id, message.conversationName, message.conversationId);
       archiveDb.prepare('INSERT INTO messages(reference,conversation_id,text,original_timestamp) VALUES (?, ?, ?, ?) ON CONFLICT(reference) DO NOTHING').run(message.reference, id, message.text, message.originalTimestamp);
+      archive.indexMessage(message.reference);
       return id;
     }),
     setPassword(password: string) { return setOwnerPassword(authDb, password); },

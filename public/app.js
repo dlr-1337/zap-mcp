@@ -4,9 +4,55 @@ const noServer = 'Sem acesso ao servidor. O conteúdo exibido pode estar desatua
 const date = value => value ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value)).replace(',', '') : unknown;
 let csrfToken, listCursor, messageCursor, selected, listPosition = 0, reading = false, authenticated = false;
 let readVersion = 0, navigationVersion = 0, statusVersion = 0, qrTimer, lastReference, attemptsLimit;
+let searchVersion = 0, searchCursor, searchFilters;
+const searchPanel = document.createElement('section'); searchPanel.id = 'search-panel';
+$('archive').insertBefore(searchPanel, $('archive').querySelector('main'));
+addText(searchPanel, 'h2', 'Buscar mensagens');
+const searchForm = document.createElement('form'); searchForm.id = 'search-form'; searchForm.noValidate = true; searchPanel.append(searchForm);
+const termLabel = addText(searchForm, 'label', 'Termos'); termLabel.htmlFor = 'search-terms';
+const termInput = document.createElement('input'); termInput.id = 'search-terms'; searchForm.append(termInput);
+const searchButton = addText(searchForm, 'button', 'Buscar mensagens', 'primary'); searchButton.id = 'search-submit'; searchButton.type = 'submit';
+const searchStatus = addText(searchPanel, 'p', 'Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.'); searchStatus.id = 'search-status'; searchStatus.setAttribute('role', 'status');
+const searchError = addText(searchPanel, 'p', ''); searchError.id = 'search-error'; searchError.setAttribute('role', 'alert');
+const searchScope = addText(searchPanel, 'p', 'Todo o acervo'); searchScope.id = 'search-scope';
+const searchResults = document.createElement('ol'); searchResults.id = 'search-results'; searchPanel.append(searchResults);
+const moreResults = addText(searchPanel, 'button', 'Carregar resultados seguintes'); moreResults.id = 'more-results'; moreResults.hidden = true;
+const refreshSearch = addText(searchPanel, 'button', 'Atualizar busca'); refreshSearch.id = 'refresh-search'; refreshSearch.hidden = true;
+async function search(append = false) {
+  if (!authenticated || searchPanel.getAttribute('aria-busy') === 'true') return;
+  const version = readVersion, ticket = ++searchVersion;
+  if (!append) searchFilters = new URLSearchParams({ q: termInput.value });
+  const query = new URLSearchParams(searchFilters); if (append && searchCursor) query.set('cursor', searchCursor);
+  searchPanel.setAttribute('aria-busy', 'true'); searchButton.disabled = moreResults.disabled = true; searchStatus.textContent = 'Buscando mensagens…'; searchError.textContent = '';
+  try {
+    const response = await request('/api/search?' + query);
+    if (version !== readVersion || ticket !== searchVersion) return;
+    const data = await response.json(); if (version !== readVersion || ticket !== searchVersion) return;
+    if (!response.ok) { searchError.textContent = response.status === 410 ? 'Este recorte expirou. Atualize a busca para criar um novo recorte.' : 'Não foi possível buscar mensagens. Tente buscar novamente.'; searchStatus.textContent = searchResults.children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; refreshSearch.hidden = false; return; }
+    if (!append) searchResults.replaceChildren();
+    for (const message of data.messages) {
+      const li = messageItem(message), article = li.querySelector('article');
+      addText(article, 'p', 'Conversa: ' + (message.conversation?.name ?? unknown) + ' · ' + (message.conversation?.identity ?? unknown) + ' · ' + message.conversationId, 'meta').dir = 'auto';
+      for (const revision of message.matchingRevisions) {
+        addText(article, 'p', revision.historical ? 'Correspondência em conteúdo anteriormente capturado — registro histórico' : 'Correspondência no conteúdo atual');
+        addText(article, 'p', revision.text ?? unknown).dir = 'auto'; detail(article, 'Revisão correspondente', revision.revisionId);
+      }
+      const open = addText(article, 'button', 'Abrir contexto'); open.dataset.reference = message.reference;
+      open.addEventListener('click', () => { history.pushState({}, '', '/?conversation=' + encodeURIComponent(message.conversationId) + '&reference=' + encodeURIComponent(message.reference)); openConversation(message.conversationId); });
+      searchResults.append(li);
+    }
+    searchCursor = data.nextCursor; moreResults.hidden = !searchCursor; refreshSearch.hidden = false;
+    const n = searchResults.children.length;
+    searchStatus.textContent = n ? n + (n === 1 ? ' resultado carregado' : ' resultados carregados') + (searchCursor ? '' : '. Todos os resultados deste recorte foram carregados.') : 'Não encontrado no acervo. Nenhuma mensagem corresponde aos filtros. Ajuste a conversa, os termos ou o período e busque novamente.';
+    searchScope.textContent = 'Todo o acervo; fuso: ' + data.effectiveFilters.zone;
+  } catch (error) { if (version === readVersion && ticket === searchVersion && !['stale', 'expired'].includes(error.message)) { searchError.textContent = 'Não foi possível buscar mensagens. Tente buscar novamente.'; searchStatus.textContent = searchResults.children.length ? 'O conteúdo exibido pode estar desatualizado.' : ''; } }
+  finally { if (version === readVersion && ticket === searchVersion) { searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = false; } }
+}
+searchForm.addEventListener('submit', e => { e.preventDefault(); search(); }); moreResults.addEventListener('click', () => search(true)); refreshSearch.addEventListener('click', () => search());
 function hideQr() { clearTimeout(qrTimer); $('qr')?.remove(); $('qr-instruction').hidden = true; }
 function signedOut(message = '') {
-  ++readVersion; ++navigationVersion; ++statusVersion;
+  ++readVersion; ++navigationVersion; ++statusVersion; ++searchVersion;
+  searchResults.replaceChildren(); searchForm.reset(); searchCursor = searchFilters = undefined; searchError.textContent = ''; searchStatus.textContent = 'Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.'; searchScope.textContent = 'Todo o acervo'; moreResults.hidden = refreshSearch.hidden = true; searchPanel.removeAttribute('aria-busy'); searchButton.disabled = moreResults.disabled = false;
   authenticated = reading = false; selected = listCursor = messageCursor = csrfToken = lastReference = attemptsLimit = undefined;
   hideQr();
   $('archive').hidden = true; $('archive').classList.remove('reading'); $('login-panel').hidden = false;

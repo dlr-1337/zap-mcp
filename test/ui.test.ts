@@ -32,6 +32,6 @@ test('site encontra termo literal em evidência congelada', async t => {
   assert.equal(await result.locator('img').count(), 0); assert.equal(await page.evaluate(() => (window as any).EXECUTED), undefined);
   assert.doesNotMatch(await page.locator('body').textContent(), /PRIVATE_SENTINEL/);
   await result.getByRole('button', { name: 'Abrir contexto' }).click();
-  await page.locator('#message-title').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.getElementById('messages')?.children.length === 1);
   assert.equal(await page.locator('#messages > li').count(), 1);
 });

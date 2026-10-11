@@ -6,7 +6,13 @@ import { serialize, deserialize } from 'node:v8';
 import { isDeepStrictEqual } from 'node:util';
 
 type Obj = Record<string, unknown>;
-export type Attachment = { id: string; reference: string; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
+export type Attachment = { id: string; reference: string; revisionId: number; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
+export function searchTerms(input: unknown = '') {
+  if (typeof input !== 'string' || [...input].length > 2000) throw Object.assign(Error('Use até 2000 caracteres e 25 termos simples.'), { status: 400 });
+  const terms = input.normalize('NFC').match(/[\p{L}\p{N}\p{M}]+/gu) ?? [];
+  if (terms.length > 25 || input.trim() && !terms.length) throw Object.assign(Error('Use até 2000 caracteres e 25 termos simples.'), { status: 400 });
+  return terms.map(t => t.toLocaleLowerCase('pt-BR'));
+}
 const obj = (value: unknown): Obj => value && typeof value === 'object' && !Array.isArray(value) ? value as Obj : {};
 const str = (value: unknown) => typeof value === 'string' && value.length ? value : null;
 const bool = (value: unknown) => typeof value === 'boolean' ? value : null;
@@ -173,6 +179,7 @@ export function openArchive(dataDir: string) {
     const current = uncertain ? undefined : latest ?? candidates[0];
     const evidence = current ? JSON.parse(current.evidence) as Obj : { type: 'unknown', text: null };
     db.prepare('UPDATE messages SET text=?,restricted=?,order_uncertain=?,revoked=?,evidence=? WHERE reference=?').run(blocked || revoked || uncertain ? null : evidence.text ?? null, Number(blocked), Number(uncertain), Number(revoked), JSON.stringify({ ...evidence, restricted: blocked }), reference);
+    indexMessage(reference);
   }
   function mergeMessages(keep: string, drop: string) {
     const a = db.prepare('SELECT * FROM messages WHERE reference=?').get(keep) as MessageRow, b = db.prepare('SELECT * FROM messages WHERE reference=?').get(drop) as MessageRow;
@@ -202,6 +209,7 @@ export function openArchive(dataDir: string) {
     db.prepare('UPDATE message_redirects SET target_reference=? WHERE target_reference=?').run(keep, drop);
     db.prepare('INSERT OR REPLACE INTO message_redirects VALUES(?,?)').run(drop, keep);
     db.prepare('DELETE FROM messages WHERE reference=?').run(drop);
+    db.prepare('DELETE FROM search_fts WHERE reference=?').run(drop);
     project(a.reference);
   }
   function reconcile() {
@@ -335,7 +343,7 @@ export function openArchive(dataDir: string) {
     if (!row) return null;
     const evidence = row.evidence ? JSON.parse(row.evidence) as Obj : { type: 'unknown', text: row.text };
     const origins = (db.prepare('SELECT key_json FROM origins WHERE reference=? ORDER BY rowid').all(redirected) as { key_json: string }[]).map(o => JSON.parse(o.key_json) as Key);
-    const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => ({ kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at, ...JSON.parse(r.evidence) as Obj }));
+    const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => { const e = JSON.parse(r.evidence) as Obj; return { ...e, text: str(e.text), revisionId: r.id, fingerprint: revisionFingerprint(r), kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at }; });
     const identities = new Set(origins.flatMap(k => [k.remoteJid, k.participant, k.remoteJidAlt, k.participantAlt]).filter(k => k !== null));
     const identityMappings = (db.prepare('SELECT jid,alternate FROM identity_evidence').all() as { jid: string; alternate: string }[]).filter(m => identities.has(m.jid) || identities.has(m.alternate));
     const attachments = (db.prepare('SELECT id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string }[]).map(a => getAttachment(a.id));
@@ -356,15 +364,79 @@ export function openArchive(dataDir: string) {
       return { ...span, interval: { oldest: span.oldestTimestamp, newest: span.newestTimestamp }, lastIngestion: last.value, batches: safeBatches, historyStatuses: statuses.map(s => ({ ...s, explicit: Boolean(s.explicit) })), completeAccount: false, watchdogSeconds: 120 };
     })();
   }
-  try { for (const batch of db.prepare('SELECT id,kind FROM batches WHERE completed_at IS NULL ORDER BY rowid').all() as { id: string; kind: string }[]) processBatch(batch.id, batch.kind); }
+  function revisionFingerprint(r: Revision) { return createHash('sha256').update(JSON.stringify([r.kind, r.source_time, JSON.parse(r.evidence)])).digest('hex'); }
+  function indexMessage(reference: string) {
+    db.prepare('DELETE FROM search_fts WHERE reference=?').run(reference);
+    const m = db.prepare('SELECT * FROM messages WHERE reference=?').get(reference) as MessageRow | undefined;
+    if (!m || m.restricted) return;
+    const revisions = db.prepare("SELECT * FROM revisions WHERE reference=? AND restricted=0 AND kind IN ('original','edit') ORDER BY id").all(reference) as Revision[];
+    const insert = db.prepare('INSERT INTO search_fts(reference,revision_id,content) VALUES(?,?,?)');
+    for (const r of revisions) {
+      const e = JSON.parse(r.evidence) as Obj;
+      const names = db.prepare('SELECT name FROM attachments WHERE revision_id=? ORDER BY rowid').all(r.id) as { name: string | null }[];
+      insert.run(reference, r.id, [str(e.text), ...names.map(a => a.name)].filter(v => v !== null).join('\n').normalize('NFC'));
+    }
+    if (!revisions.length && m.text) insert.run(reference, 0, m.text.normalize('NFC'));
+  }
+  function conversationEvidence(id: string) {
+    const c = db.prepare('SELECT id,name,source_id FROM conversations WHERE id=?').get(id) as { id: string; name: string | null; source_id: string | null } | undefined;
+    if (!c) return null;
+    const identity = c.source_id && /@(g\.us|s\.whatsapp\.net|lid)$/.test(c.source_id) ? c.source_id : null;
+    return { id: c.id, name: c.name, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity ? 'individual' : null };
+  }
+  function searchMessages({ terms, conversationId, session, filters, limit = 50, snapshotId, ordinal = 0 }: { terms: string[]; conversationId: string | null; session: string; filters: Obj; limit?: number; snapshotId?: string; ordinal?: number }) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(ordinal) || ordinal < 0) throw Object.assign(Error('Consulta inválida'), { status: 400 });
+    return db.transaction(() => {
+      db.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+      let snapshot: { id: string; filters: string; expires_at: number; count: number } | undefined;
+      if (snapshotId) {
+        snapshot = db.prepare('SELECT id,filters,expires_at,count FROM query_snapshots WHERE id=? AND session=?').get(snapshotId, session) as typeof snapshot;
+        if (!snapshot) throw Object.assign(Error('Este recorte expirou. Atualize a busca para criar um novo recorte.'), { status: 410 });
+        if (snapshot.filters !== JSON.stringify(filters) || ordinal > snapshot.count) throw Object.assign(Error('Continuação inválida'), { status: 400 });
+      } else {
+        if ((db.prepare('SELECT count(*) AS n FROM query_snapshots WHERE session=?').get(session) as { n: number }).n >= 20) throw Object.assign(Error('Limite de 20 recortes ativos. Aguarde a expiração para atualizar.'), { status: 429 });
+        const id = conversationId ? resolveConversation(conversationId) : null;
+        if (id && !conversationEvidence(id)) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
+        const match = terms.map(t => '"' + t.replaceAll('"', '""') + '"').join(' AND ');
+        const rows = (terms.length ? db.prepare("SELECT m.reference,m.original_timestamp,group_concat(search_fts.revision_id) AS matched FROM messages m JOIN search_fts ON search_fts.reference=m.reference WHERE search_fts MATCH ? AND (? IS NULL OR m.conversation_id=?) GROUP BY m.reference ORDER BY m.original_timestamp IS NULL,m.original_timestamp DESC,m.reference COLLATE BINARY DESC LIMIT 50001").all(match, id, id) : db.prepare('SELECT reference,original_timestamp,NULL AS matched FROM messages WHERE (? IS NULL OR conversation_id=?) ORDER BY original_timestamp IS NULL,original_timestamp DESC,reference COLLATE BINARY DESC LIMIT 50001').all(id, id)) as { reference: string; original_timestamp: string | null; matched: string | null }[];
+        if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja os filtros.'), { status: 413 });
+        const items: string[] = []; let bytes = 0;
+        for (const row of rows) {
+          const message = dto(row.reference)!;
+          const matched = new Set(row.matched?.split(',').map(Number) ?? []);
+          const edits = message.revisions.filter(r => r.kind === 'edit');
+          const current = (edits.length ? edits : message.revisions.filter(r => r.kind === 'original')).filter(r => r.sourceTimestamp !== null).sort((a, b) => Date.parse(b.sourceTimestamp!) - Date.parse(a.sourceTimestamp!))[0];
+          const matchingRevisions = message.restricted ? [] : message.revisions.filter(r => matched.has(r.revisionId)).map(r => ({ ...r, historical: message.revoked || message.orderUncertain || (current ? r.revisionId !== current.revisionId : r.text !== message.text) }));
+          const safe = message.restricted ? { ...message, text: null, quote: null, attachments: [], revisions: message.revisions.map(r => ({ ...r, text: null, quote: null, restricted: true })) } : message;
+          const json = JSON.stringify({ ...safe, conversation: conversationEvidence(message.conversationId), matchingRevisions });
+          bytes += Buffer.byteLength(json); if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja os filtros.'), { status: 413 });
+          items.push(json);
+        }
+        snapshot = { id: randomUUID(), filters: JSON.stringify(filters), expires_at: Date.now() + 30 * 60_000, count: items.length };
+        db.prepare('INSERT INTO query_snapshots(id,session,filters,expires_at,count) VALUES(?,?,?,?,?)').run(snapshot.id, session, snapshot.filters, snapshot.expires_at, snapshot.count);
+        const insert = db.prepare('INSERT INTO query_items(snapshot_id,ordinal,dto) VALUES(?,?,?)'); items.forEach((json, i) => insert.run(snapshot!.id, i, json));
+      }
+      const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? ORDER BY ordinal LIMIT ?').all(snapshot.id, ordinal, limit) as { dto: string }[]).map(r => JSON.parse(r.dto));
+      return { messages, effectiveFilters: JSON.parse(snapshot.filters), snapshotId: snapshot.id, expiresAt: new Date(snapshot.expires_at).toISOString(), nextOrdinal: ordinal + messages.length < snapshot.count ? ordinal + messages.length : null };
+    })();
+  }
+  try {
+    db.transaction(() => {
+      db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(reference UNINDEXED,revision_id UNINDEXED,content,tokenize='unicode61 remove_diacritics 2'); CREATE TABLE IF NOT EXISTS query_snapshots(id TEXT PRIMARY KEY,session TEXT NOT NULL,filters TEXT NOT NULL,expires_at INTEGER NOT NULL,count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS query_items(snapshot_id TEXT NOT NULL REFERENCES query_snapshots(id) ON DELETE CASCADE,ordinal INTEGER NOT NULL,dto TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal)); DELETE FROM query_snapshots; DELETE FROM search_fts;");
+      for (const row of db.prepare('SELECT reference FROM messages').all() as { reference: string }[]) indexMessage(row.reference);
+    })();
+    for (const batch of db.prepare('SELECT id,kind FROM batches WHERE completed_at IS NULL ORDER BY rowid').all() as { id: string; kind: string }[]) processBatch(batch.id, batch.kind);
+  }
   catch (error) { db.close(); throw error; }
   function getAttachment(id: string): Attachment | null {
-    const row = db.prepare('SELECT a.id,a.reference,a.type,a.name,a.mime_type AS mimeType,a.state,a.reason,a.size,a.sha256,a.source_hash_verified AS verified,coalesce(j.attempts,0) AS attempts FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.id=?').get(id) as (Omit<Attachment, 'sourceHashVerified'> & { verified: number }) | undefined;
+    const row = db.prepare('SELECT a.id,a.reference,a.revision_id AS revisionId,a.type,a.name,a.mime_type AS mimeType,a.state,a.reason,a.size,a.sha256,a.source_hash_verified AS verified,coalesce(j.attempts,0) AS attempts FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.id=?').get(id) as (Omit<Attachment, 'sourceHashVerified'> & { verified: number }) | undefined;
     if (!row) return null;
     const { verified, ...safe } = row; return { ...safe, sourceHashVerified: Boolean(verified) };
   }
   return {
     db,
+    searchMessages, indexMessage, conversationEvidence,
+    dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
       db.transaction(() => { for (const m of batch.lidPnMappings ?? []) ingestIdentity(m); for (const c of batch.contacts ?? []) ingestIdentity(c); for (const c of batch.chats ?? []) ingestIdentity(c, true); })();
       return ingestBatch('history', batch.messages, batch);
@@ -384,9 +456,9 @@ export function openArchive(dataDir: string) {
       const revision = db.prepare("SELECT payload FROM revisions WHERE reference=? AND kind IN ('original','edit') AND payload IS NOT NULL ORDER BY CASE kind WHEN 'edit' THEN 1 ELSE 0 END DESC,source_time DESC,id DESC LIMIT 1").get(message.reference) as { payload: Buffer } | undefined;
       return revision ? deserialize(revision.payload) as Obj : undefined;
     },
-    listConversations({ limit = 50, cursor = '' }: { limit?: number; cursor?: string } = {}) {
+    listConversations({ limit = 50, cursor = '', q = '' }: { limit?: number; cursor?: string; q?: string } = {}) {
       const size = Math.max(1, Math.min(50, limit));
-      const rows = db.prepare('SELECT c.id,c.name,(SELECT max(original_timestamp) FROM messages WHERE conversation_id=c.id) AS lastTimestamp FROM conversations c WHERE c.id>? ORDER BY c.id LIMIT ?').all(cursor, size + 1) as { id: string; name: string | null; lastTimestamp: string | null }[];
+      const rows = db.prepare("SELECT c.id,c.name,(SELECT max(original_timestamp) FROM messages WHERE conversation_id=c.id) AS lastTimestamp FROM conversations c WHERE c.id>? AND (instr(lower(coalesce(c.name,'')),lower(?))>0 OR instr(lower(coalesce(c.source_id,'')),lower(?))>0) ORDER BY c.id LIMIT ?").all(cursor, q, q, size + 1) as { id: string; name: string | null; lastTimestamp: string | null }[];
       return { conversations: rows.slice(0, size), nextCursor: rows.length > size ? rows[size - 1].id : null };
     },
     readConversation(id: string, { limit = 100, cursor }: { limit?: number; cursor?: { timestamp: string; reference: string } } = {}) {
