@@ -8,7 +8,7 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
-import { startMediaWorker, openVerifiedAttachment, reconcileMedia } from './media.js';
+import { startMediaWorker, openVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
@@ -47,7 +47,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     if (!/^(127\.0\.0\.1|localhost)(:[0-9]+)?$/.test(req.get('Host') ?? '') || !['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(req.socket.remoteAddress ?? '')) { res.status(403).json({ error: 'Transporte recusado' }); return; } next();
   });
   app.use((_req, res, next) => {
-    res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
+    res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
   app.use(express.json({ limit: '4kb' }));
   app.use(express.urlencoded({ extended: false, limit: '4kb' }));
@@ -62,9 +62,13 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.use('/api/search', requireOwner);
   app.use('/api/context', requireOwner);
   app.use('/api/attachments', requireOwner);
-  app.get('/api/attachments/:id', (req, res, next) => {
-    const file = openVerifiedAttachment(archive, mediaDir, req.params.id);
+  app.get(['/api/attachments/:id', '/api/attachments/:id/preview'], (req, res, next) => {
+    const file = typeof req.params.id === 'string' ? openVerifiedAttachment(archive, mediaDir, req.params.id) : null;
     if (!file) { res.status(404).json({ error: 'Original disponível não encontrado no acervo' }); return; }
+    const preview = req.path.endsWith('/preview');
+    let mime: string | null = 'application/octet-stream';
+    try { if (preview) mime = classifyPreview(file); } catch (error) { closeSync(file.fd); next(error); return; }
+    if (!mime) { closeSync(file.fd); res.status(415).json({ error: 'Sem visualização integrada para este formato. Baixe o original para abrir em outro aplicativo.' }); return; }
     let start = 0, end = file.size - 1;
     if (req.headers.range) {
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
@@ -76,7 +80,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     }
     const name = (file.attachment.name ?? 'original').replace(/[\u0000-\u001f\u007f/\\]/g, '_').slice(0, 180);
     const encoded = encodeURIComponent(Buffer.from(name).toString('utf8')).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
-    res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
+    res.set({ 'Content-Type': mime, 'Content-Disposition': `${preview ? 'inline' : 'attachment'}; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
     if (req.method === 'HEAD' || file.size === 0) { closeSync(file.fd); res.end(); return; }
     const stream = createReadStream('', { fd: file.fd, autoClose: true, start, end });
     res.on('close', () => stream.destroy()); stream.on('error', error => { if (res.headersSent) res.destroy(); else next(error); }); stream.pipe(res);

@@ -74,6 +74,13 @@ export function openVerifiedAttachment(archive: Archive, mediaDir: string, id: s
   } catch { if (file) closeSync(file.fd); failure(archive, id, 'Arquivo local ausente ou divergente'); return null; }
 }
 
+export function classifyPreview(file: NonNullable<ReturnType<typeof openVerifiedAttachment>>) {
+  const header = Buffer.alloc(Math.min(file.size, 512));
+  const count = readSync(file.fd, header, 0, header.length, 0);
+  if (file.attachment.mimeType === 'image/png' && count >= 8 && header.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
+  return null;
+}
+
 const running = new WeakSet<Archive>();
 type FinalRow = { id: string; descriptor: Buffer; size: number | null; sha256: string | null; generation: string | null; job_state: string };
 function adoptFinal(archive: Archive, dir: string, row: FinalRow) {

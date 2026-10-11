@@ -8,6 +8,8 @@ let searchVersion = 0, searchCursor, searchFilters;
 let contactVersion = 0, contactSelection, candidateCursor, candidateQuery;
 const tabs = new Map();
 const pendingContexts = new Map();
+const previews = new Set();
+function closePreviews(root = document) { for (const preview of [...previews]) if (root.contains(preview.block)) preview.close(false); }
 let suspended = false;
 const searchPanel = $('search-panel'), searchForm = $('search-form'), termInput = $('search-terms'), searchButton = $('search-submit');
 const searchStatus = $('search-status'), searchError = $('search-error'), searchScope = $('search-scope'), searchResults = $('search-results');
@@ -145,6 +147,28 @@ function attachmentBlock(article, attachment) {
   addText(block, 'p', state); if (attachment.state !== 'available') return;
   const link = addText(block, 'a', 'Baixar original', 'download'); link.href = '/api/attachments/' + encodeURIComponent(attachment.id); link.download = attachment.name ?? 'original';
   const status = addText(block, 'p', '', 'meta'); status.setAttribute('role', 'status');
+  if (attachment.mimeType === 'image/png') {
+    const open = addText(block, 'button', 'Visualizar imagem'); open.type = 'button';
+    let ticket = 0, preview;
+    const close = (focus = true) => { ++ticket; if (preview) { previews.delete(preview); for (const media of preview.box.querySelectorAll('[src]')) { media.pause?.(); media.removeAttribute('src'); media.load?.(); } preview.box.remove(); preview = undefined; } open.disabled = false; if (focus && block.isConnected) open.focus({ preventScroll: true }); };
+    open.addEventListener('click', async () => {
+      if (preview || !authenticated) return;
+      const version = readVersion, current = ++ticket;
+      const box = addText(block, 'div', '', 'preview'), feedback = addText(box, 'p', 'Carregando visualização…'); feedback.setAttribute('role', 'status'); box.setAttribute('aria-busy', 'true');
+      const hide = addText(box, 'button', 'Fechar visualização'); hide.type = 'button'; hide.addEventListener('click', () => close());
+      preview = { block, box, close }; previews.add(preview); open.disabled = true;
+      const valid = () => version === readVersion && current === ticket && authenticated && !suspended && block.isConnected;
+      try {
+        const path = '/api/attachments/' + encodeURIComponent(attachment.id) + '/preview', response = await request(path, { method: 'HEAD' });
+        if (!valid()) return;
+        if (!response.ok) { feedback.textContent = response.status === 404 ? 'Original disponível não encontrado no acervo. A mensagem permanece no acervo.' : response.status === 415 ? 'Sem visualização integrada para este formato. Baixe o original para abrir em outro aplicativo.' : 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; box.removeAttribute('aria-busy'); return; }
+        const media = document.createElement('img'); media.alt = attachment.name ?? 'Nome original não informado';
+        media.addEventListener('load', () => { if (valid()) { feedback.textContent = ''; box.removeAttribute('aria-busy'); } });
+        media.addEventListener('error', () => { if (valid()) { feedback.textContent = 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; feedback.setAttribute('role', 'alert'); box.removeAttribute('aria-busy'); } });
+        box.insertBefore(media, hide); media.src = path;
+      } catch (error) { if (valid() && !['expired', 'stale'].includes(error.message)) { feedback.textContent = 'Não foi possível visualizar este formato. Baixe o original para abrir em outro aplicativo.'; box.removeAttribute('aria-busy'); } }
+    });
+  }
   link.addEventListener('click', async event => {
     event.preventDefault(); if (link.getAttribute('aria-busy') === 'true') return;
     const version = readVersion; link.setAttribute('aria-busy', 'true'); status.textContent = 'Carregando original…';
@@ -239,6 +263,7 @@ function activateTab(tab, restore = true) {
   if (restore) window.scrollTo(0, tab.scroll);
 }
 function releasePanel(panel) {
+  closePreviews(panel);
   for (const el of panel.querySelectorAll('audio,video,img,[src]')) { el.pause?.(); el.removeAttribute('src'); el.load?.(); }
 }
 function closeTab(tab) {
