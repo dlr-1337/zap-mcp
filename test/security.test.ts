@@ -27,7 +27,7 @@ test('HTTP privado nega HEAD/Range, paths e vazamentos; revalida expiração ant
   s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 123, privateEnvelope: secret, message: { documentMessage: { caption: html, fileName: '../../x\r\nHeader:evil.svg', url: 'https://mmg.whatsapp.net/' + secret, mediaKey: Buffer.alloc(32, 1), mimetype: 'text/html' } } }, { key: { ...key, id: 'quoted' }, message: { extendedTextMessage: { text: html, contextInfo: { quotedMessage: { viewOnceMessage: { message: { conversation: secret } } } } } } }, {}] });
   const worker = startMediaWorker({ archive: s.archive, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([html]) }); await worker.drain(); await worker.stop();
   const stored = s.archive.readStoredMessage(key)!, attachment = stored.attachments[0]!, id = stored.conversationId;
-  const paths = ['/api/status', '/api/qr', '/api/conversations', `/api/conversations/${id}/messages`, '/api/attachments/' + attachment.id, '/api/attachments/unknown', '/api/conversations/%ZZ/messages'];
+  const paths = ['/api/status', '/api/qr', '/api/conversations', `/api/conversations/${id}/messages`, '/api/attachments/' + attachment.id, '/api/attachments/unknown', '/api/context/' + stored.reference, '/api/context/unknown', '/api/conversations/%ZZ/messages'];
   for (const cookie of ['', 'zap.sid=', 'zap.sid=invalid']) for (const path of paths) for (const method of ['GET', 'HEAD']) {
     const r = await fetch(base + path, { method, headers: { Cookie: cookie, Range: 'bytes=0-0' } }); assert.equal(r.status, 401, path); assert.equal(r.headers.get('cache-control'), 'no-store'); assert.equal(r.headers.get('content-range'), null);
   }

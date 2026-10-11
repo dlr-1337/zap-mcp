@@ -78,6 +78,43 @@ test('logout vence resposta de contexto retida e bfcache exige sessão atual', a
   await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))); await page.waitForFunction(() => document.getElementById('login-error')?.textContent?.includes('expirou'));
   assert.equal(await page.getByRole('tab').count(), 0); assert.equal(await page.locator('#archive').isVisible(), false); assert.doesNotMatch(await page.locator('body').textContent(), /privado da aba/);
 });
+
+test('abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34', async t => {
+  const { s, page, login } = await uiFixture(t);
+  const names = ['A', 'B', 'C'].map(n => n + ' שלום 🧪 ' + 'nome longo '.repeat(30));
+  s.archive.ingestHistory({ chats: names.map((name, i) => ({ id: (i + 1) + '@lid', subject: name })), messages: names.flatMap((_, i) => Array.from({ length: 81 }, (_, n) => ({ key: { remoteJid: (i + 1) + '@lid', id: 'm' + n, fromMe: false }, messageTimestamp: 123 + n, message: { conversation: 'leitura ' + i + ' linha' + n + ' ' + 'texto longo שלום '.repeat(10) } }))) });
+  await login(); assert.match(await page.locator('#reader-status').textContent(), /Abra uma conversa/);
+  for (const prefix of ['A', 'B', 'C']) { await page.locator('#conversations a').filter({ hasText: new RegExp('^' + prefix) }).click(); await page.waitForFunction(() => document.getElementById('reader')?.getAttribute('aria-busy') !== 'true'); }
+  const controls = page.getByRole('tab'); assert.equal(await controls.count(), 3); await controls.nth(0).click();
+  await controls.nth(0).focus(); await page.keyboard.press('ArrowRight');
+  assert.equal(await controls.nth(1).evaluate((el: any) => el === document.activeElement), true, 'seta move foco para segunda aba');
+  assert.equal(await controls.nth(0).getAttribute('aria-selected'), 'true', 'foco não ativa');
+  assert.deepEqual(await controls.evaluateAll((els: any[]) => els.map(e => e.tabIndex)), [-1, 0, -1]);
+  await page.keyboard.press('End'); assert.equal(await controls.nth(2).evaluate((el: any) => el === document.activeElement), true);
+  await page.keyboard.press('Home'); assert.equal(await controls.nth(0).evaluate((el: any) => el === document.activeElement), true);
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('Enter'); assert.equal(await controls.nth(1).getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('[role=tabpanel]:visible').count(), 1);
+  assert.equal(await page.evaluate(() => { const ids = [...document.querySelectorAll('[id]')].map(e => e.id); return ids.length === new Set(ids).size; }), true, 'IDs DOM únicos');
+  await page.evaluate(() => window.scrollTo(0, 1600)); const scrollB = await page.evaluate(() => scrollY);
+  await controls.nth(0).evaluate((el: any) => el.click()); await page.evaluate(() => window.scrollTo(0, 2200)); const scrollA = await page.evaluate(() => scrollY);
+  await controls.nth(1).evaluate((el: any) => el.click()); assert.ok(Math.abs((await page.evaluate(() => scrollY)) - scrollB) < 2);
+  await controls.nth(0).evaluate((el: any) => el.click()); assert.ok(Math.abs((await page.evaluate(() => scrollY)) - scrollA) < 2);
+  const anchor = page.locator('#messages [data-anchor=true]'), top = await anchor.evaluate((el: any) => el.getBoundingClientRect().top);
+  await page.locator('#more-messages').evaluate((el: any) => el.click()); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 76);
+  assert.ok(Math.abs((await anchor.evaluate((el: any) => el.getBoundingClientRect().top)) - top) < 2, 'prepend conserva âncora');
+  const originalA = await page.locator('#messages').textContent(); await controls.nth(1).click();
+  s.archive.ingestHistory({ messages: [{ key: { remoteJid: '2@lid', id: 'new', fromMe: false }, messageTimestamp: 150, message: { conversation: 'nova B por atualização explícita' } }] });
+  await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('messages')?.textContent?.includes('nova B por atualização explícita'));
+  await controls.nth(0).click(); assert.equal(await page.locator('#messages').textContent(), originalA, 'refresh B preserva DTO/DOM A');
+  await page.route('**/api/context/*?*', (r: any) => r.fulfill({ status: 500, json: { error: 'Solicitação não concluída' } })); await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.textContent?.startsWith('Não foi possível carregar'));
+  assert.equal(await page.locator('#messages').textContent(), originalA); await page.unroute('**/api/context/*?*');
+  for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sem overflow' + width); await page.locator('#conversation-tabs').scrollIntoViewIfNeeded(); await page.screenshot({ path: 'dist/02-02-ui-' + width + '.png' }); }
+  await page.setViewportSize({ width: 320, height: 900 }); await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); await page.locator('#conversation-tabs').scrollIntoViewIfNeeded(); await page.screenshot({ path: 'dist/02-02-ui-zoom200.png' });
+  await page.locator('#back').click(); assert.equal(await page.locator('#search-panel').isVisible(), true); await page.locator('#conversations a').filter({ hasText: /^A/ }).click(); assert.equal(await page.locator('#messages').textContent(), originalA);
+  await controls.nth(0).focus(); await page.keyboard.press('Delete'); assert.equal(await controls.count(), 2); assert.match(await page.getByRole('tab', { selected: true }).textContent(), /^B/);
+  await page.keyboard.press('Delete'); assert.equal(await controls.count(), 1); await page.keyboard.press('Delete'); assert.equal(await controls.count(), 0);
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('#conversations') !== null), true); assert.match(await page.locator('#reader-status').textContent(), /Abra uma conversa/);
+});
 test('site encontra termo literal em evidência congelada', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', name: 'Homônimo' }], messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'm', fromMe: false }, messageTimestamp: 123, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { conversation: 'Orçamento café <img src=x onerror=window.EXECUTED=1>' } }] });
