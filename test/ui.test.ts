@@ -25,6 +25,26 @@ test('browser exporta conversa inteira além da página e conclui download ZIP',
   assert.equal(await download.failure(), null); const path = await download.path();
   assert.equal(spawnSync('unzip', ['-t', path]).status, 0); const manifest = spawnSync('unzip', ['-p', path, 'manifest.json']); assert.equal(manifest.status, 0); assert.equal(JSON.parse(manifest.stdout.toString()).messages.length, 161);
 });
+test('exportação mostra período efetivo e recupera polling sem misturar abas UC40 a UC49', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ chats: [{ id: 'a@lid', subject: 'A '.repeat(90) }, { id: 'b@lid', subject: 'B' }], messages: [{ key: { remoteJid: 'a@lid', id: 'a', fromMe: false }, messageTimestamp: 1700000000, message: { conversation: 'mensagem A' } }, { key: { remoteJid: 'b@lid', id: 'b', fromMe: false }, messageTimestamp: 1700000000, message: { conversation: 'mensagem B' } }] });
+  const idA = s.archive.readStoredMessage({ remoteJid: 'a@lid', id: 'a', fromMe: false })!.conversationId, idB = s.archive.readStoredMessage({ remoteJid: 'b@lid', id: 'b', fromMe: false })!.conversationId;
+  await login(); await page.locator('#search-from').fill('2020-01-01'); await page.locator(`a[data-id="${idA}"]`).click(); await page.locator('#messages article').first().waitFor();
+  const panel = page.locator('#panel-' + idA), from = panel.locator('.export-form input').nth(0), to = panel.locator('.export-form input').nth(1);
+  assert.equal(await from.inputValue(), '', 'não herda recorte de busca'); await from.fill('2018-11-04'); await to.fill('2018-11-04');
+  await page.waitForTimeout(100); assert.equal(await panel.locator('.export-period').count(), 1, 'prévia usa limites efetivos antes do POST');
+  await page.waitForFunction(() => document.querySelector('.export-period')?.textContent?.includes('2018-11-04T03:00:00.000Z'));
+  await from.fill(''); await to.fill('');
+  let fail = true, posts = 0; page.on('request', (r: any) => { if (r.url().endsWith('/api/exports') && r.method() === 'POST') posts++; });
+  await page.route(/\/api\/exports\/[0-9a-f-]{36}$/, async (route: any) => fail ? route.abort('failed') : route.continue());
+  await panel.getByRole('button', { name: 'Preparar exportação', exact: true }).click(); await panel.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).waitFor();
+  assert.equal(await panel.getByRole('link', { name: 'Baixar ZIP' }).count(), 0); assert.match(await panel.textContent(), /Preparando exportação/);
+  await page.locator(`a[data-id="${idB}"]`).click(); await page.locator('#messages article').first().waitFor(); assert.equal(await page.locator('#panel-' + idB).getByRole('button', { name: 'Preparar exportação', exact: true }).isDisabled(), true);
+  assert.match(await page.locator('#messages').textContent(), /mensagem B/); fail = false; await page.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).filter({ visible: true }).click();
+  await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).filter({ visible: true }).waitFor(); assert.equal(posts, 1); assert.match(await page.locator('#panel-' + idB).textContent(), /1 mensagens · 0 arquivos · 0 faltantes/);
+  for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: `dist/02-04-ui-${width}.png`, fullPage: true }); }
+  await page.addStyleTag({ content: ':root{font-size:200%}' }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'dist/02-04-ui-zoom200.png', fullPage: true });
+});
 async function uiFixture(t: any) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-ui-')), s = createService({ dataDir: dir });
   const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening');

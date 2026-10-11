@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { once } from 'node:events';
+import { once, EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { spawnSync, spawn } from 'node:child_process';
@@ -16,6 +16,7 @@ import { createService } from '../src/main.js';
 import { startMediaWorker } from '../src/media.js';
 import { createExportManager, verifyZip } from '../src/export.js';
 import { openArchive, parsePeriod } from '../src/archive.js';
+import type { SocketFactory } from '../src/whatsapp.js';
 
 export async function entries(path: string) {
   const zip = await new Promise<yauzl.ZipFile>((ok, fail) => yauzl.open(path, { lazyEntries: true, strictFileNames: true, validateEntrySizes: true }, (e, z) => e ? fail(e) : ok(z!)));
@@ -144,4 +145,13 @@ test('SIGKILL antes e após publicação recupera preparing como failed preserva
     const restored = openArchive(dir), m = createExportManager({ archive: restored, dataDir: dir, mediaDir: join(dir, 'media') }), db = new Database(join(dir, 'exports', 'jobs.sqlite')); const row = db.prepare('SELECT id FROM jobs').get() as { id: string }; db.close();
     assert.equal(m.getExportJob(row.id, 'session').state, 'failed'); assert.equal(readdirSync(join(dir, 'exports')).some(n => /\.(part|zip)$/.test(n)), false); assert.equal(restored.readStoredMessage(key)!.text, 'preservado'); await m.close(); restored.close();
   }
+});
+test('ciclo completo de exportação consulta somente arquivo sem métodos WhatsApp', async t => {
+  const f = await fixture(t), ev = new EventEmitter(); let forbidden = 0, sockets = 0;
+  const reject = () => { forbidden++; throw Error('proibido'); };
+  const collector = f.s.startCollector({ newProfile: true, socketFactory: () => { sockets++; return { ev, end() {}, sendMessage: reject, chatModify: reject, readMessages: reject, sendReceipt: reject, sendPresenceUpdate: reject, logout: reject } as unknown as ReturnType<SocketFactory>; } });
+  await collector.stop();
+  const r = await f.post(); assert.equal(r.status, 202); const j = await r.json(), job = await ready(f, j.jobId); assert.equal(job.state, 'ready'); assert.equal((await fetch(f.base + job.downloadURL, { headers: f.headers })).status, 200);
+  for (const path of ['/send', '/edit', '/delete', '/read', '/presence', '/mcp', '/export', '/ingest']) assert.equal((await fetch(f.base + path, { method: 'POST', headers: f.headers })).status, 404);
+  assert.equal(forbidden, 0); assert.equal(sockets, 1); assert.equal(f.s.archive.getCoverage().uniqueMessages, 162);
 });
