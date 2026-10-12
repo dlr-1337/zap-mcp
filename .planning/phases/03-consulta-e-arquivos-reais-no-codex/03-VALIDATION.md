@@ -155,19 +155,19 @@ Cada chamada positiva teve subprocesso instalado atual, request ID/timestamp pri
 
 | Threat | Evidência registrada |
 |---|---|
-| T-03-01 | Antes de parser: bearer ausente/inválido/cookie/sessão recusados; TLS real sem CA recusado, Host/Origin sintéticos e reais |
-| T-03-02 | Grant por request e write/end, CLI/restart/duas conexões/streams; mcp.test + revogação real |
-| T-03-03 | IDs/schema fechados, paths/URL/symlink/corrupção/HEAD; media/mcp/security |
-| T-03-04 | Dois streams8 MiB interrompidos por rotação/restrição, buffers inline recusados; sintético, primários intactos |
-| T-03-05 | Cursor HMAC/operação/filtro/grant/TTL/ordinal validado; freeze/replay/quotas e continuação real |
-| T-03-06 | Proveniência/unknowns/limites honestos, DTO/campos SQL/site; candidato/histórico/fuso sintéticos e reais |
-| T-03-07 | Envelope completo32 KiB, argumento12 KiB, DTO excessivo sem avanço, muitos lotes resumidos explicitamente; RED 600 lotes e real32587 bytes |
-| T-03-08 | Conversa adversarial não altera registry/permissões/instruções; initialize fixo, dados separados em DTO |
-| T-03-09 | Operações WhatsApp/resource/prompt extras ausentes; allowlist/spies/readonly/security |
-| T-03-10 | Âncora e vizinhas sanitizadas; buffers/continuações vencidos por política atual, paridade SQL/site |
-| T-03-11 | publicReceipt whitelist/sentinelas, arquivos privados externos, nenhuma configuração/token/conversa no diff |
-| T-03-12 | Processo/calls/protocolo/TLS/arquivo atuais e correlação; replay JSON/fake/ausência/parcial/corrupção recusados |
-| T-03-SC | Pins/lock auditados em03-01; nenhum pacote novo em03-02/03/04 |
+| T-03-01 | Bearer antes de parsing/cookie; Host/Origin e TLS real; src/mcp.ts:70,src/main.ts:51/56,test/mcp.test.ts:538 |
+| T-03-02 | Gate por consumo/write/end e fd; src/mcp.ts:57/80/230,src/media.ts:88,test/mcp.test.ts:39/72/89 |
+| T-03-03 | ID fechado/O_NOFOLLOW/tamanho/SHA; src/media.ts:50/65,test/mcp.test.ts:54/97/532 |
+| T-03-04 | Adapter sem socket, quatro registros fixos, allowlist e spies zero; src/mcp.ts:62/148/166/174/213,test/readonly.test.ts:16/34/36 |
+| T-03-05 | HMAC/operação/geração/filtro/TTL e namespace; src/mcp.ts:105,src/archive.ts:422,test/mcp.test.ts:388 |
+| T-03-06 | Schemas/corpo/args/envelope/quotas e DTO inteiro; src/mcp.ts:13/17/96/129/203,src/archive.ts:426,test/mcp.test.ts:202/365/409/449 |
+| T-03-07 | Closure request-local/namespace/gate no consumo; src/mcp.ts:65/76/139/169,test/mcp.test.ts:427/463/474 |
+| T-03-08 | Âncora/referências no gate e projeção atual; src/mcp.ts:206,src/archive.ts:366/487,test/mcp.test.ts:327/345 |
+| T-03-09 | Instruções fixas/DTO como dados/allowlist; src/mcp.ts:18/147,test/mcp.test.ts:305,test/readonly.test.ts:37 |
+| T-03-10 | Referência/direção/sessão/TTL/ordinal e paridade; src/mcp.ts:174,src/archive.ts:478,test/mcp.test.ts:223/273 e SQL/site real |
+| T-03-11 | Whitelist/diretórios0700/arquivos0600/config/cleanup; scripts/phase3-acceptance.mjs:21/38/101/233/236/241,test/mcp-acceptance.test.ts:47 |
+| T-03-12 | Run atual/calls/canal/destinos/oráculos; scripts/phase3-acceptance.mjs:19/24/107/153/176/224,test/mcp-acceptance.test.ts:25/29/40 |
+| T-03-SC | Ordem prévia de todas transitivas não cumprida em03-01; revalidação corretiva atual1586arquivos/0vulnerabilidades aguarda reauditoria:03-DEPENDENCY-REVALIDATION.md |
 
 ## Pendências explícitas
 
