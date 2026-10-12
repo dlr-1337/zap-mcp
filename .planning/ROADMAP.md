@@ -55,6 +55,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 5. Ao escolher conversa e período, o proprietário recebe um ZIP com todas as mensagens arquivadas do recorte, além da página visível, mensagens legíveis, manifesto estruturado e arquivos ligados à origem, inclusive faltantes listados e nomes iguais sem sobrescrita. Interrupção/falha é explícita e não gera pacote rotulado como concluído; nomes/caminhos recebidos não permitem incluir arquivos arbitrários da VPS nem segredos.
 
 **Plans**: 0 (não planejados)
+- [x] 02-06-PLAN.md
 - [x] 02-01-PLAN.md
 - [x] 02-02-PLAN.md
 - [x] 02-03-PLAN.md
@@ -116,7 +117,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
-| 2. Busca, contexto, abas e exportação no site | 5/5 | Complete    | 2026-10-11 |
+| 2. Busca, contexto, abas e exportação no site | 6/6 | In Progress |  |
 | 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
 

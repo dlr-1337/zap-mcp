@@ -1,5 +1,43 @@
 # Fase 2 — UI Review
 
+## Reauditoria do delta G-02-6 — 2026-10-12
+
+**Fonte auditada:** `e0d921c`, delta de produto desde `1a5b7c8`; `public/app.js`, `public/style.css` e `test/ui.test.ts` sem alterações locais no momento da leitura. Baseline: `02-UI-SPEC.md` aprovado. Histórico abaixo preservado.
+
+**Screenshots:** capturadas anteriormente pelo harness sintético e inspecionadas em pixels nesta reauditoria: `dist/02-02-ui-320.png`, `dist/02-02-ui-768.png`, `dist/02-02-ui-1280.png` e `dist/02-02-ui-zoom200.png`, geradas em `test/ui.test.ts:345-346`. Nenhuma captura nova ou de conversa privada feita pelo auditor. `git check-ignore` confirmou `dist/`; `.planning/ui-reviews/.gitignore` já contém os oito padrões de proteção. Detecção atual: localhost:3000 HTTP 200, 5173/8080 HTTP 000; não capturar a instância privada foi uma restrição explícita desta revisão.
+
+**Interaction captures:** off (`interaction_capture: false`). Imagens pós-interação do harness e prova CUA upstream são fontes distintas; o driver de interaction capture não foi executado.
+
+### Pillar Scores — resultado atual
+
+| Pillar | Score | Evidência específica do delta |
+|---|---|---|
+| Copywriting | 4/4 | Nenhuma string de produto alterada; nomes completos permanecem no texto da aba e no nome acessível de Fechar (`public/app.js:327-328`). Imagens mantêm Fechar, referências e Exportar conversa legíveis. |
+| Visuals | 4/4 | Barra branca opaca, seleção por borda e três abas distintas na imagem 1280; Fechar permanece abaixo de cada nome. Em 320/768 há rolagem horizontal local prevista, sem corte do documento. `public/style.css:48-51`; foco alcançável e contorno de 2px verificados na matriz (`test/ui.test.ts:364-369`). |
+| Color | 4/4 | Delta acrescenta somente branco contratual à barra; nenhuma cor nova ou novo uso de accent. Accent aparece em cinco regras CSS (`public/style.css:15,17,29,43,51`), reservado a CTA/download/seleção/foco; distribuição aproximada visual, sem mensuração pixel a pixel. |
+| Typography | 4/4 | Permanecem quatro tamanhos/400 e 600; white-space/pre-wrap, dir=auto e seleção de texto preservados. Imagem 200% mostra reflow do nome e Fechar; restante do nome é acessível por scroll local, não eliminado/truncado no DOM (`public/style.css:50`; `test/ui.test.ts:380-387`). |
+| Spacing | 4/4 | Gap 8px, padding 4px e margem 16px conservam escala; 50vh e a fórmula de altura são dimensões de contenção, não novos tokens de gap. Scroll-margin inclui 16px da escala. Matriz confirma barra ≤ metade do viewport e Fechar ≥48×48 sem obstrução (`test/ui.test.ts:378-390`). |
+| Experience Design | 4/4 | Restauração por gesto nativo <2px, foco separado de seleção, Enter/Espaço, Delete/Fechar e âncora alinhada ao início demonstrados; guard/tickets e estado por aba preservados (`public/app.js:414`; `test/ui.test.ts:352-399`). |
+
+**Overall atual: 24/24. BLOCKERs: 0. WARNINGs: 0.** Nenhum defeito concreto novo encontrado neste delta; notas preservadas com evidência atual, sem elevar pontuação por média. Não há três correções de produto a inventar: prioridades abertas 0 e recomendações menores abertas 0. Os três fixes históricos resolvidos permanecem abaixo.
+
+### UC-23 a UC-34 e evidência de interação
+
+- **UC-23/24/25/26/27 (vazio, loading, erro, preenchido e parcial):** delta não altera copy/estados, renderContext nem guards de sessão/geração. Fixture em `test/ui.test.ts:313-351` mantém leitura anterior após erro HTTP, atualização explícita de B sem alterar A, âncora e prepend; loading e respostas tardias continuam cobertos por `:254-312`. Estes estados conservam a avaliação anterior, sem atribuir nova execução real a cada um.
+- **UC-28/30/33/34 (overflow e nomes longos):** quatro imagens inspecionadas mostram nomes Unicode/RTL, conteúdo quebrado, barra restrita ao leitor e fechamento visível. O nome extremo ocupa parte da tela, com limite de metade do viewport e rolagem local para ler o texto completo. `overscroll-behavior: contain` evita propagar wheel ao documento no fim do nome. O corte momentâneo de conteúdo sob uma barra sticky durante leitura não demonstra falha de abertura da âncora; a imagem 1280 foi capturada após navegação/refresh/erro e reposicionamento da tablist, não no instante de abertura do contexto.
+- **UC-29 (zero/um/muitos) e UC-31/32 (loading/erro de abas):** teste mantém três abas, reuso, isolamento e fechamento sucessivo até devolver foco à lista, sem conteúdo no storage. Loading/erro não ganha estado ou rota nova. Dados/DOM/referências e cursores por conversa seguem independentes.
+- **Geometria sintética separada de pixels:** matriz de `test/ui.test.ts:359-394`, 320/768/1280×480 com fonte100/200%, comprova início da âncora top255,59375/256,1875, abaixo da barra bottom239 e dentro do viewport. Mensagens chegam a861px de altura. `focus({preventScroll:true})` seguido de `scrollIntoView({block:'start'})` em `public/app.js:414` evita centralização que ocultava o início. Essas seis combinações têm assertions de geometria; as quatro imagens inspecionadas são capturas de altura900, não screenshots dessa matriz480.
+- **CUA real upstream, não execução deste auditor:** `02-06-SUMMARY.md` registra prova autônoma do parent em cópia real offline, viewport1280×720, fonte `e0d921c`: A/B/A56463→56463 e B/A/B45583→45583 por clique físico nas abas visíveis; setas movem foco sem ativar/deslocar; Enter/Delete/Fechar e logout aprovados. Âncora top375,59375 > barra bottom194; snapshot e hash da senha original preservados. Sem confirmação humana atribuída e sem ler conversas privadas nesta auditoria.
+- **Divergência da ferramenta preservada:** caminho locator.click da CUA deslocou287px; clique físico produziu delta0. Causa interna não confirmada. Não ampliar threshold nem classificar o locator como prova aprovada. Playwright instalado usa clique nativo na matriz sintética com limite estrito <2px.
+
+### Verificação terminal e limites
+
+Logs existentes lidos, sem repetir testes: `dist/02-06-ui-focused.log` **19 testes/19 pass/0 fail/0 cancelled/0 skipped/0 todo, EXIT_CODE=0**; `dist/02-06-full-tests.log` **144 testes/144 pass/0 fail/0 cancelled/0 skipped/0 todo, EXIT_CODE=0**, fonte final `e0d921c`. A primeira regressão142/144 e a tentativa inválida de TMPDIR continuam registradas no SUMMARY; não foram apagadas nem usadas como GREEN. Nenhum registry: `components.json` ausente, contrato declara Nenhum; auditoria de blocos não aplicável.
+
+Fonte raiz200% é aumento de fonte CSS, não zoom físico/nativo do navegador. Pixels, assertions geométricas e prova real1280×720 não demonstram dispositivos físicos, todas as conversas da conta, zoom nativo, coletor conectado, VPS ou MCP. O auditor não instalou dependência, repetiu suíte, abriu browser privado, implementou correção, modificou metadados globais ou criou commit; ownership limitado a este relatório.
+
+**Arquivos/evidências adicionais auditados:** `02-06-PLAN.md`, `02-06-SUMMARY.md`, diff `1a5b7c8..e0d921c`, fontes e testes mencionados, dois logs terminais e quatro capturas sintéticas. Planos/summaries anteriores, contrato e histórico deste relatório foram consultados como baseline, não revalidação integral da fase.
+
 **Audited:** 2026-10-11 (America/Sao_Paulo)
 **Baseline:** 02-UI-SPEC.md aprovado; frontend HTML/CSS/JS nativo.
 **Screenshots:** capturas sintéticas existentes inspecionadas: `dist/02-04-ui-{320,768,1280}.png`, `dist/02-04-ui-zoom200.png` e `dist/02-03-ui-320.png`. Origem: `test/ui.test.ts:57-58,110`. Não foram feitas novas capturas; porta 3000 respondeu HTTP 200, 5173/8080 indisponíveis. `dist/` ignorado confirmado com git check-ignore; gate `.planning/ui-reviews/.gitignore` executado antes de qualquer captura nova.
