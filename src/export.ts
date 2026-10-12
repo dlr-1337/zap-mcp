@@ -118,17 +118,24 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
     }
     return { jobId: id, state: row.state, effectiveFilters: selection.effectiveFilters, conversation: selection.conversation, snapshotAt: selection.snapshotAt, expiresAt: new Date(row.expires).toISOString(), counts: row.counts ? JSON.parse(row.counts) : { messages: selection.messages.length, files: null, missing: null }, reason: row.reason, ...(row.state === 'ready' ? { downloadURL: '/api/exports/' + id + '/download' } : {}) };
   };
-  const create = (session: string, conversationId: unknown, from: unknown, to: unknown) => {
+  const create = (session: string, conversationId: unknown, from: unknown, to: unknown, requestId?: unknown) => {
     if (stopped) throw error(409, 'Preparação indisponível');
-    if (active || db.prepare("SELECT id FROM jobs WHERE state='preparing'").get()) throw error(409, 'Já há uma exportação em preparação. Aguarde.');
     if (typeof conversationId !== 'string' || !idPattern.test(conversationId)) throw error(404, 'Não encontrado no acervo');
-    const selection = archive.freezeExportSelection(conversationId, parsePeriod(from, to));
+    if (requestId !== undefined && (typeof requestId !== 'string' || !idPattern.test(requestId))) throw error(400, 'Solicitação inválida');
+    const id = typeof requestId === 'string' ? requestId : randomUUID(), period = parsePeriod(from, to);
+    if (db.prepare('SELECT id FROM jobs WHERE id=?').get(id)) {
+      const job = get(id, session), filters = job.effectiveFilters;
+      if (filters.conversationId !== conversationId || filters.from !== period.from || filters.to !== period.to) throw error(409, 'Solicitação já usada para outro recorte.');
+      return job;
+    }
+    if (active || db.prepare("SELECT id FROM jobs WHERE state='preparing'").get()) throw error(409, 'Já há uma exportação em preparação. Aguarde.');
+    const selection = archive.freezeExportSelection(conversationId, period);
     const json = JSON.stringify(selection), binary = selection.messages.flatMap(m => m.attachments).filter(a => a.state === 'available').reduce((n, a) => n + (a.size ?? BUDGET), 0);
     const estimate = Buffer.byteLength(json) * 5 + binary + selection.messages.length * 2048;
     let used = 0; for (const name of readdirSync(directory)) if (/^[0-9a-f-]{36}\.(part|zip)$/.test(name)) { const path = join(directory, name), row = db.prepare('SELECT expires FROM jobs WHERE id=?').get(name.slice(0, 36)) as { expires: number } | undefined; if (!row || row.expires <= Date.now()) remove(name.slice(0, 36)); else used += lstatSync(path).size; }
     if (!Number.isSafeInteger(estimate) || estimate + used > BUDGET) throw error(413, 'Exportações excedem o orçamento de 2GiB. Restrinja o período ou aguarde expiração.');
     space(directory, estimate);
-    const id = randomUUID(), expires = Date.now() + TTL;
+    const expires = Date.now() + TTL;
     db.transaction(() => db.prepare("INSERT INTO jobs(id,session,state,selection,expires) VALUES(?,?,'preparing',?,?)").run(id, session, json, expires))();
     const part = join(directory, id + '.part'), final = join(directory, id + '.zip');
     active = new Promise<void>(resolve => setImmediate(resolve)).then(async () => {

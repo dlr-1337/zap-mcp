@@ -134,7 +134,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     if ([400, 404, 409, 410, 413, 422, 507].includes(status ?? 0)) res.status(status!).json({ error: (error as Error).message }); else next(error);
   };
   app.post('/api/exports', auth.csrf, (req, res, next) => {
-    try { if (!req.body || Object.keys(req.body).some(k => !['conversationId', 'from', 'to', 'csrfToken'].includes(k))) throw Object.assign(Error('Seleção inválida'), { status: 400 }); res.status(202).json(exports.createExportJob(searchSession(req), req.body.conversationId, req.body.from, req.body.to)); } catch (e) { exportError(e, res, next); }
+    try { if (!req.body || Object.keys(req.body).some(k => !['conversationId', 'from', 'to', 'csrfToken', 'requestId'].includes(k))) throw Object.assign(Error('Seleção inválida'), { status: 400 }); res.status(202).json(exports.createExportJob(searchSession(req), req.body.conversationId, req.body.from, req.body.to, req.body.requestId)); } catch (e) { exportError(e, res, next); }
   });
   app.get('/api/exports/period', (req, res, next) => {
     try { if (Object.keys(req.query).some(k => !['from', 'to'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('Período inválido'), { status: 400 }); res.json(parsePeriod(req.query.from, req.query.to)); } catch (e) { exportError(e, res, next); }

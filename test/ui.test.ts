@@ -14,6 +14,78 @@ import { createService } from '../src/main.js';
 
 const requireBrowser = createRequire(process.env.ZAP_BROWSER_MODULE ?? '/home/otavio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
 const { chromium } = requireBrowser('playwright');
+test('pagehide e logout recusado liberam buscas candidatos e listagem sem callbacks tardios', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'lifecycle@lid', id: 'm', fromMe: false }, message: { conversation: 'conteúdo preservado' } }] });
+  await login();
+  for (const lifecycle of ['pagehide', 'logout']) for (const operation of ['search', 'candidates', 'list']) {
+    if (lifecycle === 'logout') await page.route('**/logout', (r: any) => r.fulfill({ status: 500, json: {} }));
+    const url = operation === 'search' ? '**/api/search?*' : operation === 'candidates' ? '**/api/conversations?q=*' : '**/api/conversations';
+    let release!: () => void, begun!: () => void; const held = new Promise<void>(r => release = r), started = new Promise<void>(r => begun = r);
+    await page.route(url, async (r: any) => { const response = await r.fetch(); begun(); await held; await r.fulfill({ response }); });
+    if (operation === 'search') await page.locator('#search-submit').click();
+    if (operation === 'candidates') await page.locator('#locate-contact').click();
+    if (operation === 'list') await page.evaluate('void list()');
+    await started;
+    if (lifecycle === 'pagehide') { await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))); await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))); await page.locator('#archive').waitFor({ state: 'visible' }); }
+    else { await page.locator('#logout-button').click(); await page.waitForFunction(() => document.getElementById('archive-error')?.textContent?.includes('encerrar')); }
+    const panel = operation === 'search' ? '#search-panel' : operation === 'candidates' ? '#candidate-panel' : '#conversation-panel';
+    const button = operation === 'search' ? '#search-submit' : operation === 'candidates' ? '#locate-contact' : '#more-conversations';
+    assert.notEqual(await page.locator(panel).getAttribute('aria-busy'), 'true', operation + '/' + lifecycle);
+    assert.equal(await page.locator(button).isDisabled(), false);
+    release(); await page.waitForTimeout(100); await page.unroute(url);
+    assert.notEqual(await page.locator(panel).getAttribute('aria-busy'), 'true');
+    if (lifecycle === 'logout') await page.unroute('**/logout');
+  }
+  await page.locator('#search-submit').click(); await page.waitForFunction(() => document.getElementById('search-results')?.textContent?.includes('conteúdo preservado'));
+});
+test('POST retido recupera o mesmo ZIP após suspensão ou logout recusado sem duplicar job', async t => {
+  for (const lifecycle of ['pagehide', 'logout', 'close', 'expired', 'network']) {
+    const { s, page, login } = await uiFixture(t);
+    s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'recover@lid', id: 'm', fromMe: false }, message: { conversation: 'conteúdo do ZIP' } }] });
+    await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
+    let release!: () => void, begun!: () => void, jobId: string;
+    const held = new Promise<void>(r => release = r), started = new Promise<void>(r => begun = r); let first = true, posts = 0;
+    await page.route('**/api/exports', async (r: any) => {
+      if (r.request().method() !== 'POST') return r.continue();
+      posts++; const response = await r.fetch();
+      if (first) { first = false; jobId = (await response.json()).jobId; begun(); await held; if (lifecycle === 'network') return r.abort('failed'); }
+      await r.fulfill({ response });
+    });
+    await page.getByRole('button', { name: 'Gerar ZIP', exact: true }).click(); await started;
+    if (lifecycle === 'network') { release(); await page.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).click(); }
+    else if (lifecycle === 'logout') { await page.route('**/logout', (r: any) => r.fulfill({ status: 500, json: {} })); await page.locator('#logout-button').click(); await page.waitForFunction(() => document.getElementById('archive-error')?.textContent?.includes('encerrar')); }
+    else {
+      await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+      if (lifecycle === 'expired') s.authDb.exec('UPDATE web_sessions SET touched_at=0');
+      if (lifecycle === 'close') await page.evaluate('closeTab([...tabs.values()][0])');
+      await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    }
+    if (lifecycle === 'expired') { await page.locator('#login-panel').waitFor({ state: 'visible' }); release(); await page.waitForTimeout(100); assert.equal(await page.locator('.export-form').count(), 0); assert.equal(posts, 1); }
+    else {
+      await page.locator('#archive').waitFor({ state: 'visible' });
+      if (lifecycle === 'close') { release(); await page.waitForTimeout(100); await page.locator('#conversations a').click(); }
+      const download = page.getByRole('link', { name: 'Baixar ZIP', exact: true }); await download.waitFor();
+      assert.equal(await download.getAttribute('href'), '/api/exports/' + jobId! + '/download', 'mesma criação recuperada');
+      assert.equal(await page.locator('.export-form').getAttribute('aria-busy'), 'false');
+      assert.equal(await page.getByRole('button', { name: 'Gerar ZIP', exact: true }).isDisabled(), false);
+      release(); await page.waitForTimeout(100); assert.equal(await download.getAttribute('href'), '/api/exports/' + jobId! + '/download');
+    }
+  }
+});
+test('resposta anterior à suspensão não limpa o loading da nova busca', async t => {
+  const { s, page, login } = await uiFixture(t);
+  s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'versions@lid', id: 'm', fromMe: false }, message: { conversation: 'leitura' } }] }); await login();
+  const releases: (() => void)[] = []; let begun!: () => void;
+  let started = new Promise<void>(r => begun = r);
+  await page.route('**/api/search?*', async (r: any) => { const response = await r.fetch(); const held = new Promise<void>(resolve => releases.push(resolve)); begun(); await held; await r.fulfill({ response }); });
+  await page.locator('#search-submit').click(); await started;
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))); await page.locator('#archive').waitFor({ state: 'visible' });
+  started = new Promise<void>(r => begun = r); await page.locator('#search-submit').click(); await started;
+  releases[0](); await page.waitForTimeout(100); assert.equal(await page.locator('#search-panel').getAttribute('aria-busy'), 'true'); assert.equal(await page.locator('#search-submit').isDisabled(), true);
+  releases[1](); await page.waitForFunction(() => document.getElementById('search-panel')?.getAttribute('aria-busy') !== 'true');
+});
 test('erro de datas de exportação acompanha campo focado por descrição única', async t => {
   const { s, page, login } = await uiFixture(t); s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'aria@lid', id: 'm', fromMe: false }, messageTimestamp: 123, message: { conversation: 'leitura preservada' } }] });
   await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();

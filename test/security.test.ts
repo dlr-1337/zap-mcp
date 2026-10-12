@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, symlinkSync, renameSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -70,6 +71,16 @@ test('export POST status HEAD Range e download isolam sessão CSRF e geração d
   for (const h of [{ ...headers, Origin: 'https://evil.example' }, { ...headers, Origin: '' }]) assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers: h, body })).status, 403);
   assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers, body: JSON.stringify({ conversationId, csrfToken: 'wrong' }) })).status, 403);
   const j = await (await fetch(base + '/api/exports', { method: 'POST', headers, body })).json();
+  const requestId = randomUUID(), retryBody = JSON.stringify({ conversationId, csrfToken: owner.csrfToken, requestId });
+  while ((await (await fetch(base + '/api/exports/' + j.jobId, { headers: owner.headers })).json()).state === 'preparing') await new Promise(r => setTimeout(r, 5));
+  const first = await fetch(base + '/api/exports', { method: 'POST', headers, body: retryBody }); assert.equal(first.status, 202); const recovered = await first.json();
+  const retry = await fetch(base + '/api/exports', { method: 'POST', headers, body: retryBody }); assert.equal(retry.status, 202); assert.equal((await retry.json()).jobId, recovered.jobId);
+  assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers, body: JSON.stringify({ ...JSON.parse(retryBody), from: '2000-01-01' }) })).status, 409);
+  const foreign = await authenticate();
+  assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers: { ...headers, ...foreign.headers }, body: JSON.stringify({ ...JSON.parse(retryBody), csrfToken: foreign.csrfToken }) })).status, 404);
+  assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' }, body: retryBody })).status, 403);
+  assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers, body: JSON.stringify({ ...JSON.parse(retryBody), csrfToken: 'invalid' }) })).status, 403);
+  assert.equal((await fetch(base + '/api/exports', { method: 'POST', headers, body: JSON.stringify({ ...JSON.parse(retryBody), requestId: '../private' }) })).status, 400);
   let job: any; for (let i = 0; i < 100; i++) { job = await (await fetch(base + '/api/exports/' + j.jobId, { headers: owner.headers })).json(); if (job.state !== 'preparing') break; await new Promise(r => setTimeout(r, 5)); } assert.equal(job.state, 'ready');
   const paths = ['/api/exports/' + j.jobId, '/api/exports/' + j.jobId + '/download', '/api/exports/%2Fetc%2Fpasswd/download', '/api/exports/..%2Fsecret/download'];
   for (const path of paths) for (const method of ['GET', 'HEAD']) { const r = await fetch(base + path, { method, headers: { Range: 'bytes=0-0' } }); assert.equal(r.status, 401); assert.equal(r.headers.get('content-range'), null); }
