@@ -11,6 +11,7 @@ import { acquireServiceLock, createCollector, createAuthState, type Collector, t
 import { startMediaWorker, openVerifiedAttachment, streamVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
 import { createExportManager } from './export.js';
+import { createMcpAdapter, rotateMcpToken } from './mcp.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -52,6 +53,7 @@ export function createService({ dataDir }: { dataDir: string }) {
   app.use((_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
+  app.use('/mcp', createMcpAdapter({ archive, authDb, mediaDir }));
   app.use(express.json({ limit: '4kb' }));
   app.use(express.urlencoded({ extended: false, limit: '4kb' }));
   app.use(auth.middleware);
@@ -241,6 +243,13 @@ export function createService({ dataDir }: { dataDir: string }) {
 async function cli() {
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
+  if (process.argv[2] === 'mcp-token-rotate') {
+    if (process.argv.length !== 4) throw Error('Uso: mcp-token-rotate ARQUIVO_PRIVADO_NOVO');
+    const location = resolve(dataDir), root = realpathSync(fileURLToPath(new URL('../../', import.meta.url))), path = join(location, 'auth.sqlite');
+    if (location === root || location.startsWith(root + '/') || realpathSync(location) !== location || lstatSync(location).mode & 0o077 || lstatSync(location).uid !== process.getuid!() || !lstatSync(path).isFile() || lstatSync(path).isSymbolicLink() || lstatSync(path).mode & 0o077 || lstatSync(path).uid !== process.getuid!()) throw Error('Banco privado inválido');
+    const db = new Database(path, { fileMustExist: true });
+    try { rotateMcpToken(db, process.argv[3]); } finally { db.close(); } return;
+  }
   const collect = process.argv.includes('--collect');
   if (collect && (process.argv[2] !== 'serve' || process.argv.length !== 4)) throw Error('Uso: serve --collect');
   if (process.argv[2] === 'backup') { if (process.argv.length !== 4) throw Error('Uso: backup DESTINO_NOVO'); await createSnapshot({ dataDir, destination: process.argv[3] }); console.log('Snapshot privado íntegro; restauração ainda deve ser verificada'); return; }
