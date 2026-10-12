@@ -4,7 +4,7 @@ Arquivo privado de WhatsApp com uma conta, um proprietário e um coletor, por di
 
 ## Status
 
-As fases 1 e 2 locais estão concluídas e verificadas. O site oferece busca por contato, texto e período, contexto paginado, conversas em abas, preview sob ação e exportação integral do recorte arquivado em ZIP. A suíte integrada passou 143/143 testes; a verificação independente da fase 2 passou 40/40 critérios e 8/8 requisitos, sem gaps.
+As fases 1 e 2 locais estão concluídas e verificadas. O site oferece busca por contato, texto e período, contexto paginado, conversas em abas, preview sob ação e exportação integral do recorte arquivado em ZIP. A suíte integrada passou 144/144 testes; a verificação independente da fase 2 passou 45/45 critérios e 8/8 requisitos, sem gaps, após corrigir a perda de posição ao alcançar abas e concluir a UAT autônoma.
 
 O aceite real conferiu 1.028 mensagens, 190 originais e 112 faltantes no recorte escolhido, preservando versões e citações; ambos ZIPs tiveram todas as 192 entradas e os hashes conferidos. A atualização local preservou senha, identidade e IDs, após snapshot/restore de 8.792 mensagens e 856 originais. Essas contagens são das cópias verificadas, sem garantia de histórico integral. [Evidências da fase 2](.planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-VERIFICATION.md).
 
@@ -54,7 +54,6 @@ Node24.21.0 é obrigatório, inclusive para o módulo SQLite. Com mise instalado
 ```sh
 mise exec node@24.21.0 -- npm ci
 mise exec node@24.21.0 -- npm run build
-mise exec node@24.21.0 -- npm test
 export ZAP_DATA_DIR=/caminho/privado/zap
 export ZAP_PORT=3000
 mise exec node@24.21.0 -- node dist/src/main.js profile-init
@@ -63,6 +62,10 @@ printf '%s' "$ZAP_OWNER_PASSWORD" | mise exec node@24.21.0 -- node dist/src/main
 unset ZAP_OWNER_PASSWORD
 mise exec node@24.21.0 -- node dist/src/main.js serve
 ```
+
+Os testes de interface exigem Playwright1.62.1 e seu Chromium151.0.7922.34. O CI instala esse ambiente de teste em diretório temporário externo, define `ZAP_BROWSER_MODULE` e `ZAP_BROWSER_EXECUTABLE` e executa `npm test`, sem conta ou sessão WhatsApp. Esses componentes são exclusivos dos testes; o coletor funciona sem navegador. A instalação no CI segue a [documentação oficial do Playwright](https://playwright.dev/docs/ci).
+
+Para testar localmente com uma instalação existente, aponte `ZAP_BROWSER_MODULE` para o `package.json` do diretório `node_modules` que contém Playwright e `ZAP_BROWSER_EXECUTABLE` para o executável desse Chromium. Então execute `mise exec node@24.21.0 -- npm test`. No Codex, o harness já possui um caminho padrão para o Playwright do bundle; o executável pode ser indicado explicitamente.
 
 Escolha diretório privado fora do checkout; o caminho acima é fictício. `.env.example` documenta variáveis, mas `.env` não é carregado automaticamente. Senha passa por stdin, nunca por argumento/histórico. `owner-set` revoga sessões anteriores e exige serviço parado. `profile-init` cria somente credenciais locais offline; não substitui perfil corrompido e não conecta conta.
 
