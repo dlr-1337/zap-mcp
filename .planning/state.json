@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Consulta e arquivos reais no Codex",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -29,5 +29,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 03 of 4 · 50% · executing"
   },
-  "updated_at": "2026-10-12T14:14:36.664Z"
+  "updated_at": "2026-10-12T15:30:31.327Z"
 }
