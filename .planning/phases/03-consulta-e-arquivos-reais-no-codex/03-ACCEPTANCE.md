@@ -6,20 +6,20 @@ Rodada final **real**, encerrada com exit0 em **2026-10-12T17:13:27.794Z**. O ro
 
 | Evidência | Resultado observado |
 |---|---|
-| Cliente/runtime/SDK | Codex CLI0.162.1, Node24.21.0, server2.3.1/node2.1.1 |
+| Cliente/runtime/SDK | Codex CLI 0.162.1, Node 24.21.0, server 2.3.1/node 2.1.1 |
 | Protocolo efetivamente negociado | initialize2025-06-18, client codex-mcp-client |
 | Canal MCP/originais | HTTPS nativo localhost, cadeia e hostname verificados; Codex sem confiar na CA foi recusado antes de initialize |
-| Fonte | Clone restaurado de conta vinculada,8792mensagens; coletor desligado, pairing indisponível |
-| find_conversations |1chamada real; candidato canônico conferido com SQL e site |
-| search_messages |3páginas consecutivas,4+5+4=13mensagens de um recorte de128; termo/conversa/dias inclusivos AND e ICU/UTC/offset conferidos |
-| get_context |6chamadas: âncora da busca, antes/depois e3âncoras adicionais;20referências distintas conferidas com SQL/site |
-| Proveniência real adicional |1citação recebida,1âncora com revisão edit e1âncora sem instante original; janelas contêm2revisões edit |
+| Fonte | Clone restaurado de conta vinculada,8792 mensagens; coletor desligado, pairing indisponível |
+| find_conversations |1 chamada real; candidato canônico conferido com SQL e site |
+| search_messages |3 páginas consecutivas,4+5+4=13 mensagens de um recorte de128; termo/conversa/dias inclusivos AND e ICU/UTC/offset conferidos |
+| get_context |6 chamadas: âncora da busca, antes/depois e3 âncoras adicionais;20 referências distintas conferidas com SQL/site |
+| Proveniência real adicional |1 citação recebida,1 âncora com revisão edit e1 âncora sem instante original; janelas contêm2 revisões edit |
 | Campos | IDs, autoria/direção, origens/PN-LID, citações, revisões/fingerprints/datas, anexos/estados e unknowns iguais aos oráculos |
-| Envelope de consulta | Maior HTTP/SSE observado32587bytes; orçamento servidor32768bytes, **sem inferir teto do Codex** |
+| Envelope de consulta | Maior HTTP/SSE observado 32587 bytes; orçamento servidor 32768 bytes, **sem inferir teto do Codex** |
 | Configuração | TOML global preservado byte a byte; overrides somente nos subprocessos, sem registro de endpoint encerrado |
 | Encerramento | Bearer atual recusado após revogação, token temporário removido e listeners encerrados; credenciais/config/sessões web do clone restauradas |
 
-O caso de citação preservou identificadores recebidos e texto desconhecido; a edição escolhida não possuía instante original conhecido. O roteiro preservou esses nulls, sem inventar texto citado, versão original ou data. Os casos são amostras do recebido:13resultados não representam a busca inteira,20referências não representam a conta inteira. Inserção/edição entre páginas, histórico textual, calendário DST, restrições e concorrência têm controles sintéticos separados.
+O caso de citação preservou identificadores recebidos e texto desconhecido; a edição escolhida não possuía instante original conhecido. O roteiro preservou esses nulls, sem inventar texto citado, versão original ou data. Os casos são amostras do recebido:13 resultados não representam a busca inteira,20 referências não representam a conta inteira. Inserção/edição entre páginas, histórico textual, calendário DST, restrições e concorrência têm controles sintéticos separados.
 
 ## Originais realmente recuperados
 
@@ -28,7 +28,7 @@ O caso de citação preservou identificadores recebidos e texto desconhecido; a 
 | Original pequeno |4200|`<SHA-256 conferido privadamente>`|Ferramenta retornou inline; original salvo por GET explícito autenticado |
 | Original maior |271485|`<SHA-256 conferido privadamente>`|download_required; GET explícito autenticado |
 
-São arquivos novos no diretório privado da rodada, com tamanho/SHA e corpo HTTP iguais ao original lido independentemente. O helper foi executado pelo Codex, usa bearer pelo ambiente, origem HTTPS fixa e não segue redirecionamento. Metadata/URL/arquivo parcial não contam como entrega.256KiB é a política inline do servidor para imagem suportada; não medimos um limite geral do cliente nem renderização visual ou gravação automática de inline.
+São arquivos novos no diretório privado da rodada, com tamanho/SHA e corpo HTTP iguais ao original lido independentemente. O helper foi executado pelo Codex, usa bearer pelo ambiente, origem HTTPS fixa e não segue redirecionamento. Metadata/URL/arquivo parcial não contam como entrega.256 KiB é a política inline do servidor para imagem suportada; não medimos um limite geral do cliente nem renderização visual ou gravação automática de inline.
 
 ## Recibos e repetição
 
@@ -43,13 +43,13 @@ mise exec node@24.21.0 -- node scripts/phase3-acceptance.mjs --mode real-codex
 
 O caso externo contém `synthetic:false`, `dataDir`, `smallId`, `largeId`, `keyFile`, `certFile`, `caFile` e `destination`. Todos os caminhos devem ficar fora do checkout; sessão/dados/chave/token/recibos são privados. O clone tem `restored.json` offlineOnly e manifest vinculado à identidade pública do perfil. O executável é o Codex nativo instalado via mise; nenhuma fixture ou cliente SDK substitui essa execução.
 
-Cada rodada cria diretório novo0700, arquivos0600, `selected.json`, transcripts por chamada, `evidence.json` com requests/resultados e `receipt.json` sanitizado. `latest-integrated.json` fica junto ao caso externo e aponta a rodada atual; a anterior GREEN às17:02:05Z foi preservada. A auditoria exige contexto de execução em memória, processo/calls/protocolo atuais e arquivos novos conferidos; desserializar a evidência inteira não recria esse contexto. Ausência de acesso real é exit não zero, nunca skip.
+Cada rodada cria diretório novo 0700, arquivos 0600, `selected.json`, transcripts por chamada, `evidence.json` com requests/resultados e `receipt.json` sanitizado. `latest-integrated.json` fica junto ao caso externo e aponta a rodada atual; a anterior GREEN às 17:02:05Z foi preservada. A auditoria exige contexto de execução em memória, processo/calls/protocolo atuais e arquivos novos conferidos; desserializar a evidência inteira não recria esse contexto. Ausência de acesso real é exit não zero, nunca skip.
 
 ## Ajustes e limites observados
 
-- Muitos lotes tornavam impossível até um candidato: a menor resposta real requeria232809bytes. RED com600lotes reproduziu a recusa. `queryCoverage` conserva contagens/intervalo/lastIngestion/historyStatuses e agrega estados dos lotes em `batchSummary`, com aviso explícito dos detalhes no `/api/status` autenticado. A soma foi conferida por SQL e pelo site; nenhum DTO de mensagem ou orçamento foi alterado.
+- Muitos lotes tornavam impossível até um candidato: a menor resposta real requeria232809 bytes. RED com600 lotes reproduziu a recusa. `queryCoverage` conserva contagens/intervalo/lastIngestion/historyStatuses e agrega estados dos lotes em `batchSummary`, com aviso explícito dos detalhes no `/api/status` autenticado. A soma foi conferida por SQL e pelo site; nenhum DTO de mensagem ou orçamento foi alterado.
 - Roteiros encadeados excederam o orçamento existente de240s por processo. Alguns requests HTTP haviam concluído, mas não houve encerramento completo do Codex, portanto não receberam recibo. O roteiro final conduz chamadas curtas em processos reais; cursores continuam vinculados ao mesmo bearer/snapshot.
-- Login do site em TLS nativo com Origin HTTPS retornou403. O oráculo usa HTTP somente em loopback no mesmo serviço offline; MCP e originais permanecem em HTTPS verificado. Revisar Origin/canal/proxy do site na fase4, sem inferir comportamento de produção.
+- Login do site em TLS nativo com Origin HTTPS retornou 403. O oráculo usa HTTP somente em loopback no mesmo serviço offline; MCP e originais permanecem em HTTPS verificado. Revisar Origin/canal/proxy do site na fase 4, sem inferir comportamento de produção.
 - Fonte/coletor/sessão WhatsApp originais não foram alterados, pareados ou usados como segundo coletor. Isso não revalida a conexão atual da fonte, implantação VPS, supervisão, backup externo recorrente ou restore operacional final.
 
 ## Controles de privacidade e cobertura
