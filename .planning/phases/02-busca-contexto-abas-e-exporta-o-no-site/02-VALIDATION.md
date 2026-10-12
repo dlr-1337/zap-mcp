@@ -1,21 +1,21 @@
 ---
 phase: "02"
 slug: "busca-contexto-abas-e-exporta-o-no-site"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: execution-verified
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-11"
 ---
 # Phase 2 — Validation Strategy
 
-Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum teste novo foi executado ou requisito está concluído por este documento. Todo verify falha por exit não zero, zero testes, alvo obrigatório skipped ou assertion failing; RED exige falha semântica do alvo e classificador TDD.
+Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais, agora com evidência executada abaixo. Os requisitos globais e a conclusão da fase aguardam revisões/verificador independentes. Todo verify falha por exit não zero, zero testes, alvo obrigatório skipped ou assertion failing; RED exige falha semântica do alvo e classificador TDD.
 
 ## Test Infrastructure
 - Framework: node:test/TypeScript existentes, Node24.21.0 via mise.
 - Build: `mise exec node@24.21.0 -- npm run build`.
 - Quick: `mise exec node@24.21.0 -- node --test dist/test/archive.test.js dist/test/http.test.js dist/test/security.test.js dist/test/readonly.test.js`.
 - Full: `mise exec node@24.21.0 -- npm test`.
-- Pesquisa mediu 4 testes HTTP/security/readonly em 2,67s; duração da suíte ampliada ainda não medida. Falha: exit não zero, zero testes executados ou qualquer teste failing.
+- Suíte ampliada final130/130,0fail/skip/todo,39,740s; log ignorado dist/02-05-full-tests.log. Falha: exit não zero, zero testes executados ou qualquer teste failing.
 
 ## Sampling Rate
 - Após tarefa: build e testes dos módulos alterados.
@@ -37,9 +37,9 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | 02-04-01 | 4 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/ui.test.js` | passed —12/12; tracer repetido12/12; HTTP/browser além da página |
 | 02-04-02 | 4 | tdd | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/export.test.js dist/test/security.test.js dist/test/search.test.js` | passed —17/17; versões/faltantes/CRC/SHA/space/7faultpoints/SIGKILL |
 | 02-04-03 | 4 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/ui.test.js dist/test/readonly.test.js dist/test/export.test.js` | passed —23/23; período/polling/abas/download/logout; full127/127 |
-| 02-05-01 | 5 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-offline` | pending execution |
-| 02-05-02 | 5 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js dist/test/ui.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-browser` | pending execution |
-| 02-05-03 | 5 | auto | `mise exec node@24.21.0 -- npm test` | pending execution |
+| 02-05-01 | 5 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-offline` | passed —2/2initial;tracerreal repetido;1.028mensagens/190originais/112faltantes;P2-OFFLINE |
+| 02-05-02 | 5 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js dist/test/ui.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-browser` | passed —3/3selfcheck;16/16focados;browserreal repetido,A/B/4originais/ZIP;P2-BROWSER |
+| 02-05-03 | 5 | auto | `mise exec node@24.21.0 -- npm test` | passed —130/130,0skip/fail/todo,39,740s;02-ACCEPTANCE sanitizado |
 
 ## Wave 0 Requirements
 - Criar testes novos das capacidades junto às tarefas elegíveis de TDD; antes de lógica não trivial, RED observado.
@@ -55,17 +55,17 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais. Nenhum 
 | Coletor desligado | WEB-02/03/05, EXP-01/02 | independência real de socket | consultar cópia privada restaurada sem iniciar outro coletor; busca/preview/download/ZIP continuam úteis |
 
 ## Validation Sign-Off
-- [ ] Tarefas finais têm verify automático/fails_when e IDs alinhados.
-- [ ] Nenhuma sequência de três tarefas sem verificação.
-- [ ] Novos arquivos/testes implementados; sem placeholders MISSING restantes.
-- [ ] Sem watch e latência medida.
-- [ ] Aceite browser/real/offline sanitizado.
-- [ ] nyquist_compliant true somente após evidência.
-**Approval:** pending execution evidence.
+- [x] Tarefas finais têm verify automático/fails_when e IDs alinhados.
+- [x] Nenhuma sequência de três tarefas sem verificação.
+- [x] Novos arquivos/testes implementados; sem placeholders MISSING restantes.
+- [x] Sem watch e latência medida.
+- [x] Aceite browser/real/offline sanitizado.
+- [x] nyquist_compliant true somente após evidência.
+**Approval:** execução verificada; aprovação independente da fase pendente. Flags canônicos/recall de critérios continuam sujeitos ao verificador, sem autoatestado de certificação.
 
 ## Edge Coverage —42 itens spec-less
 
-Fonte: probe determinístico fornecido pelo orquestrador sobre os oito requisitos;42 aplicáveis,42 resolvidos por critérios explícitos,0 descartados/ausentes. resolved significa especificação de teste, não resultado executado. Todos dependem dos testes indicados; nenhum backstop genérico substitui o alvo.
+Fonte: probe determinístico fornecido pelo orquestrador sobre os oito requisitos;42 aplicáveis,42 critérios explícitos,0 descartados/ausentes. As linhas abaixo preservam a especificação; os arquivos de teste indicados executaram e passaram na suíte130/130. A coluna resolved é o estado do critério especificado, não uma auditoria independente de cobertura. Provas reais completam filtro/UTC/paginação/contexto/originais/ZIP; adversidades são fixtures. O verificador deve conferir cada assertion contra o critério, sem substituir alvos por um backstop genérico.
 
 | Requisito | Categoria | Status | Verification | Critério de resolução | Teste / tarefa |
 |---|---|---|---|---|---|
@@ -115,7 +115,7 @@ Fonte: probe determinístico fornecido pelo orquestrador sobre os oito requisito
 
 Critérios completos ficam em02-UI-SPEC.md; os IDs abaixo cobrem todos49, sem transformar aprovação7/7 do documento em QA executada.
 
-| IDs | Superfície | Tarefa responsável | Prova planejada |
+| IDs | Superfície | Tarefa responsável | Prova executada (fixtures discriminadas em02-ACCEPTANCE) |
 |---|---|---|---|
 | UC-01,UC-02,UC-03,UC-04,UC-05,UC-06,UC-07,UC-08 | candidatos |02-01-03| test/ui.test.ts: vazio/loading/erro/seleção distinta/Unicode/reflow |
 | UC-09,UC-10,UC-11,UC-12,UC-13,UC-14 | formulário/alcance |02-01-02/03| período/UTC e DOM320/768/1280/200% |
@@ -125,11 +125,11 @@ Critérios completos ficam em02-UI-SPEC.md; os IDs abaixo cobrem todos49, sem tr
 | UC-35,UC-36,UC-37,UC-38,UC-39 | preview/anexo |02-03-01/03| clique explícito,codec/fallback/bytes/controls/close |
 | UC-40,UC-41,UC-42,UC-43,UC-44,UC-45 | export seleção |02-04-01/03| vazio/período próprio/filtros reais/labels congelados/reflow |
 | UC-46,UC-47,UC-48,UC-49 | export job |02-04-02/03| loading/poll failure/faltantes/ready verificado/expire |
-| Todos49 | aceite site real e estados sintéticos |02-05-02| checklist discrimina fixture de conta; nenhum conteúdo privado em Git |
+| Todos49 | aceite site real e estados sintéticos |02-05-02|02-ACCEPTANCE contém IDs/checklist/testes executados;P2-BROWSER real+A/B/media/ZIP/logout,130/130full; nenhum conteúdo privado em Git |
 
 ## Multi-Source Coverage Audit
 
-Todos44 itens abaixo COVERED; exclusões explícitas: MCP/Codex fase3, VPS/HTTPS/backup externo fase4, Claude/importadorv2 e Deferred Ideas. D-01..D-20 também constam nos must_haves.truths dos planos responsáveis. Nenhuma funcionalidade foi trocada por rótulo estático ouomitida por custo.
+Todos44 itens abaixo têm plano e prova rastreável nos SUMMARYs e02-ACCEPTANCE; COVERED indica essa rastreabilidade, sujeita à confirmação independente. Exclusões explícitas: MCP/Codex fase3, VPS/HTTPS/backup externo fase4, Claude/importadorv2 e Deferred Ideas. D-01..D-20 também constam nos must_haves.truths dos planos responsáveis. Nenhuma funcionalidade foi trocada por rótulo estático ou omitida por custo.
 
 | Fonte | ID | Item | Plano/tarefa | Status |
 |---|---|---|---|---|
@@ -189,7 +189,7 @@ Sem SPEC, aplicar recall/precision aos requisitos: a evidência não deve se tor
 | P-02-04 | WEB-05 | preview/codec mantém download; miniatura não satisfaz original | enforced — preview.test.ts missing404/ativo415; ui.test.ts mp4v sem suporte mantém original/hash, zero binários antes do clique |
 | P-02-05 | EXP-02 | manifest/texto com cobertura parcial, revisões e todos missing | enforced — export.test.ts versões Unicode/quote/revoke/restricted, pending congelado e dois nomes iguais; completeAccount=false |
 | P-02-06 | EXP-03 | ZIP fault/crash/CRC/entries impedem ready | enforced — export.test.ts CRC/SHA/conjunto/duplicata/traversal, falhas ENOSPC/fd/ZIP e SIGKILL em3pontos; download recusado |
-| P-02-07 | EXP-01 | acceptance self-check recusa fixture/truncado como real | flagged-unverified |
+| P-02-07 | EXP-01 | acceptance self-check recusa fixture/truncado como real | negative-test passed —acceptance.test.ts rejeita origem sintética,<=100/truncado/duplicata/falta/hash/bytes;RED5e40b48/GREEN2209057;flag canônico sujeito ao verifier |
 
 Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refere aos threat_models T-02-01..T-02-22 e T-02-SC/ASVS5.0.0 L1 e ao controle gsd-secure-phase; não duplicado como valores genéricos. Bloqueio configurado: high. Sem novas permissões de WhatsApp.
 
@@ -204,6 +204,14 @@ Canon security (XSS, IDOR, CSRF, sessão, traversal, package supply-chain) refer
 - Ondas1→2→3→4→5 por dependência e arquivos compartilhados; nenhuma paralelização falsa. STATE/ROADMAP ficam comorquestrador.
 
 ## Artefatos e símbolos produzidos
+
+### Evidência executada do plano02-05
+
+Self-checkRED dist/02-05-01-red.json (synthetic erroneamente aceito antes do roteiro) e dist/02-05-02-red.json (checkbrowser ausente) preservam TAP completo/exit1 e semanticAssessment; ambos classificadosRED_EVIDENCE_OK antes do respectivo GREEN. Self-check3/3 recusa prova falsa/truncada/duplicada, hashes/bytes/faltantes e checksDOM ausentes, com contador independente de arquivos obrigatórios. Focados acceptance/ui16/16,31,335s; full130/130,0fail/skip/todo,39,740s.
+
+P2-OFFLINE/P2-BROWSER: snapshot real8684mensagens/restoreprivado, origem vinculada a reciboHMAC/mesmo snapshot e identidade real já pareada; cópia semcoletor/QR. Caso selecionado porSQL puro fora dos helpers:1028mensagens do período,1037contexto incluindo9unknown fora do período,190originais,112faltantes,1088versões/40citações. Todasrefs/ordem/UTC/citações/revisões/origins/PN-LID/anexos e cadaSHA/tamanho/entradaZIP conferidos porSQL/bytes. ICU independente encontra primeira epochms do dia; DST também tem assertions search/export. Quatrooriginais reais baixados viaHTTP e browserdownload.finished/saveAs/hash; imagemdecoded,áudio/vídeoplayed,documentdownloadonly noChromium152.0.7977.82. A/Bscroll/hashDOM,teclado,storagevazio,zeroGETantecipado,320/768/1280/fonte200% e logoutcomrespostaretida passaram. Os49UC têm mapa explícito em02-ACCEPTANCE; fixtures exercitam adversidades e codecMP4Part2 indisponível. Screenshots/ZIP/report reais0600 privados, nãoGit/logs; nenhuma confirmação de negócio inferida.
+
+P2-SERVICE: unidade localtransient identificada/preservada, fonteSIGTERM/MainPID0/travaliberada antes do snapshotatual8771mensagens/853originais. Restoreoffline e fallbackPhase1compilado prontos,7tabelas iguais à fonte parada; unidade recriada commesmo comando/ambiente/perfil/propriedades após sumir ao parar. Todasrefs preservadas apósstartup, índiceFTS pronto,senha/chaveidentidadeiguais,MainPIDúnico,JSnovo e5rotas401anônimo. Zero sessões web válidas/senha original indisponível: conexão atual/retomadasemQR da fonte NÃO comprovada; apenas dadossalvosdesessão prontos. Nãoalterou senha original nem criou bypass; statusautenticado real é limite explícito, nãofalha da consultaoffline. Nãoexecutarphase.complete; requisitos/STATE/ROADMAP de conclusão ficamcomorquestrador apósreview/verifier.
 
 ### Evidência executada do plano02-04 —2026-10-11
 
