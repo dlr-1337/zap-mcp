@@ -349,6 +349,56 @@ test('abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34', a
   await page.keyboard.press('Delete'); assert.equal(await controls.count(), 1); await page.keyboard.press('Delete'); assert.equal(await controls.count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement?.closest('#conversations') !== null), true); assert.match(await page.locator('#reader-status').textContent(), /Abra uma conversa/);
 });
+test('G-02-6 gesto nativo teclado âncora fechamento e nomes completos em tela baixa', async t => {
+  const { s, page, login } = await uiFixture(t);
+  const names = ['A', 'B', 'C'].map(n => n + ' שלום 🧪 ' + 'nome longo '.repeat(30));
+  s.archive.ingestHistory({ chats: names.map((subject, i) => ({ id: (i + 1) + '@lid', subject })), messages: names.flatMap((_, i) => Array.from({ length: 81 }, (_, n) => ({ key: { remoteJid: (i + 1) + '@lid', id: 'm' + n, fromMe: false }, messageTimestamp: 123 + n, message: { conversation: 'leitura ' + i + ' linha ' + n } }))) });
+  await login();
+  for (const prefix of ['A', 'B', 'C']) { await page.locator('#conversations a').filter({ hasText: new RegExp('^' + prefix) }).click(); await page.waitForFunction(() => document.getElementById('reader')?.getAttribute('aria-busy') !== 'true'); }
+  const controls = page.getByRole('tab'), bar = page.locator('#conversation-tabs');
+  for (const font of ['100%', '200%']) for (const width of [320, 768, 1280]) {
+    await page.setViewportSize({ width, height: 480 }); await page.evaluate((size: string) => document.documentElement.style.fontSize = size, font);
+    await controls.nth(0).click();
+    const base = await bar.evaluate((el: any) => el.getBoundingClientRect().top + scrollY);
+    await page.evaluate((y: number) => window.scrollTo(0, y), base + 1600); const a = await page.evaluate(() => scrollY), contentA = await page.locator('#messages').innerHTML();
+    for (const key of ['End', 'Home', 'ArrowRight', 'ArrowLeft', 'End']) {
+      await page.keyboard.press(key); assert.ok(Math.abs(await page.evaluate(() => scrollY) - a) < 2, 'foco sem mover leitura ' + key + '/' + width + '/' + font);
+      assert.equal(await controls.nth(0).getAttribute('aria-selected'), 'true');
+      const focused = page.locator('[role=tab]:focus');
+      assert.ok(await focused.evaluate((el: any) => { const r = el.getBoundingClientRect(), b = el.parentElement.parentElement.getBoundingClientRect(); return r.top - 4 >= b.top && r.bottom + 4 <= b.bottom && r.left >= b.left && r.right <= b.right && getComputedStyle(el).outlineWidth === '2px'; }), 'foco/contorno alcançáveis');
+    }
+    await page.keyboard.press('Enter'); assert.equal(await controls.nth(2).getAttribute('aria-selected'), 'true');
+    await controls.nth(1).click(); await page.evaluate((y: number) => window.scrollTo(0, y), base + 2200); const b = await page.evaluate(() => scrollY), contentB = await page.locator('#messages').innerHTML();
+    for (let round = 0; round < 2; round++) {
+      await controls.nth(0).click(); assert.ok(Math.abs(await page.evaluate(() => scrollY) - a) < 2, 'A/B/A nativo'); assert.equal(await page.locator('#messages').innerHTML(), contentA);
+      await page.keyboard.press('ArrowRight'); assert.ok(Math.abs(await page.evaluate(() => scrollY) - a) < 2); await page.keyboard.press('Space');
+      assert.ok(Math.abs(await page.evaluate(() => scrollY) - b) < 2, 'B/A/B teclado'); assert.equal(await page.locator('#messages').innerHTML(), contentB);
+    }
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sem overflow do documento');
+    assert.ok(await bar.evaluate((el: any) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.height <= innerHeight / 2 && getComputedStyle(el).backgroundColor === 'rgb(255, 255, 255)'; }), 'barra limitada e opaca');
+    for (const index of [0, 2]) {
+      await controls.nth(1).press(index === 0 ? 'Home' : 'End');
+      const target = controls.nth(index === 0 ? 0 : 2);
+      assert.match(await target.textContent(), new RegExp('^' + names[index === 0 ? 0 : 2]));
+      assert.ok(await target.evaluate((el: any) => { const r = el.getBoundingClientRect(); return r.width >= 48 && r.height >= 48 && getComputedStyle(el).userSelect === 'text' && el.scrollHeight > el.clientHeight; }), 'nome integral rolável e selecionável');
+      const readingPosition = await page.evaluate(() => scrollY);
+      await target.hover(); await page.mouse.wheel(0, 10000);
+      await page.waitForFunction(() => { const el = document.querySelector('[role=tab]:focus')!; return el.scrollTop + el.clientHeight >= el.scrollHeight - 2; });
+      assert.ok(Math.abs(await page.evaluate(() => scrollY) - readingPosition) < 2, 'rolagem do nome permanece local');
+      const close = target.locator('..').getByRole('button', { name: /^Fechar conversa/ });
+      assert.ok(await close.evaluate((el: any) => { const r = el.getBoundingClientRect(), b = el.parentElement.parentElement.getBoundingClientRect(); return r.width >= 48 && r.height >= 48 && r.top >= b.top && r.bottom <= b.bottom && r.bottom <= innerHeight; }), 'Fechar 48px desobstruído');
+    }
+    await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader')?.getAttribute('aria-busy') !== 'true');
+    const geometry = await page.locator('#messages [data-anchor=true]').evaluate((el: any) => { const r = el.getBoundingClientRect(), b = document.getElementById('conversation-tabs')!.getBoundingClientRect(); return { top: r.top, height: r.height, barBottom: b.bottom }; });
+    assert.ok(geometry.top >= geometry.barBottom && geometry.top < 480, 'início da âncora visível abaixo da barra ' + width + '/' + font + ' ' + JSON.stringify(geometry));
+    t.diagnostic('reflow ' + width + 'x480/' + font + ' PASS ' + JSON.stringify(geometry));
+  }
+  await controls.nth(0).click(); await page.evaluate(() => window.scrollBy(0, 1600));
+  await controls.nth(0).locator('..').getByRole('button', { name: /^Fechar conversa/ }).click(); assert.equal(await controls.count(), 2); assert.equal(await controls.nth(0).evaluate((el: any) => el === document.activeElement), true, 'fechar ativa próxima');
+  await page.keyboard.press('End'); await page.keyboard.press('Delete'); assert.equal(await controls.count(), 1); assert.equal(await controls.nth(0).evaluate((el: any) => el === document.activeElement), true, 'fechar última ativa anterior');
+  await page.keyboard.press('Delete'); assert.equal(await controls.count(), 0); assert.equal(await page.evaluate(() => document.activeElement?.closest('#conversations') !== null), true);
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+});
 test('site encontra termo literal em evidência congelada', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ chats: [{ id: '1@s.whatsapp.net', name: 'Homônimo' }], messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'm', fromMe: false }, messageTimestamp: 123, privateEnvelope: 'PRIVATE_SENTINEL_NEVER_RETURN', message: { conversation: 'Orçamento café <img src=x onerror=window.EXECUTED=1>' } }] });

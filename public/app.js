@@ -411,7 +411,7 @@ async function openContext(reference, sourceSnapshotId, conversationId) {
     const canonical = tabs.get(data.conversation.id);
     if (tab && tab !== canonical && tab.conversation.id !== data.conversation.id) { const wasActive = selected === tab.conversation.id; ++tab.generation; tabs.delete(tab.conversation.id); releasePanel(tab.panel); tab.panel.remove(); tab.button.parentElement.remove(); if (wasActive) selected = undefined; }
     tab = canonical ?? createTab(data.conversation); renderContext(tab, data);
-    if (navigation === navigationVersion) { activateTab(tab, false); tab.messages.querySelector('[data-anchor=true]')?.focus(); }
+    if (navigation === navigationVersion) { activateTab(tab, false); const anchor = tab.messages.querySelector('[data-anchor=true]'); anchor?.focus({ preventScroll: true }); anchor?.scrollIntoView({ block: 'start' }); }
   } catch (error) { if (version === readVersion && pendingContexts.get(conversationId) === operation) { if (tab && !['stale', 'expired'].includes(error.message)) { tab.status.setAttribute('role', 'alert'); tab.status.textContent = 'Não foi possível carregar o contexto. Tente abrir novamente.'; } if (navigation === navigationVersion) failure(error); } }
   finally { if (version === readVersion && pendingContexts.get(conversationId) === operation) { pendingContexts.delete(conversationId); if (tab) { tab.loading = false; tab.panel.removeAttribute('aria-busy'); } const active = tabs.get(selected); reading = active?.loading ?? false; $('reader').setAttribute('aria-busy', String(reading)); } }
 }
