@@ -14,6 +14,28 @@ import { createService } from '../src/main.js';
 
 const requireBrowser = createRequire(process.env.ZAP_BROWSER_MODULE ?? '/home/otavio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
 const { chromium } = requireBrowser('playwright');
+test('erro de datas de exportação acompanha campo focado por descrição única', async t => {
+  const { s, page, login } = await uiFixture(t); s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'aria@lid', id: 'm', fromMe: false }, messageTimestamp: 123, message: { conversation: 'leitura preservada' } }] });
+  await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
+  const form = page.locator('.export-form'), from = form.locator('input').nth(0), to = form.locator('input').nth(1);
+  await from.fill('2024-01-02'); await to.fill('2024-01-01'); await form.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
+  assert.equal(await from.getAttribute('aria-invalid'), 'true'); assert.equal(await from.evaluate((el: any) => el === document.activeElement), true);
+  assert.equal(await from.evaluate((el: any) => el.getAttribute('aria-describedby').split(/\s+/).some((id: string) => document.getElementById(id)?.textContent?.includes('A data inicial deve ser igual ou anterior'))), true, 'campo focado deve descrever seu erro');
+  assert.match(await page.locator('#messages').textContent(), /leitura preservada/);
+  await from.fill('2099-01-01'); await to.fill(''); await form.getByRole('button', { name: 'Preparar exportação', exact: true }).click(); await page.waitForFunction(() => document.activeElement?.getAttribute('aria-invalid') === 'true');
+  assert.equal(await from.evaluate((el: any) => el.getAttribute('aria-describedby').split(/\s+/).some((id: string) => document.getElementById(id)?.textContent?.includes('Não encontrado no acervo'))), true);
+});
+test('falhas de contexto e HEAD preview são alertas e repetir restaura status', async t => {
+  const { page } = await mediaUiFixture(t);
+  await page.route(/\/api\/context\//, (route: any) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'sintético' }) }));
+  await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.textContent?.includes('Não foi possível carregar'));
+  assert.equal(await page.locator('#reader-status').getAttribute('role'), 'alert', 'erro de contexto precisa ser alert');
+  await page.unroute(/\/api\/context\//); await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.textContent?.includes('mensagens carregadas')); assert.equal(await page.locator('#reader-status').getAttribute('role'), 'status');
+  await page.route(/\/api\/attachments\/.*\/preview$/, (route: any) => route.request().method() === 'HEAD' ? route.fulfill({ status: 415 }) : route.continue());
+  const block = page.locator('#messages .attachment').filter({ has: page.getByRole('button', { name: 'Visualizar imagem', exact: true }) }); await block.getByRole('button', { name: 'Visualizar imagem', exact: true }).click();
+  await block.locator('.preview').getByText('Sem visualização integrada para este formato.', { exact: false }).waitFor(); assert.equal(await block.locator('.preview p').getAttribute('role'), 'alert');
+  await block.getByRole('button', { name: 'Fechar visualização' }).click(); await page.unroute(/\/api\/attachments\/.*\/preview$/); await block.getByRole('button', { name: 'Visualizar imagem', exact: true }).click(); await page.waitForFunction(() => !!(document.querySelector('#messages .preview img') as HTMLImageElement)?.naturalWidth); assert.equal(await block.locator('.preview p').getAttribute('role'), 'status');
+});
 test('browser exporta conversa inteira além da página e conclui download ZIP', async t => {
   const { s, page, login } = await uiFixture(t);
   s.archive.ingestHistory({ messages: Array.from({ length: 161 }, (_, i) => ({ key: { remoteJid: 'export@lid', id: 'm' + i, fromMe: false }, messageTimestamp: 1700000000 + i, message: { conversation: 'exportável ' + i } })) });
