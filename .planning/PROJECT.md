@@ -22,7 +22,7 @@ Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pel
 - ✓ Visualizar formatos suportados e baixar originais disponíveis com indicação de faltantes e fallback de codec — fase 2.
 - ✓ Exportar todo o recorte escolhido em ZIP com mensagens, manifesto, versões, citações, arquivos e faltantes; pacote só disponível após conferência integral — fase 2.
 
-23 dos 32 requisitos rastreados estão concluídos no escopo local. A verificação independente da fase 2 passou 40/40 critérios, 8/8 requisitos e 7/7 proibições. Isso não comprova cobertura integral da conta nem a implantação futura.
+23 dos 32 requisitos rastreados estão concluídos no escopo local. A verificação independente da fase 2 passou 45/45 critérios, 8/8 requisitos e 7/7 proibições após a UAT autônoma e o fechamento de G-02-6. Isso não comprova cobertura integral da conta nem a implantação futura.
 
 ### Active
 
@@ -52,7 +52,8 @@ Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pel
 - Repositório público criado a pedido do usuário: https://github.com/dlr-1337/zap-mcp, com branch principal `main`. Fonte e documentação são públicas; mensagens, mídias, banco, sessões e credenciais permanecem no ambiente privado e fora do Git.
 - VPS, domínio, capacidade de armazenamento e acessos de implantação ainda precisam ser identificados na etapa de preparação do ambiente; não são pré-requisitos para este planejamento.
 - Não há prazo ou orçamento numérico informado.
-- Fases 1 e 2 locais concluídas. Suíte integrada 143/143, sem falhas/skips; aceite real da fase 2 conferiu 1.028 mensagens, 190 originais, 112 faltantes, 1.088 versões e 40 citações contra SQL/ICU/bytes independentes. O verificador reabriu os dois ZIPs e conferiu todas as 192 entradas de cada um.
+- Fases 1 e 2 locais concluídas. Suíte integrada atual 144/144, sem falhas/cancelamentos/skips/todo; aceite real da fase 2 conferiu 1.028 mensagens, 190 originais, 112 faltantes, 1.088 versões e 40 citações contra SQL/ICU/bytes independentes. O verificador reabriu os dois ZIPs e conferiu todas as 192 entradas de cada um.
+- UAT autônoma concluiu 17 verificações, incluindo o defeito de perda de posição ao alcançar abas após rolar. O plano02-06 corrigiu a barra e o foco da âncora; clique físico real preservou ambas as posições com delta0, teclado/fechamento/logout passaram na cópia8792/856 sem coletor. Snapshot e senha original preservados. Duas falhas iniciais de I/O e o deslocamento do caminho locator da ferramenta continuam com causa não confirmada; registros preservados.
 - A atualização local final preservou senha, identidade e IDs, com snapshot/restore de 8.792 mensagens e 856 originais conferidos. O status autenticado atual do WhatsApp após esse reinício não foi comprovado; processo ativo não substitui essa prova. Zoom nativo e dispositivos físicos permanecem sem teste.
 
 ## Constraints
@@ -83,6 +84,7 @@ Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pel
 | Token privado e revogável no MCP do Codex | Cliente obrigatório oferece autenticação por bearer; dispensa provedor de identidade no v1 | Testar no Codex realmente instalado |
 | Sessão WhatsApp transacional e um único coletor | Perda de chaves ou escritores concorrentes podem quebrar a conexão e a identidade do arquivo | Persistência, recuperação e um coletor local conferidos |
 | Recortes congelados por sessão e contexto por referência | Novas mensagens não podem deslocar páginas ou misturar leituras | Busca/contexto/abas verificados em testes e acervo real |
+| Controles de abas alcançáveis durante a leitura e âncora alinhada pelo início | Alcançar o controle não deve substituir a posição salva; mensagens altas não podem esconder o início | G-02-6 fechado com RED/GREEN, matriz de reflow e clique físico real com delta0 nas duas leituras |
 | Restrição atual prevalece sobre conteúdo congelado | Uma restrição recebida depois da busca não autoriza entregar conteúdo antigo | DTOs, original, preview e ZIP bloqueiam futuros bytes; primários preservados |
 | Preview por ação e fallback para download | Container válido não garante codec suportado pelo navegador | JPEG/Ogg/MP4 reais conferidos; arquivo sem preview continua baixável |
 | ZIP integral conferido antes de disponibilizar | Uma página visível ou arquivo parcial não comprova exportação completa | CRC/SHA/conjunto e estados de falha verificados;192 entradas reais por ZIP |

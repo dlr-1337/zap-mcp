@@ -117,7 +117,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
-| 2. Busca, contexto, abas e exportação no site | 6/6 | In Progress |  |
+| 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
 | 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
 

@@ -4,16 +4,16 @@ current_phase: 3
 current_phase_name: Consulta e arquivos reais no Codex
 current_plan: Not started
 status: planning
-stopped_at: Phase 2 complete and verified; ready to discuss/plan Phase 3
-last_updated: "2026-10-12T02:59:14.960Z"
-last_activity: 2026-10-11
+stopped_at: "Phase 2 autonomous UAT complete: 17 passing, native scroll corrected; verification45/45; ready to discuss/plan Phase 3"
+last_updated: "2026-10-12T12:06:25.967Z"
+last_activity: 2026-10-12
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
-state_head: 905f4bcad8ca6c33e1cd3905e16e5834ba8b677d
+state_head: 61e0f475646c5ced07239fac978851c1ba20cbe6
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 13
+  completed_plans: 13
   percent: 50
 ---
 
@@ -21,10 +21,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-10)
+See: .planning/PROJECT.md (updated 2026-10-12)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase 3 ready to discuss/plan — Phase 2 local verified: 40/40 criteria, 8/8 requirements; Phase 1 local complete
+**Current focus:** Phase 3 ready to discuss/plan — Phase 2 local verified: 45/45 criteria, 8/8 requirements; autonomous UAT 17 passing, G-02-6 resolved; Phase 1 local complete
 
 **Publicação da Phase1:** [PR #1](https://github.com/dlr-1337/zap-mcp/pull/1), branch codex/phase-1-private-archive; fase local verificada, sem implantação na VPS.
 
@@ -34,14 +34,14 @@ Phase: 3 — Consulta e arquivos reais no Codex
 Current Plan: Not started
 Total Plans in Phase: 0
 Status: Ready to plan
-Last activity: 2026-10-11 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-10-12 — Phase 2 complete, transitioned to Phase 3
 
 Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: Não consolidada; plano07 teve piloto continuado
 - Total execution time:71min registrados nos planos01–06, além do piloto continuado01–07
 
@@ -50,7 +50,7 @@ Progress: [█████░░░░░] 50%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
-| 2 | 5 | - | - |
+| 2 | 6 | - | - |
 | 3 | 0 | 0 | - |
 | 4 | 0 | 0 | - |
 
@@ -73,6 +73,7 @@ Progress: [█████░░░░░] 50%
 | Phase 02 P03 | 12min | 3 tasks | 9 files |
 | Phase 02 P04 | 17min | 3 tasks | 9 files |
 | Phase 02 P05 | 18min | 3 tasks | 4 files |
+| Phase 02 P06 | 26min30s | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 02]: Exportação congela DTOs e expected media por sessão; ZIP pronto só após releitura CRC/SHA/conjunto, fsync e publicação exclusiva;127 testes sintéticos passaram, aceite real segue02-05.
 - [Phase 02]: Aceite real offline/browser conferiu 1.028 mensagens,190originais e112faltantes por SQL/bytes independentes; fonte local atualizada preservando 8.771mensagens/853originais e credenciais, sem confirmar conexão original atual.
 - [Phase 02]: Phase2 local:40/40criteria,8/8requirements,7/7prohibitions;143tests and real1028-message ZIP accepted; next Phase3 MCP.
+- [Phase 02]: G-02-6: abas sticky e foco da âncora pelo início, sem novo estado de leitura; UAT autônoma física delta0. — Alcançar controles não pode substituir a posição salva; fonte200 e mensagens altas exigem início alcançável; provas reais sanitizadas.
 
 ### Pending Todos
 
@@ -127,8 +129,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T02:58:15.106Z
-Stopped at: Phase 2 complete and verified; ready to discuss/plan Phase 3
+Last session: 2026-10-12T12:05:08.872Z
+Stopped at: Phase 2 autonomous UAT complete: 17 passing, native scroll corrected; verification45/45; ready to discuss/plan Phase 3
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
