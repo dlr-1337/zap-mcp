@@ -66,3 +66,7 @@ O gsd-security-auditor recalculou SHA512 dos6tarballs e comparou1586/1586arquivo
 | Threats found | 13 |
 | Closed | 13 |
 | Open | 0 |
+
+## Seguimento da revisão de código
+
+WR-01/WR-02 corrigem a recuperação do roteiro: subprocesso aguarda close e grupoLinux TERM→KILL, setup/cleanup cobre todos recursos e restaura somente após primeira mutação. Adapter/Archive/auth/mídia/dependências ativos não foram alterados. Os controles e a prova integrada já auditados permanecem válidos; regressão e tracer atualizado passaram. T-03-11/T-03-12 ganham as regressões documentadas em03-REVIEW-FIX.md, sem nova aceitação de risco ou reescrita do histórico.
