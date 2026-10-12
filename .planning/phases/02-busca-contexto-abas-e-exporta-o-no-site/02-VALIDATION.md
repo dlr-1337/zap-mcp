@@ -1,7 +1,7 @@
 ---
 phase: "02"
 slug: "busca-contexto-abas-e-exporta-o-no-site"
-status: execution-verified
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-11"
@@ -242,3 +242,10 @@ RED de HTTP404, formulário ausente, datasHTTP400 e seletor de contato ausente o
 |02-04| src/archive.ts freezeExportSelection; src/export.ts createExportManager/createExportJob/getExportJob/openExport/buildZip/verifyZip; /api/exports | export.test.ts (inclui readonly novo); ui/security; readonly existente só regressão |
 |02-05| scripts/phase2-acceptance.mjs --mode real-offline/real-browser | acceptance.test.ts;02-ACCEPTANCE.md; ledgerVALIDATION |
 
+## Validation Audit 2026-10-12
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
