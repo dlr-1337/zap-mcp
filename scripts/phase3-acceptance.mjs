@@ -116,16 +116,21 @@ export async function runAcceptance(caseFile) {
   const executableHash = hash(readFileSync(executable)), directory = mkdtempSync(join(c.destination, 'integrated-')); chmodSync(directory, 0o700);
   const live = Object.assign(beginRun(), { calls: [], files: [], oracle: {} }), proof = { runId: live.runId, status: 'passed', synthetic: false, sourceVerified: true, offline: true, collectorEnabled: false };
   const configPath = join(homedir(), '.codex/config.toml'), beforeConfig = existsSync(configPath) ? readFileSync(configPath) : null;
-  const db = new Database(join(c.dataDir, 'archive.sqlite'), { readonly: true }), selected = discover(db);
+  const tlsErrors = [], observed = [], tokenPath = join(directory, 'token');
+  let db, s, server, siteServer, originalOwner, originalSessions, originalRevocations, originalConfig, stage = 'setup';
+  try {
+  db = new Database(join(c.dataDir, 'archive.sqlite'), { readonly: true }); const selected = discover(db);
   selected.realFieldCases = [['quote', "json_extract(m.evidence,'$.quote') IS NOT NULL"], ['edit', "EXISTS(SELECT 1 FROM revisions e WHERE e.reference=m.reference AND e.kind='edit' AND e.restricted=0)"], ['unknownTime', 'm.original_timestamp IS NULL']].flatMap(([kind, condition]) => {
     const row = db.prepare(`SELECT m.reference FROM messages m JOIN revisions r ON r.reference=m.reference WHERE m.restricted=0 AND ${condition} GROUP BY m.reference ORDER BY sum(length(r.evidence)),count(r.id),m.reference LIMIT 1`).get();
     return row ? [{ kind, reference: row.reference }] : [];
   });
   writeFileSync(join(directory, 'selected.json'), JSON.stringify(selected), { mode: 0o600 });
-  const s = createService({ dataDir: c.dataDir }), originalOwner = s.authDb.prepare('SELECT * FROM web_owner').all(), originalSessions = s.authDb.prepare('SELECT * FROM web_sessions').all(), originalRevocations = s.authDb.prepare('SELECT * FROM web_revocations').all(), originalConfig = s.authDb.prepare("SELECT * FROM web_config WHERE key NOT LIKE 'mcp-%'").all();
+  s = createService({ dataDir: c.dataDir });
+  originalOwner = s.authDb.prepare('SELECT * FROM web_owner').all(); originalSessions = s.authDb.prepare('SELECT * FROM web_sessions').all();
+  originalRevocations = s.authDb.prepare('SELECT * FROM web_revocations').all(); originalConfig = s.authDb.prepare("SELECT * FROM web_config WHERE key NOT LIKE 'mcp-%'").all();
   const primary = () => hash(JSON.stringify(['conversations', 'messages', 'revisions', 'origins', 'identity_evidence', 'attachments'].map(t => db.prepare('SELECT * FROM ' + t + ' ORDER BY rowid').all())));
-  const primaryBefore = primary(), tlsErrors = [], observed = [];
-  const server = createServer({ key: privateFile(c.keyFile), cert: readFileSync(c.certFile) }, (req, res) => {
+  const primaryBefore = primary();
+  server = createServer({ key: privateFile(c.keyFile), cert: readFileSync(c.certFile) }, (req, res) => {
     const entry = { at: Date.now(), path: req.url, method: req.method, chunks: [] }; observed.push(entry);
     if (req.url === '/mcp' && req.method === 'POST') { let raw = ''; req.on('data', b => raw += b); req.on('end', () => { try { entry.rpc = JSON.parse(raw); } catch {} }); }
     const write = res.write.bind(res), end = res.end.bind(res);
@@ -136,9 +141,7 @@ export async function runAcceptance(caseFile) {
     s.app(req, res);
   });
   server.on('tlsClientError', e => tlsErrors.push(e.code ?? 'TLS_ERROR'));
-  const tokenPath = join(directory, 'token'), ca = privateFile(c.caFile);
-  let stage = 'transport', siteServer;
-  try {
+  const ca = privateFile(c.caFile); stage = 'transport';
     rotateMcpToken(s.authDb, tokenPath); const token = privateFile(tokenPath).toString().trim();
     await new Promise(r => server.listen(0, '127.0.0.1', r)); const origin = `https://localhost:${server.address().port}`;
     const args = ['exec', '--ephemeral', '--skip-git-repo-check', '--json', '-C', directory, '-s', 'danger-full-access', '-c', 'approval_policy="never"', '-c', 'shell_environment_policy.inherit="all"', '-c', `mcp_servers.zap_acceptance.url="${origin}/mcp"`, '-c', 'mcp_servers.zap_acceptance.bearer_token_env_var="ZAP_MCP_TOKEN"', '-c', 'mcp_servers.zap_acceptance.startup_timeout_sec=15'];
@@ -245,22 +248,28 @@ export async function runAcceptance(caseFile) {
     return receipt;
   } catch (error) { writeFileSync(join(directory, 'failure.json'), JSON.stringify({ stage, message: error.message, observed }), { mode: 0o600 }); throw Error('Aceite recusado na etapa: ' + stage); }
   finally {
-    if (siteServer) { siteServer.closeAllConnections(); await new Promise(r => siteServer.close(r)); }
-    server.closeAllConnections(); await new Promise(r => server.close(r));
-    s.authDb.transaction(() => { s.authDb.prepare('DELETE FROM web_owner').run(); for (const row of originalOwner) s.authDb.prepare('INSERT INTO web_owner(id,salt,hash) VALUES (@id,@salt,@hash)').run(row);
+    const errors = [];
+    for (const cleanup of [
+      async () => { if (siteServer) { siteServer.closeAllConnections(); await new Promise(r => siteServer.close(r)); } },
+      async () => { if (server) { server.closeAllConnections(); await new Promise(r => server.close(r)); } },
+      () => { if (originalConfig) s.authDb.transaction(() => { s.authDb.prepare('DELETE FROM web_owner').run(); for (const row of originalOwner) s.authDb.prepare('INSERT INTO web_owner(id,salt,hash) VALUES (@id,@salt,@hash)').run(row);
       s.authDb.prepare('DELETE FROM web_sessions').run(); for (const row of originalSessions) s.authDb.prepare('INSERT INTO web_sessions(id,data,touched_at) VALUES (@id,@data,@touched_at)').run(row);
       s.authDb.prepare('DELETE FROM web_revocations').run(); for (const row of originalRevocations) s.authDb.prepare('INSERT INTO web_revocations(id,revoked_at) VALUES (@id,@revoked_at)').run(row);
       s.authDb.prepare("DELETE FROM web_config WHERE key LIKE 'mcp-%'").run();
-      s.authDb.prepare("DELETE FROM web_config WHERE key NOT LIKE 'mcp-%'").run(); for (const row of originalConfig) s.authDb.prepare('INSERT INTO web_config(key,value) VALUES (@key,@value)').run(row); })();
-    await s.close(); db.close(); if (existsSync(tokenPath)) unlinkSync(tokenPath); if (existsSync(downloaderPath(directory))) unlinkSync(downloaderPath(directory));
-    if (beforeConfig) check(same(readFileSync(configPath), beforeConfig), 'Codex global config preserved');
+      s.authDb.prepare("DELETE FROM web_config WHERE key NOT LIKE 'mcp-%'").run(); for (const row of originalConfig) s.authDb.prepare('INSERT INTO web_config(key,value) VALUES (@key,@value)').run(row); })(); },
+      () => s?.close(), () => db?.close(),
+      () => { if (existsSync(tokenPath)) unlinkSync(tokenPath); },
+      () => { if (existsSync(downloaderPath(directory))) unlinkSync(downloaderPath(directory)); },
+      () => check(beforeConfig ? same(readFileSync(configPath), beforeConfig) : !existsSync(configPath), 'Codex global config preserved')
+    ]) { try { await cleanup(); } catch (error) { errors.push(error); } }
+    if (errors.length) throw new AggregateError(errors, 'Aceite recusado na etapa: cleanup');
   }
 }
 const downloaderPath = directory => join(directory, 'download-case.json');
 export function selfTest() {
   const run = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'dist/test/mcp-acceptance.test.js'], { encoding: 'utf8' });
-  check(run.status === 0 && /# tests 5\b/.test(run.stdout) && /# fail 0\b/.test(run.stdout) && /# skipped 0\b/.test(run.stdout), 'non-vacuous verifier controls');
-  return { accepted: true, mode: 'self-test', synthetic: true, controls: 5 };
+  check(run.status === 0 && /# tests 11\b/.test(run.stdout) && /# fail 0\b/.test(run.stdout) && /# skipped 0\b/.test(run.stdout), 'non-vacuous verifier controls');
+  return { accepted: true, mode: 'self-test', synthetic: true, controls: 11 };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const mode = process.argv[process.argv.indexOf('--mode') + 1];
