@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: Not started
-status: "Phase 03 shipped — PR #3"
-stopped_at: "UAT da fase 3 concluída: 12/12 e verification passed; próxima ação: discutir a fase 4"
-last_updated: "2026-10-12T21:41:08.797Z"
+status: planning
+stopped_at: "Fase 3 publicada no PR #3, CI190/190 aprovado; fase4 pronta para discussão"
+last_updated: "2026-10-12T22:07:36.415Z"
 last_activity: 2026-10-12
-state_head: 6246c97211fa135244521279fd9f9304c21633c7
+state_head: 89d94ec4bc069abc69cc9a77e94228575b42d2aa
 progress:
   total_phases: 4
   completed_phases: 3
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 Phase: 4 — Operação e restauração na VPS
 Current Plan: Not started
 Total Plans in Phase: 0
-Status: Phase 03 shipped — PR #3
+Status: Ready to plan
 Last activity: 2026-10-12
 
 Progress: [████████░░] 75% — 3/4 fases; 17/17 planos definidos concluídos
@@ -117,6 +117,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: Próxima ação é discutir a fase 4; VPS permanente, HTTPS/login web Origin403, backup externo e restauração operacional seguem pendentes. Ponteiros antigos para tarefas das fases 1/2 são históricos, já concluídos.
 - [Phase 03]: UAT autônoma da fase 3 passou 12/12 cenários, zero issues/bloqueadores; dez entregas auto-covered e prova nova Codex/TLS/dois originais/cleanup1/1. Predicate uat-passed exige e confirma verification passed; confirmação humana não presumida.
 - [Phase 03]: Fase 3 publicada no PR #3: https://github.com/dlr-1337/zap-mcp/pull/3; branch codex/phase-3-codex-mcp sobre main. Réplica sanitizada preserva67commits reais e fonte/testes/pins; CI remoto em acompanhamento, sem implantação na VPS.
+- [Phase 03]: CI do PR #3 e do push89d94ec concluído190/190 no Ubuntu/Node24.21.0, zero fail/cancelled/skipped/todo. Correção test-only do preflight de cleanup isolou Codex pessoal; produto/driver/pins/workflow não mudaram. Fase4 continua não iniciada.
 
 ### Pending Todos
 
@@ -145,8 +146,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T21:08:16.801Z
-Stopped at: UAT da fase 3 concluída: 12/12 e verification passed; próxima ação: discutir a fase 4
+Last session: 2026-10-12T22:07:36.367Z
+Stopped at: Fase 3 publicada no PR #3, CI190/190 aprovado; fase4 pronta para discussão
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
