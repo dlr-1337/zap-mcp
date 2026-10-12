@@ -14,7 +14,7 @@ const idSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 const querySchema = z.string().refine(value => [...value].length <= 2000, 'Use até 2000 caracteres.');
 const cursorSchema = z.string().min(1).max(2048).optional();
 const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
-const queryLimits = { pageItems: 50, snapshotItems: 50000, snapshotBytes: 64 * 1024 * 1024, activeSnapshots: 20, ttlSeconds: 1800, queryCharacters: 2000, queryTerms: 25 };
+const queryLimits = { pageItems: 50, snapshotItems: 50000, snapshotBytes: 64 * 1024 * 1024, activeSnapshots: 20, ttlSeconds: 1800, queryCharacters: 2000, queryTerms: 25, argumentBytes: 12 * 1024 };
 const queryResult = (data: Record<string, unknown>) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data });
 export const MCP_INLINE_LIMIT = 256 * 1024;
 export const MCP_QUERY_RESPONSE_LIMIT = 32 * 1024;
@@ -88,6 +88,9 @@ export function createMcpAdapter({ archive, authDb, mediaDir }: { archive: Archi
   router.all('/', async (req, res, next) => {
     const scope = res.locals.mcp;
     if (Buffer.byteLength(JSON.stringify(req.body?.id ?? null)) > 512) { res.status(400).json({ error: 'ID de requisição excessivo' }); return; }
+    if (req.body?.method === 'tools/call' && ['find_conversations', 'search_messages'].includes(req.body.params?.name) && Buffer.byteLength(JSON.stringify(req.body.params?.arguments ?? null)) > queryLimits.argumentBytes) {
+      res.status(413).json({ error: 'Argumentos excessivos', argumentBytes: queryLimits.argumentBytes }); return;
+    }
     const secret = access.cursorSecret()!;
     const filterHash = (filters: unknown) => createHash('sha256').update(JSON.stringify(filters)).digest('hex');
     const cursorBody = z.object({ operation: z.enum(['find_conversations', 'search_messages']), generation: z.string(), filters: z.string(), snapshotId: idSchema, ordinal: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), expiresAt: z.number().int().positive() }).strict();
