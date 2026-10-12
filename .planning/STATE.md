@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Consulta e arquivos reais no Codex
 current_plan: 4
-status: executing
-stopped_at: Completed03-03-PLAN.md;172/172regressao e tracerreal1/1
-last_updated: "2026-10-12T16:05:41.299Z"
+status: verifying
+stopped_at: Completed03-04-PLAN.md;177/177 e aceiteCodex12calls;aguardando review/verificacao fase3
+last_updated: "2026-10-12T17:33:16.005Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 03 execution started
-state_head: bcd189c18d4754a43ea2b517c6c8120acaa2f9cc
+state_head: 57e7da7a7217caa26324600375907854032d603a
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 50
 ---
 
@@ -33,7 +33,7 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 Phase: 03 (Consulta e arquivos reais no Codex) — EXECUTING
 Current Plan: 4
 Total Plans in Phase: 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-12 — Phase 03 execution started
 
 Progress: [█████░░░░░] 50%
@@ -77,6 +77,7 @@ Progress: [█████░░░░░] 50%
 | Phase 03 P01 | 27min | 2 tasks | 10 files |
 | Phase 03 P02 | 36min | 2 tasks | 8 files |
 | Phase 03 P03 | 10min | 2 tasks | 5 files |
+| Phase 03 P04 | 72min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,9 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: MCP independente do site: digest e geracao atomicos, gates de consumo write/end e rotacao local sem segundo coletor;154/154 testes passam em TMPDIR privado/home.
 - [Phase 03]: MCP consultas usam Archive/snapshots e candidatos Map privado;32KiB é orçamento do servidor,32671bytes medidos,no máximo cliente;164/164tests,tracer1/1.
 - [Phase 03]: Contexto MCP reusa Archive, origem searchCursor autenticada e ancora obrigatoria no budget;172/172 testes e tracerCodex1/1.
+- [Phase 03]: Cobertura MCP agrega explicitamente lotes em batchSummary preservando contagens/intervalos/estados; envelope32KiB e DTOs inalterados, conferidos porSQL/site.
+- [Phase 03]: Aceite Codex0.162.1/protocolo2025-06-18 completou12calls atuais e dois originais4200/271485bytes SHAiguais; gate emWeakSet impede JSONreplay.
+- [Phase 03]: Oraculo siteHTTP apenasloopback no clone; MCP/originaisHTTPSverificado. Login siteTLS OriginHTTPS403 pendente emfase4/WINDOWS13.
 
 ### Pending Todos
 
@@ -136,8 +140,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T16:05:41.254Z
-Stopped at: Completed03-03-PLAN.md;172/172regressao e tracerreal1/1
+Last session: 2026-10-12T17:33:15.956Z
+Stopped at: Completed03-04-PLAN.md;177/177 e aceiteCodex12calls;aguardando review/verificacao fase3
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
