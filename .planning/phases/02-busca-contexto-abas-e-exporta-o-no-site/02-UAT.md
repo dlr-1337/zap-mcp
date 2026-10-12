@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 02-busca-contexto-abas-e-exporta-o-no-site
 source: [02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md, 02-04-SUMMARY.md, 02-05-SUMMARY.md]
 started: 2026-10-12T09:47:28Z
@@ -180,9 +180,19 @@ blocked: 0
   reason: "Agent observed: scroll45596→44966 ao alternarA/B/A; barra de abas estava343px acima do viewport antes do clique."
   severity: major
   test: 6
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "A barra sai do viewport. O alcance nativo do botão desloca a página antes de activateTab capturar window.scrollY; o valor deslocado substitui a posição de leitura. Testes programáticos evitavam esse movimento."
+  artifacts:
+    - path: public/app.js
+      issue: "Captura na ativação depois de alcançar o botão; teclado também chama scrollIntoView."
+    - path: public/style.css
+      issue: "Barra de abas fora do viewport após rolar."
+    - path: test/ui.test.ts
+      issue: "Teste de posição usa clique programático e não reproduz autoscroll."
+
+  missing:
+    - "Controles de abas alcançáveis durante a leitura sem deslocar o scroll antes da ativação."
+    - "Regressão com clique nativo e cobertura teclado/mobile/fonte200, sem esconder âncora ou dados."
+
+  debug_session: .planning/debug/02-native-tab-scroll.md
 
 
