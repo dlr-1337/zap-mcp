@@ -240,16 +240,30 @@ APIs/imports do exemplo conferidos; name/version são exemplos propostos, não v
 
 ## Assumptions Log
 
-Nenhuma afirmação de suporte binário/limite do cliente é adotada sem prova. O caminho inline e o mecanismo de download são hipóteses experimentais do tracer, não requisitos considerados cumpridos. Valores de payload/TTL de transferência ficam abertos à medição, sem número imaginário.
+Nenhuma afirmação de suporte binário/limite do cliente é adotada sem prova. A política de entrega e o mecanismo de download estão decididos no plano; suporte inline, limites e entrega efetiva exigem medição no tracer, sem número imaginário nem requisito considerado cumprido.
 
 ## Open Questions
 
-- Qual era/protocolo o cliente efetivamente usa? Registrar headers/metadados/discovery ou initialize no tracer sanitizado.
-- Quais formatos/tamanhos inline o cliente/modelo recebe? Começar com original pequeno; maior/documento por download privado explícito.
-- Como o processo Codex de aceite recebe o segredo sem expor ao modelo? Provar variável disponível no processo e download por ambiente/arquivo privado, sem imprimir token.
-- Qual canal protegido estará disponível na VPS? Fase 4; loopback local comprova apenas compatibilidade local.
+### Decisões de implementação — RESOLVED
 
-Não bloqueiam planejamento. O primeiro plano deve falhar honestamente se não concluir transferência real.
+As escolhas abaixo estão resolvidas pelo plano `03-01-PLAN.md`, tarefa `03-01-01`; esse estado registra decisões, não sucesso observado no cliente.
+
+- **Protocolo — RESOLVED:** usar `createMcpHandler`/`toNodeHandler` com suporte às duas eras e registrar a negociação efetiva do Codex instalado, sem fixar antecipadamente a era/protocolo (D-01/D-04).
+- **Transporte do tracer — RESOLVED:** HTTPS em localhost com cadeia confiada pelo processo Codex e controle negativo de certificado; a validação dessa confiança ainda integra o aceite real (D-02/D-04).
+- **Entrega de originais — RESOLVED:** `get_attachment` por ID interno, com original verificado; inline somente para formato/tamanho comprovadamente suportado, com teto medido. Para maior ou sem suporte inline, download autenticado explícito no mesmo origin HTTPS confiado, sem bearer na URL (D-13/D-14/D-16).
+- **Segredo — RESOLVED:** `bearer_token_env_var=ZAP_MCP_TOKEN` e injeção pelo ambiente privado do processo; o download usa ambiente/arquivo privado, sem expor segredo ao modelo, argumentos ou logs (D-02/D-19/D-20).
+
+### Experimentos de aceite — pendentes até o tracer, obrigatórios antes da expansão
+
+- Observar negociação real (initialize ou discovery/metadados), comprovar confiança TLS positiva e recusa do certificado inválido no Codex instalado.
+- Medir formatos/tamanhos e apresentação inline efetivamente suportados; quando inline não funcionar, registrar o limite e concluir o download privado autenticado, sem tratar metadado/URL como recebimento.
+- Comprovar injeção privada do bearer e recuperar dois originais reais no destino do Codex, incluindo o maior/sem inline, com bytes, tamanho e SHA-256 iguais aos originais e recibo privado verificável (D-15/D-18/D-20).
+
+São verificações de execução já delimitadas, não escolhas de pesquisa em aberto. O gate de `03-01-01` bloqueia `03-02` enquanto negociação, TLS ou qualquer entrega real não forem comprovados; esta revisão não registra nenhuma dessas provas como concluída.
+
+### Canal operacional da VPS — fase 4
+
+O canal HTTPS, proxy e supervisão finais na VPS permanecem no escopo da fase 4. O tracer local comprova somente o ambiente local observado e não demonstra implantação ou aceite operacional na VPS.
 
 ## Environment Availability
 
