@@ -4,11 +4,11 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: Not started
 status: planning
-stopped_at: "Fase 3 local concluída e verificada; próxima ação: discutir a fase 4, ainda não iniciada"
-last_updated: "2026-10-12T20:31:12.956Z"
+stopped_at: "UAT da fase 3 concluída: 12/12 e verification passed; próxima ação: discutir a fase 4"
+last_updated: "2026-10-12T21:08:16.864Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 70edce9240cc90ca8192f54f10ccca9db09d1f34
+state_head: 58b90da1049c5f8b70e70a304465e0ef0780e08b
 progress:
   total_phases: 4
   completed_phases: 3
@@ -116,6 +116,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: Fase 3 local concluída: verificador passed21/21, MCP-01 a MCP-05 satisfeitos, 190/190 testes; 12 chamadas no Codex0.162.1 e dois originais com tamanho/SHA iguais.
 - [Phase 03]: Endpoint MCP de aceite transitório: HTTPS verificado, CA e configuração somente no subprocesso; zero chaves MCP/tokens residuais e acervo, sessão, autenticação web e TOML preservados.
 - [Phase 03]: Próxima ação é discutir a fase 4; VPS permanente, HTTPS/login web Origin403, backup externo e restauração operacional seguem pendentes. Ponteiros antigos para tarefas das fases 1/2 são históricos, já concluídos.
+- [Phase 03]: UAT autônoma da fase 3 passou 12/12 cenários, zero issues/bloqueadores; dez entregas auto-covered e prova nova Codex/TLS/dois originais/cleanup1/1. Predicate uat-passed exige e confirma verification passed; confirmação humana não presumida.
 
 ### Pending Todos
 
@@ -144,8 +145,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T20:30:12.261Z
-Stopped at: Fase 3 local concluída e verificada; próxima ação: discutir a fase 4, ainda não iniciada
+Last session: 2026-10-12T21:08:16.801Z
+Stopped at: UAT da fase 3 concluída: 12/12 e verification passed; próxima ação: discutir a fase 4
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.

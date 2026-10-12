@@ -23,7 +23,7 @@ Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pel
 - ✓ Exportar todo o recorte escolhido em ZIP com mensagens, manifesto, versões, citações, arquivos e faltantes; pacote só disponível após conferência integral — fase 2.
 - ✓ Permitir que o Codex instalado encontre conversas, busque mensagens, abra contexto e recupere originais por MCP autenticado e somente leitura — fase 3 local, 12 chamadas reais e dois downloads conferidos por tamanho/SHA.
 
-28 dos 32 requisitos rastreados estão concluídos no escopo local. A verificação independente da fase 2 passou 45/45 critérios, 8/8 requisitos e 7/7 proibições após a UAT autônoma e o fechamento de G-02-6. A fase 3 passou 21/21 critérios, 5/5 requisitos MCP e três proibições com enforcement executado; a suíte integrada atual passou 190/190. Isso não comprova cobertura integral da conta nem a implantação futura.
+28 dos 32 requisitos rastreados estão concluídos no escopo local. A verificação independente da fase 2 passou 45/45 critérios, 8/8 requisitos e 7/7 proibições após a UAT autônoma e o fechamento de G-02-6. A fase 3 passou 21/21 critérios, 5/5 requisitos MCP e três proibições com enforcement executado; a suíte integrada atual passou 190/190. A UAT autônoma da fase 3 passou 12/12 cenários, sem bloqueadores, reaproveitando a cobertura atual e repetindo a prova curta no cliente real. Isso não comprova cobertura integral da conta nem a implantação futura.
 
 ### Active
 
@@ -57,6 +57,7 @@ Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pel
 - A atualização local final preservou senha, identidade e IDs, com snapshot/restore de 8.792 mensagens e 856 originais conferidos. O status autenticado atual do WhatsApp após esse reinício não foi comprovado; processo ativo não substitui essa prova. Zoom nativo e dispositivos físicos permanecem sem teste.
 - Aceite MCP: Codex 0.162.1 negociou o protocolo 2025-06-18; 12 chamadas completaram localização, três páginas de busca, seis contextos e dois anexos. SQL/ICU/site e disco independentes conferiram o recorte; downloads de 4.200 e 271.485 bytes ficaram idênticos aos originais. Inline foi observado no protocolo, sem afirmação de renderização visual ou salvamento automático.
 - O piloto MCP usou clone real offline, CA somente no subprocesso e configuração temporária. Acervo, sessão WhatsApp, autenticação web e TOML do Codex foram preservados; o endpoint foi encerrado e todos os tokens descartáveis revogados/removidos. Não há configuração persistente apontando para esse endpoint.
+- UAT da fase 3 registrada em 03-UAT.md por delegação, sem confirmação humana presumida. Prova nova em2026-10-12T21:03:34.968Z: tracer1/1,exit0,57,571s, dois downloads originais íntegros, TLS positivo/negativo e cleanup. Auditoria readonly confirmou zero chaves MCP/tokens/lock, bytes iguais ao SQL/disco e TOML igual ao baseline anterior; busca/contexto usam a evidência integrada preservada, sem apresentá-la como rodada nova.
 - Login web por HTTPS direto apresentou Origin403; o oráculo web do piloto usou HTTP autenticado apenas em loopback. MCP e downloads usaram HTTPS verificado. Resolver HTTPS/proxy/login do site, supervisão, backup externo e restauração operacional na fase 4/WINDOWS13.
 
 ## Constraints
@@ -106,4 +107,4 @@ Após cada fase, mover requisitos realmente verificados para Validated, registra
 Após cada marco, revisar todas as seções, o valor central, as exclusões e a situação real da aplicação. Planejamento, testes simulados e implantação sem pareamento não contam como validação com a conta do usuário.
 
 ---
-*Last updated: 2026-10-12 after Phase 3 local verification and transition to Phase 4*
+*Last updated: 2026-10-12 after Phase 3 autonomous UAT; Phase 4 ready for discussion*
