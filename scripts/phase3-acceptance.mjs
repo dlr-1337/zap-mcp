@@ -117,7 +117,7 @@ export async function runAcceptance(caseFile) {
   const live = Object.assign(beginRun(), { calls: [], files: [], oracle: {} }), proof = { runId: live.runId, status: 'passed', synthetic: false, sourceVerified: true, offline: true, collectorEnabled: false };
   const configPath = join(homedir(), '.codex/config.toml'), beforeConfig = existsSync(configPath) ? readFileSync(configPath) : null;
   const tlsErrors = [], observed = [], tokenPath = join(directory, 'token');
-  let db, s, server, siteServer, originalOwner, originalSessions, originalRevocations, originalConfig, stage = 'setup';
+  let db, s, server, siteServer, originalOwner, originalSessions, originalRevocations, originalConfig, restoreState = false, stage = 'setup';
   try {
   db = new Database(join(c.dataDir, 'archive.sqlite'), { readonly: true }); const selected = discover(db);
   selected.realFieldCases = [['quote', "json_extract(m.evidence,'$.quote') IS NOT NULL"], ['edit', "EXISTS(SELECT 1 FROM revisions e WHERE e.reference=m.reference AND e.kind='edit' AND e.restricted=0)"], ['unknownTime', 'm.original_timestamp IS NULL']].flatMap(([kind, condition]) => {
@@ -142,7 +142,7 @@ export async function runAcceptance(caseFile) {
   });
   server.on('tlsClientError', e => tlsErrors.push(e.code ?? 'TLS_ERROR'));
   const ca = privateFile(c.caFile); stage = 'transport';
-    rotateMcpToken(s.authDb, tokenPath); const token = privateFile(tokenPath).toString().trim();
+    restoreState = true; rotateMcpToken(s.authDb, tokenPath); const token = privateFile(tokenPath).toString().trim();
     await new Promise(r => server.listen(0, '127.0.0.1', r)); const origin = `https://localhost:${server.address().port}`;
     const args = ['exec', '--ephemeral', '--skip-git-repo-check', '--json', '-C', directory, '-s', 'danger-full-access', '-c', 'approval_policy="never"', '-c', 'shell_environment_policy.inherit="all"', '-c', `mcp_servers.zap_acceptance.url="${origin}/mcp"`, '-c', 'mcp_servers.zap_acceptance.bearer_token_env_var="ZAP_MCP_TOKEN"', '-c', 'mcp_servers.zap_acceptance.startup_timeout_sec=15'];
     const env = { ...process.env, ZAP_MCP_TOKEN: token }; delete env.NODE_TLS_REJECT_UNAUTHORIZED;
@@ -252,7 +252,7 @@ export async function runAcceptance(caseFile) {
     for (const cleanup of [
       async () => { if (siteServer) { siteServer.closeAllConnections(); await new Promise(r => siteServer.close(r)); } },
       async () => { if (server) { server.closeAllConnections(); await new Promise(r => server.close(r)); } },
-      () => { if (originalConfig) s.authDb.transaction(() => { s.authDb.prepare('DELETE FROM web_owner').run(); for (const row of originalOwner) s.authDb.prepare('INSERT INTO web_owner(id,salt,hash) VALUES (@id,@salt,@hash)').run(row);
+      () => { if (restoreState) s.authDb.transaction(() => { s.authDb.prepare('DELETE FROM web_owner').run(); for (const row of originalOwner) s.authDb.prepare('INSERT INTO web_owner(id,salt,hash) VALUES (@id,@salt,@hash)').run(row);
       s.authDb.prepare('DELETE FROM web_sessions').run(); for (const row of originalSessions) s.authDb.prepare('INSERT INTO web_sessions(id,data,touched_at) VALUES (@id,@data,@touched_at)').run(row);
       s.authDb.prepare('DELETE FROM web_revocations').run(); for (const row of originalRevocations) s.authDb.prepare('INSERT INTO web_revocations(id,revoked_at) VALUES (@id,@revoked_at)').run(row);
       s.authDb.prepare("DELETE FROM web_config WHERE key LIKE 'mcp-%'").run();
