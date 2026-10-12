@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Consulta e arquivos reais no Codex
-current_plan: 1
+current_plan: 2
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-10-12T13:46:33.890Z"
+stopped_at: Completed03-01-PLAN.md; real Codex tracer passed
+last_updated: "2026-10-12T14:14:37.350Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 03 execution started
-state_head: 129b9402900d719ea6e203d4d4e278618b3da53a
+state_head: d264d280b87f1bf96245fcbe6198576bbbfd98ce
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 50
 ---
 
@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 ## Current Position
 
 Phase: 03 (Consulta e arquivos reais no Codex) — EXECUTING
-Current Plan: 1
+Current Plan: 2
 Total Plans in Phase: 4
-Status: Executing Phase 03
+Status: Ready to execute
 Last activity: 2026-10-12 — Phase 03 execution started
 
 Progress: [█████░░░░░] 50%
@@ -74,6 +74,7 @@ Progress: [█████░░░░░] 50%
 | Phase 02 P04 | 17min | 3 tasks | 9 files |
 | Phase 02 P05 | 18min | 3 tasks | 4 files |
 | Phase 02 P06 | 26min30s | 3 tasks | 3 files |
+| Phase 03 P01 | 27min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,8 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 02]: Aceite real offline/browser conferiu 1.028 mensagens,190originais e112faltantes por SQL/bytes independentes; fonte local atualizada preservando 8.771mensagens/853originais e credenciais, sem confirmar conexão original atual.
 - [Phase 02]: Phase2 local:40/40criteria,8/8requirements,7/7prohibitions;143tests and real1028-message ZIP accepted; next Phase3 MCP.
 - [Phase 02]: G-02-6: abas sticky e foco da âncora pelo início, sem novo estado de leitura; UAT autônoma física delta0. — Alcançar controles não pode substituir a posição salva; fonte200 e mensagens altas exigem início alcançável; provas reais sanitizadas.
+- [Phase 03]: Codex0.162.1 negociou2025-06-18 e salvou dois originais reais por GET privado TLS com tamanhos/SHA iguais; CA somente no subprocesso e config preservada.
+- [Phase 03]: MCP independente do site: digest e geracao atomicos, gates de consumo write/end e rotacao local sem segundo coletor;154/154 testes passam em TMPDIR privado/home.
 
 ### Pending Todos
 
@@ -129,9 +132,9 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T12:47:18.642Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-consulta-e-arquivos-reais-no-codex/03-CONTEXT.md
+Last session: 2026-10-12T14:14:37.308Z
+Stopped at: Completed03-01-PLAN.md; real Codex tracer passed
+Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
 

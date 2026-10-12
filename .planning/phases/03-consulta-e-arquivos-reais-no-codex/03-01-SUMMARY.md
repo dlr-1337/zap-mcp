@@ -47,7 +47,7 @@ coverage:
         ref: "test/mcp.test.ts; test/readonly.test.ts; test/auth.test.ts; test/media.test.ts; test/export.test.ts"
         status: pass
     human_judgment: false
-duration: 25min
+duration: 27min
 completed: 2026-10-12
 status: complete
 ---
@@ -58,7 +58,7 @@ status: complete
 
 ## Performance
 
-- Início de referência:2026-10-12T13:47:06Z, timestamp do prompt de despacho; duração25min até fechamento, sem contador de início persistido separado.
+- Início de referência:2026-10-12T13:47:06Z, timestamp do prompt de despacho; duração27min até o SUMMARY, sem contador de início persistido separado.
 - Tarefas:2/2; oito arquivos de implementação/aceite e dois registros RED.
 - Actuals:13.601 tokens pela contagem chars/4 do diff realizado, incluindo evidências RED; quatro commits medidos pelo ledger. Não representa tokens do harness.
 

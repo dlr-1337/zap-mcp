@@ -81,6 +81,10 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 5. As consultas pelo site e pelo Codex não enviam, editam, apagam nem marcam mensagens como lidas no WhatsApp; não existe operação pública que permita essas ações. Conteúdo de conversa é tratado como dado não confiável, sem instruções privilegiadas ou exposição de chaves, e anotações MCP não são usadas como único bloqueio.
 
 **Plans**: 0 (não planejados)
+- [x] 03-01-PLAN.md
+- [ ] 03-02-PLAN.md
+- [ ] 03-03-PLAN.md
+- [ ] 03-04-PLAN.md
 
 **Prova de compatibilidade:** Começar com uma prova curta de autenticação, negociação e entrega binária no Codex do usuário. Usar a recomendação pesquisada do SDK MCP v2 oficial estável e Streamable HTTP, revalidando versões e o protocolo realmente negociado antes de ampliar ferramentas. Testar arquivo pequeno e o caminho de download para arquivos maiores conforme suporte real do cliente; Claude, OAuth/IdP e bridges adicionais não condicionam o v1. PRIV-02/PRIV-03 e EVID-02 são novamente verificados nesta superfície, sem duplicar o mapeamento de responsabilidade.
 
@@ -118,7 +122,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 |-------|----------------|--------|-----------|
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
-| 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
+| 3. Consulta e arquivos reais no Codex | 1/4 | In Progress | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
 
 **Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. Status de todos: Pending. Planos ainda não criados; progresso de execução: 0%.
