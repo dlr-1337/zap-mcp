@@ -253,6 +253,14 @@ test('MCP mensagem excessiva retorna limite sem cortar evidência nem avançar',
   const retry = await f.rpc('tools/call', { name: 'search_messages', arguments: { query: '', cursor: error.nextCursor } }); assert.equal(retry.result.structuredContent.ordinal, 0);
 });
 
+test('MCP argumentos excessivos não fazem erro de schema ultrapassar orçamento', async t => {
+  const f = await mcpFixture(t);
+  const response = await fetch(f.base + '/mcp', { method: 'POST', headers: f.headers, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_messages', arguments: { query: '', ['x'.repeat(40000)]: true } } }) });
+  const body = await response.text();
+  assert.ok(Buffer.byteLength(body) <= 32768, 'Até o erro deve caber no orçamento completo');
+  assert.equal(response.status, 413); assert.match(body, /Argumentos excessivos/);
+});
+
 test('MCP candidatos expiram após restart e TTL enquanto recorte de mensagens persiste', async t => {
   const f = await mcpFixture(t);
   f.s.archive.ingestHistory({ chats: Array.from({ length: 55 }, (_, i) => ({ id: 'restart-' + i + '@lid', subject: 'restart' })), messages: [] });
