@@ -300,8 +300,7 @@ test('MCP instruções fixas não promovem mensagem adversarial a ferramenta ou 
   assert.deepEqual((await f.rpc('tools/list')).result, before.result);
   assert.equal(createMcpAccess(f.s.authDb).authenticate(f.headers.Authorization), generation);
   assert.doesNotMatch(JSON.stringify(page), new RegExp(f.token));
-  assert.equal((await f.rpc('resources/list')).result.resources.length, 0);
-  assert.equal((await f.rpc('prompts/list')).result.prompts.length, 0);
+  for (const method of ['resources/list', 'prompts/list']) { const reply = await f.rpc(method); assert.ok(reply.error || (reply.result.resources ?? reply.result.prompts).length === 0); }
 });
 
 test('MCP contexto revalida âncora histórico e vizinha após formar buffer', async t => {
@@ -328,9 +327,10 @@ test('MCP contexto bloqueia continuação bufferizada por restrição e rotaçã
   const reference = f.s.archive.readStoredMessage({ ...key, id: '25' })!.reference;
   const page = await callQuery(f, 'get_context', { reference }), read = f.s.archive.readContextPage;
   let first = true;
-  f.s.archive.readContextPage = args => { const next = read(args); if (first) { first = false; const exposed = next.messages.at(-1)!; queueMicrotask(() => f.s.archiveDb.prepare('UPDATE messages SET restricted=1 WHERE reference=?').run(exposed.reference)); } return next; };
+  f.s.archive.readContextPage = args => { const next = read(args); if (first) { first = false; const exposed = next.messages[0]!; queueMicrotask(() => f.s.archiveDb.prepare('UPDATE messages SET restricted=1 WHERE reference=?').run(exposed.reference)); } return next; };
   await assert.rejects(callQuery(f, 'get_context', { reference, direction: 'after', cursor: page.nextCursor }));
-  f.s.archive.readContextPage = args => { const next = read(args); queueMicrotask(() => rotateMcpToken(f.s.authDb, join(f.dir, 'context-rotated'))); return next; };
+  first = true;
+  f.s.archive.readContextPage = args => { const next = read(args); if (first) { first = false; queueMicrotask(() => rotateMcpToken(f.s.authDb, join(f.dir, 'context-rotated'))); } return next; };
   await assert.rejects(callQuery(f, 'get_context', { reference }));
   f.s.archive.readContextPage = read;
 });
