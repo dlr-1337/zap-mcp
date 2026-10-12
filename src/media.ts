@@ -76,13 +76,18 @@ export function openVerifiedAttachment(archive: Archive, mediaDir: string, id: s
 
 export function streamVerifiedAttachment(archive: Archive, file: NonNullable<ReturnType<typeof openVerifiedAttachment>>, start = 0, end?: number) {
   const source = createReadStream('', { fd: file.fd, autoClose: true, start, end });
+  const check = () => { if (archive.isRestricted(file.attachment.reference)) throw Error('Conteúdo restrito indisponível'); };
   const stream = Readable.from((async function* () {
     for await (const chunk of source) {
-      if (archive.isRestricted(file.attachment.reference)) throw Error('Conteúdo restrito indisponível');
+      check();
       yield chunk;
     }
   })(), { objectMode: false });
-  stream.on('close', () => source.destroy()); return stream;
+  // Gate consumption too: Readable.from may already have prefetched a permitted chunk.
+  const read = stream.read.bind(stream);
+  stream.read = size => { if (stream.destroyed) return null; try { check(); return read(size); } catch (e) { stream.destroy(e as Error); return null; } };
+  const unsubscribe = archive.onChange(() => { try { check(); } catch (e) { stream.destroy(e as Error); } });
+  stream.on('close', () => { unsubscribe(); source.destroy(); }); return stream;
 }
 
 export function classifyPreview(file: NonNullable<ReturnType<typeof openVerifiedAttachment>>) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, unlinkSync, renameSync, symlinkSync, closeSync, readSync, fstatSync, readdirSync, readlinkSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, unlinkSync, renameSync, symlinkSync, closeSync, readSync, fstatSync, readdirSync, readlinkSync, readFileSync, openSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -9,7 +9,7 @@ import { Readable } from 'node:stream';
 import { get } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
-import { startMediaWorker, openVerifiedAttachment, classifyPreview } from '../src/media.js';
+import { startMediaWorker, openVerifiedAttachment, streamVerifiedAttachment, classifyPreview } from '../src/media.js';
 import { parsePeriod } from '../src/archive.js';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1kAAAAASUVORK5CYII=', 'base64');
@@ -63,8 +63,49 @@ async function fixture(t: any, bytes: Buffer = png, mime: string | null = 'image
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`; await s.setPassword('senha sintética');
   const c = await fetch(base + '/api/session'), challenge = await c.json();
   const login = await fetch(base + '/login', { method: 'POST', headers: { Cookie: c.headers.get('set-cookie')!.split(';')[0], Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'senha sintética', csrfToken: challenge.csrfToken }) }); assert.equal(login.status, 200);
-  return { s, dir, attachment, base, headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } };
+  return { s, dir, attachment, base, headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] }, server };
 }
+test('original já bufferizado nega consumo após restrição e libera dono do fd', async t => {
+  const bytes = Buffer.concat([png, Buffer.alloc(256 * 1024)]), { s, dir, attachment } = await fixture(t, bytes);
+  const file = openVerifiedAttachment(s.archive, join(dir, 'media'), attachment.id)!;
+  const stream = streamVerifiedAttachment(s.archive, file), errors: Error[] = [];
+  t.after(() => stream.destroy());
+  stream.on('error', e => errors.push(e));
+  await once(stream, 'readable'); assert.ok(stream.readableLength > 0, 'buffer retido antes de transmitir');
+  s.archive.ingestHistory({ messages: [{ key: { remoteJid: '1@lid', id: 'image', fromMe: false, isViewOnce: true }, message: { imageMessage: {} } }] });
+  assert.equal(stream.read() === null, true, 'nenhum byte bufferizado liberado após restrição');
+  await new Promise<void>(r => { if (stream.closed) r(); else stream.once('close', r); }); assert.ok(errors.length);
+  for (let i = 0; i < 100; i++) { try { fstatSync(file.fd); await new Promise(r => setTimeout(r, 5)); } catch { break; } }
+  assert.throws(() => fstatSync(file.fd));
+  const probe = openSync(join(dir, 'archive.sqlite'), 'r');
+  try { stream.destroy(); await new Promise(r => setImmediate(r)); assert.ok(fstatSync(probe).isFile()); } finally { closeSync(probe); }
+  assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), bytes); assert.equal(s.archive.getAttachment(attachment.id)!.state, 'available');
+});
+test('original e preview HTTP sob backpressure negam bytes futuros inclusive Range sem polling', async t => {
+  for (const suffix of ['', '/preview']) for (const range of [false, true]) {
+    const bytes = Buffer.concat([png, Buffer.alloc(256 * 1024)]), { s, dir, base, headers, attachment, server } = await fixture(t, bytes);
+    const path = '/api/attachments/' + attachment.id + suffix;
+    let begun!: () => void, resume!: () => void, writes = 0, complete = false, received = 0;
+    const started = new Promise<void>(r => begun = r);
+    server.prependListener('request', (req, res) => {
+      if (req.url !== path) return;
+      const write = res.write.bind(res), emit = res.emit.bind(res); let held = true;
+      res.emit = ((name: string, ...args: unknown[]) => name === 'drain' && held ? false : emit(name, ...args)) as typeof res.emit;
+      res.write = ((...args: Parameters<typeof res.write>) => { writes++; const flowing = write(...args); begun(); return writes === 1 ? false : flowing; }) as typeof res.write;
+      resume = () => { held = false; res.emit('drain'); };
+    });
+    const ended = new Promise<void>((resolve, reject) => {
+      get(base + path, { headers: { ...headers, ...(range ? { Range: 'bytes=0-131071' } : {}) } }, res => {
+        assert.equal(res.statusCode, range ? 206 : 200); res.pause(); res.on('data', b => received += b.length); res.on('end', () => { complete = true; }); res.on('error', () => {}); res.on('close', resolve);
+        const drain = resume; resume = () => { drain(); res.resume(); };
+      }).on('error', reject);
+    });
+    await started; await new Promise(r => setTimeout(r, 20)); assert.equal(writes, 1);
+    s.archive.ingestHistory({ messages: [{ key: { remoteJid: '1@lid', id: 'image', fromMe: false, isViewOnce: true }, message: { imageMessage: {} } }] });
+    resume(); await ended; assert.equal(writes, 1, 'somente primeiro bloco já transmitido'); assert.equal(complete, false); assert.ok(received < (range ? 131072 : bytes.length));
+    assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), bytes); assert.equal(s.archive.getCoverage().uniqueMessages, 1);
+  }
+});
 test('PNG privado preserva bytes em GET HEAD Range e original offline', async t => {
   const { s, dir, attachment, base, headers } = await fixture(t), path = '/api/attachments/' + attachment.id;
   const r = await fetch(base + path + '/preview', { headers }); assert.equal(r.status, 200, 'PNG disponível deve ter preview privado');
