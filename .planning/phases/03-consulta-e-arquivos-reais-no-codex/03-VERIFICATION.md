@@ -1,9 +1,10 @@
 ---
 phase: 03-consulta-e-arquivos-reais-no-codex
-verified: 2026-10-12T20:21:56Z
+verified: 2026-10-12T21:35:35Z
 status: passed
 score: 21/21 must-haves verified
 covered_files: [
+  ".planning/SHIP.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-01-PLAN.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-01-SUMMARY.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-01-red1.json",
@@ -33,6 +34,7 @@ covered_files: [
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-SECURITY.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-TRACER-CLEANUP.json",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-TRACER-CLEANUP.md",
+  ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-UAT.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-UI-REVIEW.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-VALIDATION.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-review-wr01-iter2-red.json",
@@ -81,7 +83,7 @@ covered_files: [
   "test/ui.test.ts",
   "tsconfig.json"
 ]
-covered_digest: "v3:sha256:5d1626c8bcd810eea8ca6c679236c9a83ddf0bc079ea82ad613b2dca89329a66"
+covered_digest: "v3:sha256:ec0ffda3ec91b564319fdc6fe9bcbc9f98eca7fe9035c2182a00047df69c68b1"
 behavior_unverified: 0
 overrides_applied: 0
 prohibitions_flagged: 0
@@ -125,17 +127,38 @@ deferred:
   - truth: "Backup privado externo recorrente e restauração operacional com fluxo real site/Codex."
     addressed_in: "Phase 4"
     evidence: "Phase 4 SC2-SC4 exigem cópia fora da VPS, restore e fluxo real restaurado."
+publication_refresh:
+  previous_status: passed
+  previous_verified: 2026-10-12T20:21:56Z
+  scope: sanitized-public-replica
+  source_parity: true
+  summary_commit_windows: [8, 7, 4, 4]
+  mapped_commits_audited: 68
+  authors_dates_preserved: true
+  publication_regression:
+    tests: 190
+    passed: 190
+    failed: 0
+    duration_ms: 73525.545084
+  uat: "12/12 complete; autonomous, human_confirmation:false"
+  latest_real_tracer: 2026-10-12T21:03:34.968Z
+  latest_real_tracer_duration_ms: 57570.858276
+  current_global_config_matches_old_baseline: false
+  global_config_changed_after_tracer: true
+  global_config_change_attribution: undetermined
 human_verification: []
 ---
 
 # Fase 3: Consulta e arquivos reais no Codex — Verification Report
 
 **Phase Goal:** As a proprietário do acervo privado, I want to consultar no Codex instalado o mesmo acervo privado por MCP somente leitura e receber ou baixar anexos com integridade verificável, so that eu possa recuperar e conferir conversas e originais arquivados.
-**Verified:** 2026-10-12T20:21:56Z
+**Verified:** 2026-10-12T21:35:35Z
 **Status:** passed
 **Re-verification:** Sim — após os três grupos de gaps do relatório de 19:14:57Z, preservado em `history/03-VERIFICATION.iter1.md`.
 
 O objetivo local protegido foi alcançado: o Codex instalado consultou material real do arquivo offline e salvou dois originais íntegros por TLS verificado. Os bloqueios anteriores estão fechados por código, execução e estado privado conferidos independentemente. Não há override, proibição flagged, verdade incerta ou intervenção humana indispensável. Este veredito não representa implantação permanente na VPS.
+
+Refresh independente da réplica pública: as verificações funcionais detalhadas abaixo descrevem a rodada de20:21:56Z e suas provas preservadas. O refresh de publicação ao final registra os inputs documentais alterados, a regressão desta cópia e a UAT posterior. Alegações de preservação são temporais, não uma promessa de igualdade eterna da configuração global.
 
 ## User Flow Coverage
 
@@ -147,7 +170,7 @@ O owner `query user-story.validate` retornou `valid:true`, `errors:[]` e os trê
 | Encontrar a conversa e mensagens | Candidato canônico, filtros e continuação explícita | Transcripts e transporte correlacionam 1 find e 3 search; SQL independente confirma 13 resultados consecutivos de um recorte de 128 | ✓ VERIFIED |
 | Ler o contexto | Âncora/vizinhas, autoria, instante, citação e alterações | 6 get_context correlacionados; SQL confirma ordem, autoria, citação e revisões; caso real sem instante permanece null; oráculo web autenticado executado no roteiro | ✓ VERIFIED |
 | Recuperar os originais | Dois arquivos novos com integridade conferível | 2 get_attachment e um helper fixo executado pelo Codex; 4200/271485 bytes, disco = corpo HTTP = destino; SHA conferido novamente | ✓ VERIFIED |
-| Encerrar a prova temporária | Credencial descartável revogada/removida e dados preservados | Tracer real 19:51 passou; seis caminhos de cleanup nomeados passaram nesta rodada; leitura atual encontrou 0 chaves MCP/0 arquivos token; hashes atuais iguais ao baseline | ✓ VERIFIED |
+| Encerrar a prova temporária | Credencial descartável revogada/removida e dados preservados | Tracer real 19:51 passou; seis caminhos de cleanup nomeados passaram nesta rodada; leitura em20:21 encontrou 0 chaves MCP/0 arquivos token; hashes conferidos naquela rodada iguais ao baseline | ✓ VERIFIED |
 | Resultado da User Story | Recuperar e conferir conversas e originais arquivados | Fluxo real completo acima, fontes SQL/ICU/disco separadas da implementação; nenhuma URL isolada foi chamada de entrega | ✓ VERIFIED |
 
 ## Goal Achievement
@@ -156,7 +179,7 @@ O owner `query user-story.validate` retornou `valid:true`, `errors:[]` e os trê
 
 Preservado o contrato de 21 verdades da verificação anterior: cinco SCs, catorze refinamentos dos PLANs e os guards MVP/cleanup. As três proibições são checagens negativas separadas. Nenhum item foi removido para elevar o score.
 
-**R190**: log da execução completa atual do orquestrador, inspecionado nesta rodada, 190/190, zero fail/cancel/skip/todo, 96806.345933ms, exit0 normal registrado; não é nova suíte deste verifier. **REAL**: prova integrada de 17:13:27.794Z, preservada e inspecionada privadamente; 12 chamadas, SQL/site/ICU/disco. **TRACER**: prova real posterior de 19:51:23.244Z, 1/1, TLS e dois originais, 62278.342759ms total no log. Nenhuma dessas provas foi representada como uma execução nova do verifier.
+**R190**: log da execução completa do orquestrador anterior à publicação, inspecionado na rodada de20:21, 190/190, zero fail/cancel/skip/todo, 96806.345933ms, exit0 normal registrado; não é nova suíte deste verifier. **REAL**: prova integrada de 17:13:27.794Z, preservada e inspecionada privadamente; 12 chamadas, SQL/site/ICU/disco. **TRACER**: prova real posterior de 19:51:23.244Z, 1/1, TLS e dois originais, 62278.342759ms total no log. Nenhuma dessas provas foi representada como uma execução nova do verifier.
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
@@ -166,7 +189,7 @@ Preservado o contrato de 21 verdades da verificação anterior: cinco SCs, cator
 | SC4 | Em uma conversa real conhecida, o Codex efetivamente recebe um anexo disponível ou conclui seu download autorizado, e os bytes/tamanho/hash conferem com o arquivo preservado; listagem de recurso ou URL isolada não conta como entrega, e tipo/tamanho sem suporte recebe limite explícito. | ✓ VERIFIED | REAL2tools/2GETs completos; 4200/271485 bytes iguais disco/wire/destino nesta rodada; pequeno inline protocolar e grande download_required; ambos salvos explicitamente; teste negativo próprio1/1 |
 | SC5 | As consultas pelo site e pelo Codex não enviam, editam, apagam nem marcam mensagens como lidas no WhatsApp; não existe operação pública que permita essas ações. Conteúdo de conversa é tratado como dado não confiável, sem instruções privilegiadas ou exposição de chaves, e anotações MCP não são usadas como único bloqueio. | ✓ VERIFIED | Adapter sem sessão/socket, quatro registerTool/schema strict; spies readonly R190; adversarial próprio1/1; REAL0outros MCP/1helper fixo |
 | 01.2 | Cada requisição/download exige bearer vigente, independente de cookie/sessão do site/protocolo. | ✓ VERIFIED | Montagem main:56 precede parser/cookie; REAL recusas e R190 bearer antes de parsing/cookie |
-| 01.3 | Rotação atômica sobrevive à reabertura, invalida geração/derivados e preserva isolamento web. | ✓ VERIFIED | SELECT conjunto, transação CLI, assertCurrent/sweep; testes inline/restart/CLI/cursor em R190; web atual hash igual baseline |
+| 01.3 | Rotação atômica sobrevive à reabertura, invalida geração/derivados e preserva isolamento web. | ✓ VERIFIED | SELECT conjunto, transação CLI, assertCurrent/sweep; testes inline/restart/CLI/cursor em R190; hash web conferido em20:21 igual ao baseline |
 | 01.4 | Restrição/geração conferidas antes de buffer e próximo bloco; parcial não é concluído. | ✓ VERIFIED | Guards write/end e stream.read; named inline/restart, streams simultâneos e contexto bufferizado verdes na passada independente anterior e em R190 |
 | 01.5 | Original verificado por ID interno; nome é metadado, fallback na mesma origem privada. | ✓ VERIFIED | UUID/schema, fd O_NOFOLLOW/tamanho/SHA, helper origin fixo sem redirect/tokenURL; REAL bytes; corrupção/HEAD/symlink em R190 |
 | 02.1 | Candidatos não unem homônimos, grupo/individual ou PN/LID por suposição. | ✓ VERIFIED | conversationEvidence/IDs; teste nomeado próprio1/1 com três candidatos; candidato REAL conferido em SQL |
@@ -177,10 +200,10 @@ Preservado o contrato de 21 verdades da verificação anterior: cinco SCs, cator
 | 03.3 | Restrição atual prevalece em contexto/matchedEvidence/revisões/buffer. | ✓ VERIFIED | permittedMessage e scope.references no consumo; named bufferizado verde anterior e R190 redaction/âncora/vizinha |
 | 03.4 | Lista final exata de quatro ferramentas; nenhuma operação inventada chega ao WhatsApp. | ✓ VERIFIED | Registros fixos, schemas fechados, adapter Archive/auth/media; adversarial próprio1/1 e spies zero R190 |
 | 04.3 | Interrupção/restrição/rotação impede próximos bytes e recibo completo, também concorrente. | ✓ VERIFIED | R190 controles inline/stream/concorrência; rejeição parcial/corrupto/antigo próprio1/1; auditEvidence não aceita transferência incompleta |
-| 04.4 | Cópia real fica sem coletor e evidência privada/configuração são preservadas. | ✓ VERIFIED | Manifesto ligado ao perfil real conferido sem imprimir creds; offlineOnly; ausência de lock; arquivos0600/dirs0700; hashes atuais Archive/WhatsApp/web/TOML iguais baseline |
+| 04.4 | Cópia real fica sem coletor e evidência privada/configuração são preservadas. | ✓ VERIFIED | Manifesto ligado ao perfil real conferido sem imprimir creds; offlineOnly; ausência de lock; arquivos0600/dirs0700; hashes Archive/WhatsApp/web/TOML conferidos em20:21 iguais ao baseline |
 | 04.5 | Versões/protocolo/canal/recusas/hashes são revisáveis e não prometem VPS/histórico integral. | ✓ VERIFIED | Whitelist receipt e completeAccount:false; REAL/protocolo/cliente/hash; README e ACCEPTANCE delimitam canal transitório; R190 sanitização |
 | G-MVP | A meta mode:mvp passa no user-story.validate canônico. | ✓ VERIFIED | Owner próprio valid:true/errors[]/três slots; cinco SCs mantidas; mudança470e522 não altera intenção |
-| G-CLEANUP | Último tracer não deixa sua credencial descartável vigente. | ✓ VERIFIED | Fixe6040da após RED99988d5; seis testes próprios1/1; finally restaura grant anterior/remove token mesmo na falha de leitura; TRACER authnull/HTTP401; estado atual0chaves/0tokens |
+| G-CLEANUP | Último tracer não deixa sua credencial descartável vigente. | ✓ VERIFIED | Fixe6040da após RED99988d5; seis testes próprios1/1; finally restaura grant anterior/remove token mesmo na falha de leitura; TRACER authnull/HTTP401; estado conferido em20:21 com0chaves/0tokens |
 
 **Score: 21/21; behavior_unverified:0; incertas:0; failed:0; overrides:0; proibições flagged:0.** Os itens comportamentais possuem testes ativos e resultados; não foram aprovados por presença de símbolos. Ambiente privado e clone offline são precondições declaradas; produção estabelece ordem, sessão e autorização. Nenhuma dependência incidental nova identificada.
 
@@ -247,7 +270,7 @@ Comando padrão desta rodada: `TMPDIR=<privado home> mise exec node@24.21.0 -- e
 | R190 preservado | npm test, limite600s/TMPDIR privado |190/190,96806.345933ms; orquestrador, não nova execução|✓ PASS|
 | TRACER preservado | ZAP_MCP_REAL_MODE=tracer + node --test |1/1,62278.342759ms; cliente/TLS/bytes/cleanup|✓ PASS|
 
-Uma primeira inspeção privada teve erro de sintaxe antes de executar. Outra chegou à última assertion com expectativa errada sobre o formato de post-tracer.json: unchanged contém booleans, não hashes. Corrigida somente a inspeção, todos os checks passaram; hashes atuais foram calculados contra baseline independente. Esses erros não foram atribuídos ao produto nem usados como RED funcional.
+Uma primeira inspeção privada teve erro de sintaxe antes de executar. Outra chegou à última assertion com expectativa errada sobre o formato de post-tracer.json: unchanged contém booleans, não hashes. Corrigida somente a inspeção, todos os checks daquela rodada passaram; hashes conferidos em20:21 foram calculados contra baseline independente. Esses erros não foram atribuídos ao produto nem usados como RED funcional.
 
 ### Probe Execution
 
@@ -259,7 +282,7 @@ Cinco IDs aparecem nos PLANs e no mapeamento Phase3; zero requisitos órfãos. R
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |---|---|---|---|---|
-| MCP-01 |01/04|Cliente instalado, transporte protegido, token revogável/recusas|✓ SATISFIED no escopo local protegido|NativeSHA/protocolo/TLS/negativas; R190/restart; TRACER e0chaves/0tokens atuais|
+| MCP-01 |01/04|Cliente instalado, transporte protegido, token revogável/recusas|✓ SATISFIED no escopo local protegido|NativeSHA/protocolo/TLS/negativas; R190/restart; TRACER e0chaves/0tokens conferidos em20:21|
 | MCP-02 |02/04|Localização, termos/período/filtros/limites/continuação|✓ SATISFIED|SQL128/13 em3páginas,ICU,freezer/HMAC/TTL/budget,R190|
 | MCP-03 |03/04|Contexto por referência com campos iguais ao site|✓ SATISFIED|6contextos/20refs,quote/edit/null,SQL/ordem/site independente e paridade R190|
 | MCP-04 |01/04|Original realmente recuperado com integridade/limite|✓ SATISFIED|4200/271485bytes disco=HTTP=destino eSHA; teste próprio rejeita ausente/parcial/corrupto/antigo|
@@ -337,9 +360,25 @@ Nenhum item obrigatório pendente. O fluxo da máquina foi efetivamente executad
 
 Claude/OAuth/bridges/OCR/IA/SQLlivre são opt-outs, não requisitos faltantes. Endpoint de aceite transitório encerrado e token revogado; não existe serviço permanente habilitado no Codex como resultado desta fase.
 
+### Refresh independente da réplica pública
+
+O código funcional, testes, scripts, frontend, pins/lock e CI desta cópia são byte a byte iguais ao estado local já verificado: `git diff --quiet main HEAD -- src test scripts public package.json package-lock.json .github`, exit0. Nenhum teste completo ou cliente real foi repetido por este refresh. Alterações da publicação limitam-se à sanitização documental, referências aos commits da réplica e registros de conclusão; não alteram Goal, cinco SCs, requisitos, decisões, proibições ou enforcement.
+
+As quatro janelas `plan_head_before..plan_head_after` foram recomputadas nesta cópia:8/8,7/7,4/4,4/4; todos os finais são ancestrais de HEAD. Foram conferidas68entradas do mapa privado da réplica: autores/datas iguais aos originais e commits publicados alcançáveis. O relatório público não expõe o mapa privado. `check.tdd-review-checkpoint 3` executado independentemente retornou passed:true/block:false/violations:0, somente03-02/03-03 reconhecidos; não inventa reconhecimento dos quatro planos.
+
+Owner próprio confirmou Goal valid:true/errors[] e decisão20/20. Segurança13closed/0open, REVIEW clean e disposição2fixed/0open foram relidos; source parity sustenta os checks comportamentais anteriores. O novo README limita corretamente21/21,cinco requisitos,UAT12/12 à entrega local protegida.
+
+O log integral desta réplica confirma190/190,zero fail/cancel/skip/todo,73525.545084ms,exit0 normal registrado pelo orquestrador. É evidência posterior preservada, não nova execução deste verifier. 03-UAT está complete,12passed/0issues/0pending/0skipped/0blocked,autonomous e human_confirmation:false. O tracer real de21:03:34.968Z passou1/1,57570.858276ms total,TLSpositivo/negativo e2originais4200/271485bytes. A prova integrada12calls de17:13 permanece anterior, preservada; não foi chamada de nova rodada.
+
+A auditoria readonly de UAT foi executada neste refresh: confirmou recibo atual,bytes disco/SQL/destino,0chavesMCP/0arquivos token e ausência de lock, mas **falhou na assertion de igualdade do TOML atual ao baseline antigo**. Investigação seletiva encontrou mtime21:15:12.926Z, posterior ao tracer21:03; nenhum servidor temporário zap_* e somente leituras/comparações de configPath no produto/testes/roteiro. A comparação própria antes/depois dos tracers e seu PASS histórico permanecem válidos. Os únicos backups de conteúdo encontrados eram antigos e não recompõem aquele baseline; autoria e delta exato dessa alteração posterior não foram determinados. Não foi presumida autorização/manutenção nem restaurado/enfraquecido o arquivo/assertion. Uma conferência readonly separada dos eventos atuais confirmou0outros MCP calls e2calls da prova. **INFO temporal:** não há resíduo zap_* ou escrita do TOML atribuível à implementação confirmado; este refresh não certifica igualdade atual ao snapshot antigo.
+
+A auditoria de publicação foi repetida independentemente sobre origin/main..HEAD:69commits/144novosblobs,comparados com valores privados conhecidos, matches:[]. Categorias foram IDs reais, hashes reais de mídia, nomes privados, identidades, credenciais e caminhos de runtime; os valores permaneceram privados. Nomes de marcas públicas do caminho foram excluídos após inspeção do scanner. Essa conferência delimitada não é garantia universal de ausência de segredo. Dois hashes de mídia e caminhos privados foram substituídos por marcadores apenas nos documentos da fase; nenhum deles está neste relatório.
+
+O fingerprint proprietário foi regenerado nesta cópia sobre o conjunto anterior mais03-UAT, documentos sanitizados e evidências públicas; campos retornados copiados verbatim. Documento SHIP da raiz de planning é inerte conforme política do owner. Relatório próprio e provas/logs privados não entram no digest. Somente este03-VERIFICATION da réplica foi atualizado; checkout original, fontes, testes, tracking e configuração global ficaram intocados. WINDOWS13/HTTPSweb/VPS/backup externo/restore final continuam na fase4, sem waiver ou fechamento.
+
 ### Gaps Summary
 
-**0 gaps bloqueantes; três grupos anteriores fechados.** Goal MVP válida, três proibições determinísticas verdes e tracer sem credencial residual. Os hashes atuais do acervo, tabelasWhatsApp, estadoweb eTOML são iguais ao baseline privado anterior à recuperação. Nenhuma fonte viva/collector/socket foi reaberta para provar isso.
+**0 gaps bloqueantes; três grupos anteriores fechados.** Goal MVP válida, três proibições determinísticas verdes e tracer sem credencial residual. Os hashes do acervo, tabelasWhatsApp, estadoweb eTOML conferidos em20:21 eram iguais ao baseline privado anterior à recuperação. A igualdade do TOML atual não é afirmada: uma modificação posterior à UAT foi observada e está delimitada no refresh de publicação. Nenhuma fonte viva/collector/socket foi reaberta para provar isso.
 
 Fingerprint obtido por `query verification.fingerprint`, campos retornados copiados verbatim; inclui PLAN/SUMMARY automaticamente, fontes/testes/evidências públicas relevantes e histórico anterior. Relatório próprio, logs ignorados e artefatos/caminhos privados ficam fora do fingerprint; documentos administrativos da raiz de planning são inertes por regra do owner. Após escrita, enum/status é validado por `query verification.status`; roteamento diferente por staleness seria registrado, sem inventar novo enum.
 
@@ -347,7 +386,7 @@ Somente03-VERIFICATION.md foi escrito. Nenhum commit, phase.complete, alteraçã
 
 ---
 
-_Verified: 2026-10-12T20:21:56Z_
+_Verified: 2026-10-12T21:35:35Z_
 _Verifier: gsd-verifier_
 
 Não repeti suíte integral, cliente real, pareamento ou inspeção visual. A aprovação cobre o objetivo local protegido; VPS, HTTPSweb operacional, backup externo e restauração final permanecem na fase4.
