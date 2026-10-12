@@ -4,6 +4,7 @@ plan: "06"
 subsystem: ui
 tags: [css, sticky, native-click, scroll, node-test, playwright]
 gap_ids: [G-02-6]
+gap-status: open-pending-parent-native-cua
 requirements-completed: []
 requirements-pending: [WEB-04]
 requires:
@@ -12,111 +13,143 @@ requires:
   - phase: 02-05
     provides: Cópia real offline e sessão privada de aceite sob responsabilidade do parent.
 provides:
-  - RED validado e GREEN de A/B/A nativo após rolar.
-  - Matriz adicional de teclado/reflow e reprodução de scroll chaining em nome longo.
+  - RED validado e restauração de A/B/A por gestos nativos.
+  - Matriz de teclado, nomes completos, reflow, âncora e fechamento aprovada.
+  - Regressão final 144/144 na fonte e0d921c e handoff para CUA real.
 affects: [WEB-04, G-02-6, phase-02-acceptance]
 tech-stack:
   added: []
-  patterns: [sticky tablist, native locator clicks, local label scrolling]
+  patterns: [sticky tablist, native locator clicks, local label scrolling, explicit anchor start alignment]
 key-files:
   created: [.planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-06-SUMMARY.md]
-  modified: [public/style.css, test/ui.test.ts]
+  modified: [public/style.css, public/app.js, test/ui.test.ts, .planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-06-PLAN.md]
 key-decisions:
-  - Preservar activateTab/tab.scroll sem novo estado ou mudança de app.js.
-  - Usar Chrome for Testing headless-shell instalado após SIGTRAP do Chromium do sistema.
-  - Parar tarefa2 após três tentativas de ajuste conforme limite do executor; entregar diff e causa restantes.
+  - Preservar activateTab/tab.scroll, guards e tickets sem novo estado.
+  - Alinhar início da âncora em openContext após provar que foco centralizado encobre mensagens altas.
+  - Usar Chrome for Testing headless-shell existente e temporários privados fora do checkout.
 actuals:
-  tokens: 2827
-  tasks: 1
-  commits: 2
+  tokens: 3257
+  tasks: 3
+  commits: 4
+commits: 4
 plan_head_before: bf0bdec9211149149b83a08e6f100b1f22812f22
-plan_head_after: cbbac69e0bdea5e8a28b349e89037cb4fe5f0072
+plan_head_after: e0d921c68b6f12fe6534329e8fe9faf9e0cf343a
 coverage:
   - id: D1
-    description: A/B/A por clique nativo restaura posição menor que2px e preserva DOM/conteúdo/referências/âncora.
+    description: Fixture sintética comprova A/B/A e B/A/B nativos com delta menor que2px e DOM/referências/âncora preservados.
     requirement: WEB-04
     verification:
       - kind: automated_ui
-        ref: "test/ui.test.ts#abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34"
+        ref: "test/ui.test.ts#abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34; dist/02-06-ui-focused.log; source e0d921c"
         status: pass
-      - kind: other
-        ref: "CUA-real: PENDING_PARENT; recarregar CSS e executar gesto nativo na cópia offline existente"
-        status: unknown
+      - kind: automated_ui
+        ref: "test/ui.test.ts#G-02-6 gesto nativo teclado âncora fechamento e nomes completos em tela baixa; dist/02-06-full-tests.log; source e0d921c"
+        status: pass
     human_judgment: false
   - id: D2
-    description: Teclado, reflow320/768/1280 altura480 fonte100/200%, nomes completos, âncora e fechamento.
+    description: Fixture sintética comprova teclado, reflow320/768/1280 altura480 fonte100/200%, nomes completos, âncora e fechamento.
     requirement: WEB-04
     verification:
       - kind: automated_ui
-        ref: "test/ui.test.ts#G-02-6 gesto nativo teclado âncora fechamento e nomes completos em tela baixa"
-        status: fail
+        ref: "test/ui.test.ts#G-02-6 gesto nativo teclado âncora fechamento e nomes completos em tela baixa; seis combinações PASS em dist/02-06-task2-anchor-start.log e dist/02-06-full-tests.log"
+        status: pass
+      - kind: automated_ui
+        ref: "test/ui.test.ts#abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34; isolamento/prepend/refresh/reabrir/fechar em dist/02-06-ui-focused.log"
+        status: pass
     human_judgment: false
-duration: 6min
+real-cua: PENDING_PARENT
+duration: 26min30s
 started: 2026-10-12T11:02:55Z
-completed: 2026-10-12T11:08:50Z
-status: halted
+completed: 2026-10-12T11:29:25Z
+status: complete
 ---
 
 # Phase 2 Plan 6: alcance nativo de abas após rolar — Summary
 
-**Barra sticky conserva A/B/A por clique nativo; stress identifica propagação da rolagem do nome ao documento, ainda pendente.**
+**Barra sticky, rolagem local dos nomes e alinhamento explícito da âncora preservam leitura por gesto nativo; UI19/19 e regressão final144/144 aprovadas.**
 
 ## Performance
 
-- Uma de três tarefas completa. Tarefa2 interrompida no limite de três tentativas de ajuste; tarefa3 não executada.
-- Dois commits medidos entre o ledger persistido e HEAD. Metadata deste resumo fica fora de plan_head_after.
-- `actuals.tokens`: ceil(11305 caracteres/4) do diff realizado de CSS/testes, incluindo trabalho pendente, mesma escala de estimateTokens; não é uso do harness.
-- Checkout principal em `codex/github-sync`; isolamento sequencial determinado pelo orquestrador. Nenhum worktree novo ou protocolo manual criado.
+- Três tarefas de fonte/testes/relatório entregues; aceite nativo real continua sob responsabilidade do parent.
+- Janela persistida do plano: bf0bdec→e0d921c, quatro commits medidos por git rev-list --count. Inclui o metadata histórico de interrupção dd246cd; este commit final de documentos fica fora de plan_head_after.
+- actuals.tokens: ceil(13025 caracteres/4)=3257 sobre o diff realizado de public/style.css, public/app.js e test/ui.test.ts. Mesma escala chars/4 do estimate; não é contagem de tokens do harness. Metadata documental não entra nessa medição de implementação.
+- Checkout principal codex/github-sync, execução sequencial definida pelo parent; nenhum worktree criado.
+- A interrupção anterior permanece no histórico preservado pelo parent em history/02-06-HALTED.md. Tarefa1 não foi refeita.
+
+## Accomplishments
+
+- Abas permanecem alcançáveis após rolar, com altura no máximo metade do viewport e fundo opaco.
+- Nome completo Unicode/RTL é selecionável e rolável localmente; wheel no fim do nome não desloca o documento. Fechar conserva alvo48×48 e espaço em fonte200%.
+- openContext foca a âncora com preventScroll e alinha block:start usando scroll-margin-top existente. O foco continua no elemento original; ausência de âncora, guards/tickets e activateTab(tab,false) permanecem seguros.
+- Matriz320/768/1280×100/200% em altura480 exercita clique nativo, setas/Home/End sem ativação antecipada, Enter/Espaço, nomes, âncora e Fechar/Delete. Limite de posição continua estritamente menor que2px.
 
 ## Task Commits
 
-1. Tarefa02-06-01 RED: `5aa736f` — `test(02-06): reproduce native tab scroll loss`.
-2. Tarefa02-06-01 GREEN: `cbbac69` — `feat(02-06): keep tab controls reachable during reading`.
-3. Tarefa02-06-02: incompleta; alterações de CSS/testes permanecem no working tree para o parent continuar, sem commit de implementação que falha.
-4. Tarefa02-06-03: não executada; suíte completa não rodada porque a fonte não está estável. Prova CUA real `PENDING_PARENT`.
+1. Tarefa02-06-01 RED: 5aa736f — test(02-06): reproduce native tab scroll loss.
+2. Tarefa02-06-01 GREEN: cbbac69 — feat(02-06): keep tab controls reachable during reading.
+3. Histórico de interrupção: dd246cd — docs(02-06): record native scroll proof and stress blocker.
+4. Tarefa02-06-02: e0d921c — fix(02-06): preserve reading through reflow and native focus.
+5. Tarefa02-06-03: este SUMMARY e a exceção de ownership no PLAN são o metadata final separado. Nenhum arquivo de rastreamento global foi editado.
 
 ## TDD Gate Compliance
 
-- RED íntegro em `dist/02-06-red.json`: Node TAP, um alvo executado, fail1, exit1, assertion `clique nativo B restaura posição medida antes do gesto`.
-- Comando: `ZAP_BROWSER_EXECUTABLE=/home/otavio/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell mise exec node@24.21.0 -- node --test --test-reporter=tap --test-name-pattern='abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34' dist/test/ui.test.js`.
-- `node /home/otavio/.codex/gsd-core/bin/gsd-tools.cjs check tdd-red-evidence dist/02-06-red.json --raw`: exit0, `RED_EVIDENCE_OK`, `target_test_failed`.
-- SemanticAssessment: alvo1/1 executado e falhou em ERR_ASSERTION da posição B capturada antes do gesto nativo; sem zero testes, falha de import/fixture ou alvo skipped. Dois crashes anteriores foram excluídos da autorização GREEN.
-- GREEN `dist/02-06-green.log`: pass1/fail0/cancelled0/skipped0/todo0, exit0. Tracer reexecutou build+mesmo alvo: pass1, exit0 antes da expansão.
-- `task.is-behavior-adding`: true. Commit RED precede GREEN e foi validado antes de alterar CSS. Refactor sem commit separado; não havia necessidade na tarefa1.
-- Runtime válido: Node24.21.0; Chrome for Testing151.0.7922.34 headless-shell já instalado; Playwright do bundle existente. Pins, dependências e browser do sistema não foram alterados.
+- Evidência histórica válida: dist/02-06-red.json, Node TAP, alvo1/1 executado, fail1/exit1, assertion "clique nativo B restaura posição medida antes do gesto".
+- Validação histórica: node /home/otavio/.codex/gsd-core/bin/gsd-tools.cjs check tdd-red-evidence dist/02-06-red.json --raw, exit0, RED_EVIDENCE_OK/target_test_failed.
+- SemanticAssessment: falha de posição B capturada antes do gesto nativo; não é zero testes, skip, import/fixture quebrados. Dois crashes anteriores foram excluídos da autorização GREEN.
+- GREEN e tracer históricos: dist/02-06-green.log, pass1/fail0/cancelled0/skipped0/todo0, exit0. RED precede CSS/GREEN; tarefa1 não foi repetida.
+- Tarefa2 expandiu regressões e registrou falhas comportamentais antes dos ajustes: dist/02-06-task2-before.log, exit1/ERR_ASSERTION na rolagem do nome; dist/02-06-task2-after.log, exit1/ERR_ASSERTION no início da âncora320/200%.
+- Diagnóstico independente em dist/02-06-focus-diagnostic.log: viewport320×480/barra239/padding e margem256, alturas373/861/5000 deram top309/65/−2004. É diagnóstico sintético de foco, não prova de aceite real.
+- GREEN final da tarefa2: dist/02-06-task2-anchor-start.log, alvo1/pass1/exit0, todas as seis combinações aprovadas. Não foi necessário refactor separado.
 
-## Teste adicional e estado exato da retomada
+## Verification
 
-- Novo alvo `G-02-6 gesto nativo teclado âncora fechamento e nomes completos em tela baixa` usa uiFixture sintética, três nomes longos Unicode/RTL, seis combinações320/768/1280×100/200% em altura480.
-- Gestos: clique nativo A/B/A, setas/Home/End antes da ativação, Enter/Espaço, wheel local do nome e Fechar/Delete. Document scroll é arranjo; evaluate não ativa abas. DOM integral é comparado antes/depois; limite continua estritamente menor que2px.
-- Falha inicial de âncora em320/100%: top106.59375, altura373, barBottom239. `scroll-padding-top` condicional no documento junto de `scroll-margin-top` da âncora fez a execução avançar até fonte200%.
-- Tentativa1: acrescentar scroll-padding condicional. Próxima falha: Fechar48px encoberto na fonte200% (`dist/02-06-stress-fix1.log`).
-- Tentativa2: ajustar max-height do texto para `calc(50vh - 1.5em - 40px)` e remover scroll-margin redundante aparente. Remoção revelou novamente oclusão da âncora: top191.59375, altura352, barBottom239 em320/100%.
-- Tentativa3: restaurar scroll-margin e reforçar prova de wheel do nome. Última execução `dist/02-06-stress-green.log`: fail1/exit1 em `rolagem do nome permanece local`. Nome chegou ao fim, porém scrollY também mudou. Não é GREEN apesar do nome histórico do arquivo.
-- Proposta mínima restante: `overscroll-behavior: contain` no próprio `[role=tab]`, mantendo CSS, app.js e restauração existentes; depois rerodar matriz, UI focada e full uma vez após a última mudança. Essa proposta não foi aplicada por este executor.
-- A matriz foi interrompida no primeiro cenário que falhou; não afirmar que todas as combinações/fechamentos finais foram executados. Nenhuma captura adicional foi inspecionada; não se afirma revisão de pixels.
+Runtime: Node24.21.0 via mise; Google Chrome for Testing151.0.7922.34 headless-shell existente; Playwright do bundle existente. Nenhuma instalação/pin/configuração global alterada.
+
+Browser explícito em todas as rodadas:
+ZAP_BROWSER_EXECUTABLE=/home/otavio/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell
+
+- UI focada: mise exec node@24.21.0 -- npm run build seguido de node --test --test-reporter=tap dist/test/ui.test.js; dist/02-06-ui-focused.log, tests19/pass19/fail0/cancelled0/skipped0/todo0, exit0, 43945.277ms.
+- Regressão final: mise exec node@24.21.0 -- npm test, mesma fonte e0d921c, dist/02-06-full-tests.log: tests144/pass144/fail0/cancelled0/skipped0/todo0, exit0, 75610.085ms.
+- Temporários da regressão final: TMPDIR criado por mktemp -d /home/otavio/.local/share/zap-mcp-phase2-proof/ci-temp.02-06.XXXXXX, privado0700 e fora do checkout, no filesystem com espaço livre. Diretório exclusivo dessa rodada removido após os testes.
+- node --check public/app.js e git diff --check: exit0. Nenhuma exclusão nos commits de tarefas.
+
+| Viewport/fonte | Top da âncora | Altura da mensagem | Fundo da barra |
+|---|---:|---:|---:|
+| 320×480/100% | 255.59375 | 373 | 239 |
+| 768×480/100% | 255.59375 | 352 | 239 |
+| 1280×480/100% | 255.59375 | 331 | 239 |
+| 320×480/200% | 256.1875 | 861 | 239 |
+| 768×480/200% | 256.1875 | 591 | 239 |
+| 1280×480/200% | 256.1875 | 507 | 239 |
+
+Evaluate somente arranja scroll/fontes ou lê DOM/métricas; ativações do oráculo são locator.click e teclado nativos. Clique programático histórico da paginação não aprova restauração de abas. Capturas não foram inspecionadas; não se afirma revisão de pixels, zoom nativo ou dispositivo físico.
 
 ## Deviations from Plan
 
-**[Rule3 — harness] Binário sintético alternativo instalado.** Chromium do sistema caiu duas vezes antes da assertion. `coredumpctl` confirmou SIGTRAP em processos do harness; RAM disponível3.3GiB, shm12GiB livre e journal kernel sem entrada/OOM nesse intervalo. Causa interna/compositor não determinada. Chrome for Testing headless-shell instalado executou o RED real e o GREEN. Logs ignorados `dist/02-06-invalid-red-crash.json`, `dist/02-06-invalid-red-crash2.json`, `dist/02-06-browser-debug.log`. Nenhum core extraído, configuração global alterada ou processo alheio encerrado.
+**1. [Rule3 — harness] Browser alternativo existente.** O Chromium do sistema caiu duas vezes antes da assertion histórica. O executor anterior confirmou SIGTRAP por metadata de coredump e usou o headless-shell existente para RED/GREEN válidos. Causa interna/compositor não determinada. Nenhum core extraído, browser instalado, configuração global alterada ou processo alheio encerrado nesta retomada.
 
-**Limite de execução:** tarefa2 parou após três ajustes conforme regra do executor. Parent recebeu causa e proposta restante; o plano não está completo e G-02-6 continua aberto.
+**2. [Rule1 — bug] Início de âncora alta encoberto pelo foco centralizado.** Encontrado na tarefa2 após conter scroll chaining: altura861/top65.1875/barra239 em320/200%. Margens CSS fixas não garantem o início para altura variável. Parent ampliou ownership somente para a linha de foco em openContext; focus({preventScroll:true}) seguido de scrollIntoView({block:'start'}) corrigiu as seis combinações, permitindo remover html:has scroll-padding redundante. Arquivos: public/app.js, public/style.css, test/ui.test.ts; commit e0d921c. PLAN registra a exceção sem alterar goal, requisitos ou critérios. [HTML focus](https://html.spec.whatwg.org/multipage/interaction.html#dom-focus-dev) especifica alinhamento centralizado por padrão; [CSS overscroll](https://drafts.csswg.org/css-overscroll/#overscroll-behavior-properties) define contenção da propagação.
 
-## Verificação e segurança
+**3. [Rule3 — harness] Regressão final exigiu temporários privados externos.** Primeira full na fonte estável: dist/02-06-full-tests-first-failed.log, tests144/pass142/fail2/exit1; ENOENT em "PN/LID preserva bytes distintos e usa locator de cada attachment nas novas tentativas" e SQLITE_IOERR_WRITE em "recortes recusam excesso sem truncar nem remover recortes válidos". Ambos passaram isoladamente2/2 no mesmo ambiente, sem editar os respectivos arquivos. /tmp era tmpfs com2.4GiB livres na leitura posterior; isso não prova saturação, OOM ou ENOSPC durante a falha. Causa exata não confirmada. A tentativa de TMPDIR em dist foi invalidada pelo guard "Armazenamento privado deve ficar fora do checkout", preservada em dist/02-06-full-tests-invalid-tmpdir.log. O processo e temporários próprios foram encerrados/limpos; guard preservado. Parent autorizou ambiente externo0700; full final passou144/144 e não foi repetida após GREEN. Nenhuma fonte fora do escopo alterada.
 
-- `mise exec node@24.21.0 -- npm run build`: exit0 nas rodadas focadas.
-- `git diff --check`: exit0 ao entregar.
-- `node --check public/app.js`: exit0; arquivo permaneceu intocado.
-- Sem nova rota, auth, schema, dependência ou superfície de arquivo. T-02-23 ainda pendente na propagação da rolagem local; T-02-24 tem RED nativo válido; T-02-25/T-02-SC preservados.
-- Sem stub de produto novo; fixtures são sintéticas e não substituem dados reais. A suíte completa é verificação não executada, a registrar pelo parent em WINDOWS caso a retomada não a conclua. Esse executor não edita o ledger fora do ownership.
+## Security and Stubs
+
+- Nenhuma nova rota, auth, schema, dependência, endpoint, acesso arbitrário a arquivos ou superfície de confiança.
+- T-02-23: matriz confirma altura/controlabilidade/nomes/âncora; T-02-24: RED semântico e gestos nativos preservam oráculo; T-02-25/T-02-SC: sessão privada intocada e nenhuma instalação.
+- Scan de alterações sem TODO/FIXME/placeholder, teste skipped/todo ou stub novo de produto. Fixtures são sintéticas e não demonstram cobertura da conta real.
+- Logs e capturas sintéticas permanecem ignorados em dist. Nenhum conteúdo, ID, nome, cookie ou segredo da conta real foi incluído.
+- STATE/ROADMAP/REQUIREMENTS/UAT/SECURITY/VERIFICATION, serviços, senha, sessão, originais e coletor fonte pertencem ao parent e não foram alterados por este executor. Prova operacional WhatsApp/VPS/MCP não realizada.
 
 ## CUA real — PENDING_PARENT
 
-Depois de fonte/testes estáveis, o parent recarrega sua sessão privada já autenticada da cópia offline e verifica CSS servido, A/B/A e B/A/B após PageDown com delta menor que2px, conteúdo/âncora, teclado e Fechar. Registrar somente agregados sanitizados, `source: autonomous`, `human_confirmation: false`. Somente então reconciliar UAT6/G-02-6.
+Coverage D1/D2 acima classifica somente entregas sintéticas aprovadas. Não reconciliar G-02-6/WEB-04 apenas por esses resultados. Este SUMMARY complete significa tarefas de implementação/regressão/relatório entregues; o gate real permanece aberto.
 
-Este executor não abriu a tab privada, alterou login/senha/perfis/contas/coletor, executou socket WhatsApp, aceite real, VPS, MCP, push, PR ou tags. STATE/ROADMAP/REQUIREMENTS/UAT e demais rastreios pertencem ao parent.
+Parent deve recarregar a tab privada da cópia offline já autenticada, confirmar CSS/app.js corrigidos servidos, abrir duas conversas pela UI, PageDown emA, cliqueB/A, PageDown emB, cliqueA/B. Medir scroll antes do gesto e retorno menor que2px, com conteúdo/referências/âncora preservados; conferir foco por teclado sem deslocar leitura antes da ativação e Fechar. Registrar apenas agregados sanitizados com source:autonomous e human_confirmation:false, acrescentar o resultado neste SUMMARY e somente então reconciliar UAT6/G-02-6.
+
+Não há checkpoint humano, nova autenticação ou bootstrap de tab privada pelo executor. Teste sintético, metadata de browser e teste histórico de clique programático não substituem essa prova.
 
 ## Self-Check: PASSED
 
-- CSS, testes e este resumo existem. Commits5aa736f/cbbac69 são ancestrais de HEAD; nenhuma exclusão nesses commits.
-- Working tree contém explicitamente as mudanças incompletas de public/style.css e test/ui.test.ts; não declarar fonte final aprovada.
+- public/style.css, public/app.js, test/ui.test.ts, PLAN e este SUMMARY existem.
+- 5aa736f/cbbac69/e0d921c são ancestrais de HEAD; janela de quatro commits medida do ledger persistido ao source e0d921c.
+- Fonte/testes commitados; somente PLAN/SUMMARY são metadata desta entrega. Histórico não rastreado criado pelo parent foi preservado para ele integrar.
