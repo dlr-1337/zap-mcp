@@ -4,9 +4,9 @@ plan: "06"
 subsystem: ui
 tags: [css, sticky, native-click, scroll, node-test, playwright]
 gap_ids: [G-02-6]
-gap-status: open-pending-parent-native-cua
-requirements-completed: []
-requirements-pending: [WEB-04]
+gap-status: verified-resolved
+requirements-completed: [WEB-04]
+requirements-pending: []
 requires:
   - phase: 02-02
     provides: Abas com DOM, contexto e posição independentes na memória.
@@ -57,7 +57,7 @@ coverage:
         ref: "test/ui.test.ts#abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34; isolamento/prepend/refresh/reabrir/fechar em dist/02-06-ui-focused.log"
         status: pass
     human_judgment: false
-real-cua: PENDING_PARENT
+real-cua: passed-autonomous
 duration: 26min30s
 started: 2026-10-12T11:02:55Z
 completed: 2026-10-12T11:29:25Z
@@ -140,11 +140,20 @@ Evaluate somente arranja scroll/fontes ou lê DOM/métricas; ativações do orá
 - Logs e capturas sintéticas permanecem ignorados em dist. Nenhum conteúdo, ID, nome, cookie ou segredo da conta real foi incluído.
 - STATE/ROADMAP/REQUIREMENTS/UAT/SECURITY/VERIFICATION, serviços, senha, sessão, originais e coletor fonte pertencem ao parent e não foram alterados por este executor. Prova operacional WhatsApp/VPS/MCP não realizada.
 
-## CUA real — PENDING_PARENT
+## CUA real — aprovada pelo parent em 2026-10-12
 
-Coverage D1/D2 acima classifica somente entregas sintéticas aprovadas. Não reconciliar G-02-6/WEB-04 apenas por esses resultados. Este SUMMARY complete significa tarefas de implementação/regressão/relatório entregues; o gate real permanece aberto.
+Coverage D1/D2 acima classifica entregas sintéticas aprovadas. O parent concluiu também o gate real pela CUA na cópia restaurada de 8.792 mensagens/856 originais, sem coletor, com a fonte e0d921c recarregada: posição sticky confirmada, busca com 12 resultados, contexto de 48 mensagens e duas conversas abertas pela UI. `source: autonomous`, `human_confirmation: false`; nenhum aceite humano é atribuído.
 
-Parent deve recarregar a tab privada da cópia offline já autenticada, confirmar CSS/app.js corrigidos servidos, abrir duas conversas pela UI, PageDown emA, cliqueB/A, PageDown emB, cliqueA/B. Medir scroll antes do gesto e retorno menor que2px, com conteúdo/referências/âncora preservados; conferir foco por teclado sem deslocar leitura antes da ativação e Fechar. Registrar apenas agregados sanitizados com source:autonomous e human_confirmation:false, acrescentar o resultado neste SUMMARY e somente então reconciliar UAT6/G-02-6.
+| Prova nativa real | Antes | Depois | Resultado |
+|---|---:|---:|---|
+| A/B/A após PageDown | 56463 | 56463 | delta0, conteúdo/referências renderizadas e âncora preservados |
+| B/A/B após wheel | 45583 | 45583 | delta0, conteúdo/referências renderizadas preservados |
+| Seta para foco sem ativar | 45583 | 45583 | seleção preservada, foco na outra aba |
+| Enter e Delete | posição própria | posição própria | ativação e fechamento restauram leitura; aba remanescente ativa |
+
+Âncora após abrir contexto: top375.59375, fundo da barra194, foco no elemento original, viewport1280×720. Cliques físicos pela API CUA em coordenadas dos controles já visíveis, teclado e wheel nativos; nenhuma chamada DOM click/activateTab ou ajuste programático do scroll nos caminhos de prova. O caminho locator.click da CUA ainda deslocou287px ao alcançar um controle sticky visível; a comparação com clique físico foi registrada, sem afirmar causa interna da ferramenta. A regressão de produto usa locator.click nativo do Playwright instalado e passou na matriz sintética. Não reduzir o limite menor que2px para absorver o deslocamento da ferramenta.
+
+Logout real confirmou login visível, senha vazia, arquivo oculto e abas/conteúdo removidos. Aba temporária fechada; helper próprio encerrado e cópia/credencial temporárias removidas. `closed.json` confirmou snapshot inalterado e hash da senha original preservado, coletor da cópia desabilitado. Provas sanitizadas privadas0600 `native-result.json`/`closed.json` sob o diretório privado de UAT; nenhuma conversa/ID/cookie/captura privada versionada. Apenas a tela de login sem conteúdo foi capturada para mostrar o encerramento.
 
 Não há checkpoint humano, nova autenticação ou bootstrap de tab privada pelo executor. Teste sintético, metadata de browser e teste histórico de clique programático não substituem essa prova.
 
