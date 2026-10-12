@@ -1,6 +1,6 @@
 ---
 phase: 03-consulta-e-arquivos-reais-no-codex
-verified: 2026-10-12T21:35:35Z
+verified: 2026-10-12T21:56:51Z
 status: passed
 score: 21/21 must-haves verified
 covered_files: [
@@ -23,6 +23,7 @@ covered_files: [
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-04-red-coverage.json",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-04-red1.json",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-ACCEPTANCE.md",
+  ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-CI.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-CONTEXT.md",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-DEPENDENCY-REVALIDATION.json",
   ".planning/phases/03-consulta-e-arquivos-reais-no-codex/03-DEPENDENCY-REVALIDATION.md",
@@ -83,7 +84,7 @@ covered_files: [
   "test/ui.test.ts",
   "tsconfig.json"
 ]
-covered_digest: "v3:sha256:ec0ffda3ec91b564319fdc6fe9bcbc9f98eca7fe9035c2182a00047df69c68b1"
+covered_digest: "v3:sha256:215240f1f46e55d163668eb06b6540fa73b8663e96492b6561aa8f91b2069c9f"
 behavior_unverified: 0
 overrides_applied: 0
 prohibitions_flagged: 0
@@ -146,19 +147,36 @@ publication_refresh:
   current_global_config_matches_old_baseline: false
   global_config_changed_after_tracer: true
   global_config_change_attribution: undetermined
+ci_fixture_refresh:
+  previous_status: passed
+  previous_verified: 2026-10-12T21:35:35Z
+  scope: publication-test-fixture-isolation
+  product_driver_frontend_pins_ci_parity: true
+  changed_test: test/mcp-acceptance.test.ts
+  fixture_reproduction_commit: 553030f
+  fixture_fix_commit: 6acd909
+  focused_independent_tests: "6/6 PASS; each named separately; exit0 and zero skipped"
+  real_receipts_from_controls: 0
+  review: "standard, one changed test file, clean/0 findings"
+  current_publication_regression:
+    tests: 190
+    passed: 190
+    failed: 0
+    duration_ms: 83720.024761
+  remote_ci_after_fixture_fix: pending
 human_verification: []
 ---
 
 # Fase 3: Consulta e arquivos reais no Codex — Verification Report
 
 **Phase Goal:** As a proprietário do acervo privado, I want to consultar no Codex instalado o mesmo acervo privado por MCP somente leitura e receber ou baixar anexos com integridade verificável, so that eu possa recuperar e conferir conversas e originais arquivados.
-**Verified:** 2026-10-12T21:35:35Z
+**Verified:** 2026-10-12T21:56:51Z
 **Status:** passed
 **Re-verification:** Sim — após os três grupos de gaps do relatório de 19:14:57Z, preservado em `history/03-VERIFICATION.iter1.md`.
 
 O objetivo local protegido foi alcançado: o Codex instalado consultou material real do arquivo offline e salvou dois originais íntegros por TLS verificado. Os bloqueios anteriores estão fechados por código, execução e estado privado conferidos independentemente. Não há override, proibição flagged, verdade incerta ou intervenção humana indispensável. Este veredito não representa implantação permanente na VPS.
 
-Refresh independente da réplica pública: as verificações funcionais detalhadas abaixo descrevem a rodada de20:21:56Z e suas provas preservadas. O refresh de publicação ao final registra os inputs documentais alterados, a regressão desta cópia e a UAT posterior. Alegações de preservação são temporais, não uma promessa de igualdade eterna da configuração global.
+Refresh independente da réplica pública: as verificações funcionais detalhadas abaixo descrevem a rodada de20:21:56Z e suas provas preservadas. O refresh de publicação ao final registra os inputs documentais alterados, a regressão desta cópia e a UAT posterior. Alegações de preservação são temporais, não uma promessa de igualdade eterna da configuração global. A paridade integral de testes da rodada pública de21:35 pertence àquele estado; o refresh CI abaixo registra a única fixture alterada depois, sem mudança do produto/driver real.
 
 ## User Flow Coverage
 
@@ -376,6 +394,33 @@ A auditoria de publicação foi repetida independentemente sobre origin/main..HE
 
 O fingerprint proprietário foi regenerado nesta cópia sobre o conjunto anterior mais03-UAT, documentos sanitizados e evidências públicas; campos retornados copiados verbatim. Documento SHIP da raiz de planning é inerte conforme política do owner. Relatório próprio e provas/logs privados não entram no digest. Somente este03-VERIFICATION da réplica foi atualizado; checkout original, fontes, testes, tracking e configuração global ficaram intocados. WINDOWS13/HTTPSweb/VPS/backup externo/restore final continuam na fase4, sem waiver ou fechamento.
 
+### Refresh incremental após falha CI da fixture
+
+A primeira publicação falhou remotamente em184/190: seis controles WR-02 encontraram ENOENT no preflight de Codex pessoal do runner e não alcançaram suas falhas planejadas. [03-CI.md](03-CI.md) preserva os links das execuções PR/push e a reprodução553030f com homedir isolado:6falhas/exit1. Trata-se de defeito de isolamento do teste; não é RED funcional de feature nem evidência classificada inventada. Os resultados remotos anteriores não são chamados de verdes.
+
+Foi lido o diff553030f→6acd909 e o arquivo atual de teste, rastreando runAcceptance/auditEvidence no driver inalterado. Somente test/mcp-acceptance.test.ts mudou funcionalmente nesta correção. O preflight sintético fica no diretório temporário da fixture: quatro bytes de assinatura ELF e retorno spawnSync identificado como codex-cli synthetic-fixture, com homedir injetado. Não executa esse stub nem lê a instalação/configuração pessoal. A identidade sintética não satisfaz o regex numérico do gate de aceite real em auditEvidence.
+
+As seis falhas continuam ligadas a permissão da chave, PEM inválido, SQL inicial, captura de estado, fechamento do listener e restauração. SQLite/serviço/recursos/transações permanecem reais. Overrides são locais à avaliação do callback, sem modificar módulos globais. Nenhum regex de erros, timeout ou assertion antiga foi enfraquecido; lock/bancos/config anterior/reabertura continuam conferidos. A nova assertion procura receipt.json nas tentativas e exige ausência: stub/fixture não se tornam evidência real. Em todos os seis caminhos o erro controlado ocorre antes de lançar o cliente.
+
+Foram executados por este verifier, separadamente, os seis testes `WR-02 cleanup releases live service and readonly DB after <fault>`, com Node24.21.0, modo real removido do ambiente e TMPDIR privado. Cada execução teve1teste ativo,exit0,zero fail/cancel/skip/todo:
+
+| Fault nomeado | Resultado | Duração TAP total |
+|---|---|---:|
+|key permissions|1/1 PASS|1226.259548ms|
+|invalid PEM|1/1 PASS|1145.203231ms|
+|initial SQL|1/1 PASS|1100.321694ms|
+|state capture|1/1 PASS|1245.990416ms|
+|listener cleanup|1/1 PASS|1233.025688ms|
+|restore cleanup|1/1 PASS|1201.392216ms|
+
+O log completo posterior à correção confirma190/190,exit0 normal registrado,zero fail/cancel/skip/todo,83720.024761ms; execução do orquestrador, não nova suíte deste verifier. REVIEW atual, standard/um arquivo, clean0achados, foi relido; suas6execuções próprias são evidência distinta. Disposição WR-01/02 fixed2/open0 preservada. TDD owner próprio novamente passed:true/block:false/violations:0,somente03-02/03-03; janelas originais8/7/4/4 recomputadas e ancestrais. A correção posterior de fixture não altera essas janelas nem inventa sequência de produto.
+
+`git diff main HEAD -- src scripts public package.json package-lock.json .github` permanece vazio. Fonte, driver real, frontend, dependências e workflow conservam a árvore da implementação verificada; a exceção de teste é declarada acima. Por isso a correção não invalida o aceite integrado12calls de17:13 ou tracer/UAT real21:03:34.968Z. Não houve novo cliente real, prova de conta, conexão/coletor ou leitura de originais nesta rodada.
+
+As21verdades, cinco requisitos, três proibições determinísticas e seus controles continuam satisfeitos no objetivo local; behavior_unverified:0 e nenhum gap novo confirmado. A fixture modificada prova cleanup e isolamento, não funcionamento do Codex real. O INFO temporal do TOML posterior à UAT permanece integralmente declarado: autoria/delta desconhecidos, ausência de zap_* na observação anterior, nenhuma igualdade atual inventada e nenhuma restauração ou assertion enfraquecida.
+
+CI remoto após o fix ainda precisa de nova execução/conferência pelo orquestrador; o gate local aprovado não é sucesso remoto. WINDOWS13/VPS/HTTPSweb/backup externo/restauração operacional seguem fase4. O fingerprint proprietário desta cópia incorpora03-CI.md,teste/REVIEW atuais e o conjunto anterior; campos retornados copiados verbatim. Somente este relatório foi editado, sem commit ou mudanças no checkout original/outros arquivos.
+
 ### Gaps Summary
 
 **0 gaps bloqueantes; três grupos anteriores fechados.** Goal MVP válida, três proibições determinísticas verdes e tracer sem credencial residual. Os hashes do acervo, tabelasWhatsApp, estadoweb eTOML conferidos em20:21 eram iguais ao baseline privado anterior à recuperação. A igualdade do TOML atual não é afirmada: uma modificação posterior à UAT foi observada e está delimitada no refresh de publicação. Nenhuma fonte viva/collector/socket foi reaberta para provar isso.
@@ -386,7 +431,7 @@ Somente03-VERIFICATION.md foi escrito. Nenhum commit, phase.complete, alteraçã
 
 ---
 
-_Verified: 2026-10-12T21:35:35Z_
+_Verified: 2026-10-12T21:56:51Z_
 _Verifier: gsd-verifier_
 
 Não repeti suíte integral, cliente real, pareamento ou inspeção visual. A aprovação cobre o objetivo local protegido; VPS, HTTPSweb operacional, backup externo e restauração final permanecem na fase4.
