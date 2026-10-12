@@ -20,7 +20,7 @@ Contrato de verificação derivado de 03-RESEARCH.md. Execução encerrada em 20
 | Build | `mise exec node@24.21.0 -- npm run build` |
 | Quick proposto | `mise exec node@24.21.0 -- node --test dist/test/mcp.test.js` após criação/build |
 | Suíte completa | `mise exec node@24.21.0 -- npm test` |
-| Duração | Suíte independente final: 177/177 em 88,764s, exit 0; foco e execução real no ledger |
+| Duração | Suíte independente atual: 184/184 em87,737s,exit0; foco e execução real no ledger |
 
 ## Sampling Rate
 
@@ -196,3 +196,7 @@ Conferência independente final do orquestrador: `run-with-timeout 600 -- bash -
 ## Convergência final da revisão
 
 REVIEW clean,zeroachados; disposição canônica2/2fixed,zeroopen. A segunda iteração do fix acrescentou a variante de paiTERM com descendente sem pipes e manteve184testes (duas variantes no controleWR-01). RED94f8332→GREENa512a69, alvo/foco40/40,self-test11e full184/184,exit0normal,103731ms,zero fail/cancel/skip/todo; logdist/03-review-fix-iter2-full.log. Revisor repetiu independentemente7/7controles atuais, incluindo ambas variantes. Os18arquivos regressivos das fases1/2 permanecem na suíte completa. TDDgate retornou passedtrue/blockfalse/violations0 para os2planos reconhecidos(03-02/03-03); RED/GREENexecutados das tarefas03-01/03-04 e dos fixes estão registrados separadamente e não são apresentados como reconhecimento do gate.
+
+## Conferência imediatamente anterior ao verificador
+
+Após convergência da revisão e última mudança de código, o orquestrador executou novamente o comando completo one-shot com limite600s e TMPDIR privado no home. Exit0 normal,184/184,zero fail/cancel/skip/todo,87736,763314ms; log privado suite-root-phase3-current.log. O checkout permaneceu sem alterações de código durante/depois da execução. Esta é a evidência atual do gate regressivo; as execuções177/184 anteriores continuam históricas. Nenhum requisito foi marcado por estes resultados isolados.
