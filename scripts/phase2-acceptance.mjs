@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { isDeepStrictEqual } from 'node:util';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import { validateSnapshot, restoreSnapshot, assertCollectorReady } from '../dist/src/backup.js';
@@ -19,11 +20,17 @@ export function auditEvidence(p) {
     const accepted = p.synthetic === false && p.originVerified === true && p.isolated === true && p.collectorEnabled === false
       && Array.isArray(p.expectedReferences) && p.expectedReferences.length > 100
       && same(p.references, p.expectedReferences) && new Set(p.references).size === p.references.length
-      && p.metadataEqual === true && Array.isArray(p.files) && p.files.every(f => Number.isSafeInteger(f.size) && f.size >= 0
+      && p.metadataEqual === true && Number.isSafeInteger(p.expectedFileCount) && p.expectedFileCount >= 0
+      && Array.isArray(p.files) && p.files.length === p.expectedFileCount && p.files.every(f => Number.isSafeInteger(f.size) && f.size >= 0
         && f.size === f.actualSize && /^[a-f0-9]{64}$/.test(f.sha256) && f.sha256 === f.actualSha256)
       && Array.isArray(p.missingExpected) && same(p.missing, p.missingExpected);
     return { accepted: Boolean(accepted) };
   } catch { return { accepted: false }; }
+}
+export function auditBrowserEvidence(p) {
+  const keys = ['anchor', 'independentPositions', 'keyboard', 'noEagerMedia', 'downloadHashes', 'zipVerified', 'logoutRace', 'storageEmpty', 'reflow'];
+  try { return { accepted: keys.every(k => p[k] === true) && ['imageMessage', 'audioMessage', 'videoMessage'].every(type => p.formats.some(f => f.type === type && f.originalVerified === true && ['decoded', 'played', 'fallback'].includes(f.state))) }; }
+  catch { return { accepted: false }; }
 }
 function privateJson(path) {
   const stat = lstatSync(path);
@@ -95,7 +102,7 @@ function zipOracle(path, db, c, period, snapshot) {
   const text = read('mensagens.txt').toString();
   check(rows.every(row => text.includes(row.reference)) && text.includes('America/Sao_Paulo'), 'readable references');
   const proof = { synthetic: false, originVerified: true, isolated: true, collectorEnabled: false, expectedReferences: rows.map(r => r.reference),
-    references: m.messages.map(r => r.reference), metadataEqual, files, missingExpected: expectedMissing, missing };
+    references: m.messages.map(r => r.reference), metadataEqual, expectedFileCount: entries.length - 2, files, missingExpected: expectedMissing, missing };
   check(auditEvidence(proof).accepted, 'independent ZIP acceptance');
   return { proof, counts: m.counts, revisions: m.messages.reduce((n, r) => n + r.revisions.length, 0), quotes: m.messages.filter(r => r.quote).length };
 }
@@ -105,7 +112,7 @@ export async function runAcceptance({ mode, snapshotDir, caseFile }) {
   const initial = validateSnapshot(snapshotDir), source = realpathSync(c.source);
   check(source !== realpathSync(snapshotDir), 'original and snapshot differ');
   const auth = new Database(join(source, 'auth.sqlite'), { readonly: true });
-  try { assertCollectorReady(source, auth); const creds = JSON.parse(auth.prepare('SELECT creds FROM whatsapp_profile WHERE id=1').get().creds); check(!!creds.me?.id && !!creds.account && creds.signalIdentities?.length > 0, 'linked original account'); } finally { auth.close(); }
+  try { assertCollectorReady(source, auth); const proof = JSON.parse(privateJson(join(source, 'backup-receipt.json')).proof); check(realpathSync(proof.snapshotDir) === realpathSync(snapshotDir) && proof.manifestHash === initial.digest, 'snapshot bound to verified source'); const creds = JSON.parse(auth.prepare('SELECT creds FROM whatsapp_profile WHERE id=1').get().creds); check(!!creds.me?.id && !!creds.account && creds.signalIdentities?.length > 0, 'linked original account'); } finally { auth.close(); }
   const oracle = new Database(join(snapshotDir, 'archive.sqlite'), { readonly: true }), period = periodFor(c), expected = rowsFor(oracle, c, period);
   check(expected.length > 100 && expected.some(r => r.reference === c.anchorReference), 'real recorte and anchor');
   const directory = mkdtempSync(join(tmpdir(), 'zap-phase2-proof-')); chmodSync(directory, 0o700);
@@ -165,7 +172,85 @@ export async function runAcceptance({ mode, snapshotDir, caseFile }) {
   } catch (error) { writeFileSync(join(directory, 'failure.json'), JSON.stringify({ stage, name: error.name, message: error.message }), { mode: 0o600 }); throw Error('Aceite recusado na etapa: ' + stage); }
   finally { oracle.close(); await new Promise(r => server.close(r)); await s.close(); rmSync(destination, { recursive: true }); }
 }
-async function runBrowser() { throw Error('Browser acceptance not implemented'); }
+async function runBrowser({ base, password, c, directory, oracle, period, snapshotDir }) {
+  const require = createRequire(process.env.ZAP_BROWSER_MODULE ?? '/home/otavio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
+  const { chromium } = require('playwright');
+  const browser = await chromium.launch({ executablePath: process.env.ZAP_BROWSER_EXECUTABLE ?? '/usr/bin/chromium', headless: true,
+    args: ['--no-sandbox', '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true }); page.setDefaultTimeout(20000);
+  const proof = { formats: [], browserVersion: browser.version() }; let gets = 0;
+  page.on('request', r => { if (/\/api\/attachments\/.*\/preview$/.test(r.url()) && r.method() === 'GET') gets++; });
+  const ready = () => page.waitForFunction(() => document.getElementById('reader')?.getAttribute('aria-busy') !== 'true' && document.querySelector('#messages li'));
+  const tabA = () => page.locator('#tab-' + c.conversationId), tabB = () => page.locator('#tab-' + c.secondConversationId);
+  const activate = async locator => { await locator.evaluate(el => el.click()); await ready(); };
+  try {
+    await page.goto(base); await page.locator('#password').fill(password); await page.locator('#login-button').click();
+    await page.waitForFunction(() => document.getElementById('archive')?.hidden === false && document.getElementById('login-status')?.textContent === '');
+    await page.locator('#contact-query').fill(c.contact); await page.locator('#locate-contact').click();
+    const candidate = page.locator('#contact-candidates > li').filter({ hasText: c.conversationId }); await candidate.getByRole('button', { name: 'Usar na busca' }).click();
+    await page.locator('#search-terms').fill(c.term); await page.locator('#search-from').fill(c.from); await page.locator('#search-to').fill(c.to); await page.locator('#search-submit').click();
+    const anchorAction = page.locator('#search-results button[data-reference="' + c.anchorReference + '"]'); await anchorAction.click(); await ready();
+    proof.anchor = await page.locator('#messages [data-anchor=true][data-reference="' + c.anchorReference + '"]').count() === 1;
+    const timestamp = oracle.prepare('SELECT original_timestamp FROM messages WHERE reference=?').get(c.anchorReference).original_timestamp;
+    check(await page.locator('#messages [data-anchor=true] time').getAttribute('datetime') === timestamp, 'browser original UTC');
+    await page.locator('#search-terms').fill(''); await page.locator('#search-submit').click();
+    await page.waitForFunction(() => document.querySelectorAll('#search-results > li').length === 50);
+    while (!(await page.locator('a[data-id="' + c.secondConversationId + '"]').count())) { check(await page.locator('#more-conversations').isVisible(), 'second real conversation listed'); const n = await page.locator('#conversations li').count(); await page.locator('#more-conversations').click(); await page.waitForFunction(n => document.querySelectorAll('#conversations li').length > n, n); }
+    await page.locator('a[data-id="' + c.secondConversationId + '"]').click(); await ready();
+    await page.evaluate(() => window.scrollTo(0, 1600)); const scrollB = await page.evaluate(() => scrollY);
+    await activate(tabA()); await page.evaluate(() => window.scrollTo(0, 2200)); const scrollA = await page.evaluate(() => scrollY);
+    const hashA = digest(await page.locator('#messages').textContent());
+    await activate(tabB()); check(Math.abs(await page.evaluate(() => scrollY) - scrollB) < 2, 'B position');
+    await activate(tabA()); proof.independentPositions = Math.abs(await page.evaluate(() => scrollY) - scrollA) < 2 && digest(await page.locator('#messages').textContent()) === hashA;
+    await tabA().focus(); await page.keyboard.press('ArrowRight'); check(await tabB().evaluate(el => el === document.activeElement), 'arrow focus');
+    check(await tabA().getAttribute('aria-selected') === 'true', 'focus distinct from selection'); await page.keyboard.press('Home'); check(await tabA().evaluate(el => el === document.activeElement), 'Home');
+    await page.keyboard.press('End'); check(await tabB().evaluate(el => el === document.activeElement), 'End'); await page.keyboard.press('Enter'); check(await tabB().getAttribute('aria-selected') === 'true', 'Enter'); proof.keyboard = true;
+    await activate(tabA()); check(await page.getByRole('tab').count() === 2, 'two real tabs'); proof.noEagerMedia = gets === 0;
+    const download = async (link, name) => { const pending = page.waitForEvent('download'); await link.click(); const d = await pending; check(await d.failure() === null, 'browser download finished'); const path = join(directory, name); await d.saveAs(path); chmodSync(path, 0o600); return path; };
+    for (const [i, a] of c.media.entries()) {
+      const action = page.locator('#search-results button[data-reference="' + a.reference + '"]');
+      while (!(await action.count())) { check(await page.locator('#more-results').isVisible(), 'real attachment result'); const n = await page.locator('#search-results > li').count(); await page.locator('#more-results').click(); await page.waitForFunction(n => document.querySelectorAll('#search-results > li').length > n, n); }
+      await action.click(); await ready();
+      const block = page.locator('#messages .attachment').filter({ has: page.locator('a[href="/api/attachments/' + a.id + '"]') });
+      check(await block.count() === 1, 'original attachment block'); const open = block.getByRole('button', { name: /^(Visualizar imagem|Ouvir áudio|Assistir vídeo)$/ }); let state = 'download-only';
+      if (await open.count()) {
+        await open.click(); const media = block.locator('.preview img,.preview audio,.preview video');
+        await media.waitFor();
+        if (a.type === 'imageMessage') { await page.waitForFunction(id => { const e = document.querySelector('#messages a[href="/api/attachments/' + id + '"]')?.closest('.attachment')?.querySelector('img'); return e?.complete && e.naturalWidth > 0; }, a.id); state = 'decoded'; }
+        else {
+          check(await media.evaluate(el => el.controls && !el.autoplay && el.preload === 'none'), 'native media controls');
+          const playback = await media.evaluate(async el => { try { await el.play(); return true; } catch { return false; } });
+          if (playback) { await page.waitForFunction(id => { const e = document.querySelector('#messages a[href="/api/attachments/' + id + '"]')?.closest('.attachment')?.querySelector('audio,video'); return e?.currentTime > 0 && (e.tagName !== 'VIDEO' || e.videoWidth > 0); }, a.id); state = 'played'; }
+          else { check(await media.evaluate(el => [3,4].includes(el.error?.code)), 'codec failure identified'); check((await block.textContent()).includes('Não foi possível visualizar este formato'), 'codec fallback copy'); state = 'fallback'; }
+        }
+      } else if (a.type !== 'documentMessage') { check((await block.textContent()).includes('Sem visualização integrada'), 'unsupported preview explained'); state = 'fallback'; }
+      check((await block.textContent()).includes('Disponível —'), 'codec not missing');
+      const saved = await download(block.locator('a.download'), 'original-' + i + '.bin'), bytes = readFileSync(saved), expected = readFileSync(join(snapshotDir, 'media', a.id + '.bin'));
+      check(bytes.length === expected.length && digest(bytes) === digest(expected), 'browser original hash'); proof.formats.push({ type: a.type, state, originalVerified: true });
+      if (await block.getByRole('button', { name: 'Fechar visualização' }).count()) { await block.getByRole('button', { name: 'Fechar visualização' }).click(); check(await block.locator('.preview [src]').count() === 0, 'preview close clears src'); }
+    }
+    proof.downloadHashes = true;
+    const panel = page.locator('#panel-' + c.conversationId), dates = panel.locator('.export-form input'); await dates.nth(0).fill(c.from); await dates.nth(1).fill(c.to);
+    await page.waitForFunction(start => document.querySelector('[role=tabpanel]:not([hidden]) .export-period')?.textContent?.includes(start), new Date(period.start).toISOString());
+    check(await page.locator('#messages li').count() < rowsFor(oracle, c, period).length, 'ZIP exceeds visible page');
+    await panel.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
+    await panel.getByRole('link', { name: 'Baixar ZIP', exact: true }).waitFor({ timeout: 120000 }); const zip = await download(panel.getByRole('link', { name: 'Baixar ZIP', exact: true }), 'browser.zip');
+    const checked = zipOracle(zip, oracle, c, period, snapshotDir); proof.zipVerified = auditEvidence(checked.proof).accepted;
+    for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'real reflow'); const path = join(directory, 'browser-' + width + '.png'); await page.screenshot({ path }); chmodSync(path, 0o600); }
+    await page.setViewportSize({ width: 320, height: 900 }); await page.evaluate(() => document.styleSheets[0].insertRule(':root{font-size:200%}', document.styleSheets[0].cssRules.length));
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '200 percent font reflow'); const shot = join(directory, 'browser-font200.png'); await page.screenshot({ path: shot }); chmodSync(shot, 0o600); proof.reflow = true;
+    proof.storageEmpty = await page.evaluate(() => localStorage.length === 0 && sessionStorage.length === 0);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await tabB().focus(); await page.keyboard.press('Delete'); check(await page.getByRole('tab').count() === 1, 'Delete closes real tab');
+    let release, started; const held = new Promise(r => release = r), began = new Promise(r => started = r); let fulfilled;
+    const completed = new Promise(r => fulfilled = r);
+    await page.route('**/api/context/*?*', async route => { const response = await route.fetch(); started(); await held; try { await route.fulfill({ response }); } finally { fulfilled(); } });
+    await page.locator('#refresh-conversation').click(); await began; await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); release(); await completed;
+    await page.waitForTimeout(100); await page.unroute('**/api/context/*?*');
+    proof.logoutRace = await page.getByRole('tab').count() === 0 && await page.locator('#conversation-panels').textContent() === '' && await page.locator('#search-results li,.preview [src],a.download').count() === 0;
+    check(auditBrowserEvidence(proof).accepted, 'browser acceptance'); return { ...proof, passed: true };
+  } finally { await browser.close(); }
+}
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   runAcceptance({ mode: process.argv[process.argv.indexOf('--mode') + 1], snapshotDir: process.env.ZAP_PHASE2_SNAPSHOT, caseFile: process.env.ZAP_PHASE2_CASE_FILE })

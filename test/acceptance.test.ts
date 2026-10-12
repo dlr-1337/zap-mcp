@@ -9,7 +9,7 @@ async function audit(proof: unknown) {
 const fixture = () => ({ synthetic: false, originVerified: true, isolated: true, collectorEnabled: false,
   expectedReferences: Array.from({ length: 101 }, (_, i) => 'synthetic-' + i),
   references: Array.from({ length: 101 }, (_, i) => 'synthetic-' + i),
-  metadataEqual: true, files: [{ size: 3, actualSize: 3, sha256: 'a'.repeat(64), actualSha256: 'a'.repeat(64) }],
+  metadataEqual: true, expectedFileCount: 1, files: [{ size: 3, actualSize: 3, sha256: 'a'.repeat(64), actualSha256: 'a'.repeat(64) }],
   missingExpected: ['synthetic-missing'], missing: ['synthetic-missing'] });
 
 test('aceite recusa evidência sintética ou ZIP truncado', async () => {
@@ -21,6 +21,7 @@ test('aceite recusa evidência sintética ou ZIP truncado', async () => {
     { ...fixture(), metadataEqual: false }, { ...fixture(), missing: [] },
     { ...fixture(), files: [{ ...fixture().files[0], actualSha256: 'b'.repeat(64) }] },
     { ...fixture(), files: [{ ...fixture().files[0], actualSize: 2 }] },
+    { ...fixture(), files: [] },
     { ...fixture(), isolated: false }, { ...fixture(), collectorEnabled: true }
   ];
   for (const proof of invalid) assert.equal((await audit(proof)).accepted, false, 'evidência insuficiente não pode aprovar aceite real');

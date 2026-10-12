@@ -14,9 +14,16 @@ Este relatório registra execução do agente; o veredito independente da fase p
 
 Prova privada rotulada **P2-OFFLINE**: report.json e offline.zip no diretório novo privado da execução; índice privado latest-real-offline.json ao lado do caso. Apenas agregados são públicos. O restore descartável foi removido após fechar servidor/banco/trava.
 
-## Browser e cobertura final
+## Browser real
 
-Ainda em execução no plano02-05. O script aceita modo real-browser mas seu fluxo será implementado/verificado na tarefa02-05-02 antes de encerrar o plano. Não há afirmação de codec, aceite visual ou dispositivos físicos nesta etapa.
+- Chromium152.0.7977.82/Playwright do bundle existente, sem instalar dependência. Mesma cópia privada sem coletor; candidato porID→termo/período→âncora com UTC original.
+- Duas conversas reais conservaram texto/DOM e scroll próprios; setas/Home/End moveram foco, Enter ativou e Delete fechou. Conteúdo não foi persistido em localStorage/sessionStorage. Zero GET de preview antes de ação.
+- Imagem real decodificada; áudio e vídeo reais reproduzidos por controles nativos com currentTime>0 e videoWidth>0. Documento seguiu download. Quatro downloads nativos concluídos (`download.failure()===null`, saveAs) com tamanho/SHA igual aos originais preservados.
+- ZIP do browser, além da página visível:1.028mensagens/190arquivos/112faltantes, mesmas refs/UTC/citações/versões/bytes e conjunto exato conferidos contra SQL/files; unzip -t0.
+- Layout sem overflow do documento em320/768/1280 e fonte200%. Capturas reais0600 privadas; não publicadas. Fonte200% não é zoom nativo; nenhum dispositivo físico foi testado.
+- Logout venceu resposta real de contexto retida, limpando abas/resultados/players/src/downloads. Estados hostis/faults/TTL/bfcache/codecs deliberadamente não suportados são cobertos pelas fixtures, discriminadas na matriz final.
+- Prova privada **P2-BROWSER**: report.json, browser.zip, quatro originais efetivamente baixados e capturas do diretório de execução; índice latest-real-browser.json ao lado do caso. Nenhum aceite humano ou avaliação semântica de negociação é presumido.
+- Self-check3/3 e focados acceptance/ui16/16 passaram. O primeiro browser-run parou por seletor do roteiro consultar preview no resultado em vez do leitor; seletor confinado a #messages corrigido e prova real repetida passou. Produto intacto.
 
 ## Limites
 
