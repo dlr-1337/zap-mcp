@@ -48,7 +48,7 @@ Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pel
 - A descrição inicial citou Codex e Claude; ao esclarecer onde pretende usar o MCP, o usuário respondeu “no meu codex”. A validação obrigatória do v1 será no Codex do usuário.
 - O arquivo persistido deve continuar consultável quando a conexão com WhatsApp cair. A conexão é necessária para obter novos dados, não para reler o que já foi salvo.
 - A disponibilidade de mensagens antigas e mídias deve ser investigada e depois validada com a conta real; ausência de um registro no arquivo não prova que ele nunca existiu.
-- Ambiente inicial: repositório Git vazio em `/home/otavio/Documents/ChatGPT/zap-mcp 2`, sem `.planning/` anterior.
+- Ambiente inicial: repositório Git vazio em `<checkout>`, sem `.planning/` anterior.
 - Repositório público criado a pedido do usuário: https://github.com/dlr-1337/zap-mcp, com branch principal `main`. Fonte e documentação são públicas; mensagens, mídias, banco, sessões e credenciais permanecem no ambiente privado e fora do Git.
 - VPS, domínio, capacidade de armazenamento e acessos de implantação ainda precisam ser identificados na etapa de preparação do ambiente; não são pré-requisitos para este planejamento.
 - Não há prazo ou orçamento numérico informado.
