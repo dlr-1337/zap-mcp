@@ -1,0 +1,10 @@
+{
+  "command": "mise exec node@24.21.0 -- node --test --test-reporter=tap --test-name-pattern=reserva dist/test/recovery.test.js",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: reserva de tamanho desconhecido cede variação do disco sem cancelar compromisso conhecido\nnot ok 1 - reserva de tamanho desconhecido cede variação do disco sem cancelar compromisso conhecido\n  ---\n  duration_ms: 26.506892\n  type: 'test'\n  location: '/home/otavio/Documents/ChatGPT/zap-mcp 2/dist/test/recovery.test.js:82:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'retry_wait'\n    - 'available'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'available'\n  actual: 'retry_wait'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///home/otavio/Documents/ChatGPT/zap-mcp%202/dist/test/recovery.test.js:92:12)\n    process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 300.493982\n",
+  "targetFile": "dist/test/recovery.test.js",
+  "targetTest": "reserva de tamanho desconhecido cede variação do disco sem cancelar compromisso conhecido",
+  "expected": "ambos originais available após variação controlada4096 bytes com espaço amplo",
+  "actual": "reserva unknown ocupa todo free; known muda retry_wait",
+  "semanticAssessment": "Asserção de state available falha no job conhecido por falso ENOSPC; 4096 bytes de variação controlada mantém quase1GiB livre."
+}

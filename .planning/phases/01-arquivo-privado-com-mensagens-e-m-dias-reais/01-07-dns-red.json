@@ -1,0 +1,10 @@
+{
+  "command": "mise exec node@24.21.0 -- node --test --test-reporter=tap --test-name-pattern=\"dispatcher aceita DNS público\" dist/test/media.test.js",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: dispatcher aceita DNS público fixado no Node24 sem erro de formato IP\nnot ok 1 - dispatcher aceita DNS público fixado no Node24 sem erro de formato IP\n  ---\n  duration_ms: 40.262074\n  type: 'test'\n  location: '/home/otavio/Documents/ChatGPT/zap-mcp 2/dist/test/media.test.js:465:1'\n  failureType: 'testCodeFailure'\n  error: 'DNS já validado deve passar pelo contrato de lookup do Node24'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'ERR_INVALID_IP_ADDRESS'\n  actual: 'ERR_INVALID_IP_ADDRESS'\n  operator: 'notStrictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///home/otavio/Documents/ChatGPT/zap-mcp%202/dist/test/media.test.js:474:16)\n    process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 558.147121\n",
+  "targetTest": "dispatcher aceita DNS público fixado no Node24 sem erro de formato IP",
+  "targetFile": "test/media.test.ts",
+  "expected": "DNS público validado não produz ERR_INVALID_IP_ADDRESS",
+  "actual": "ERR_INVALID_IP_ADDRESS",
+  "semanticAssessment": "Target executou e falhou na asserção notEqual pelo contrato Node24 lookup all:true."
+}

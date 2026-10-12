@@ -1,0 +1,10 @@
+{
+  "command": "mise exec node@24.21.0 -- node --test --test-reporter=tap --test-name-pattern 'thumbnail-only nunca cria job nem satisfaz original disponível' dist/test/media.test.js",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: thumbnail-only nunca cria job nem satisfaz original disponível\nnot ok 1 - thumbnail-only nunca cria job nem satisfaz original disponível\n  ---\n  duration_ms: 13.442605\n  type: 'test'\n  location: '/home/otavio/Documents/ChatGPT/zap-mcp 2/dist/test/media.test.js:22:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    miniatura não é original\n    + actual - expected\n    \n    + 'pending'\n    - 'unavailable'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'unavailable'\n  actual: 'pending'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///home/otavio/Documents/ChatGPT/zap-mcp%202/dist/test/media.test.js:27:12)\n    Test.runInAsyncScope (node:async_hooks:227:14)\n    Test.run (node:internal/test_runner/test:1402:25)\n    Test.start (node:internal/test_runner/test:1262:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 279.264918\n",
+  "targetTest": "thumbnail-only nunca cria job nem satisfaz original disponível",
+  "targetFile": "test/media.test.ts",
+  "expected": "unavailable sem job",
+  "actual": "pending com job",
+  "semanticAssessment": "A ingestão terminou e a asserção do estado de miniatura falhou: pending em vez de unavailable. Sem falha de import/setup."
+}

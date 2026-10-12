@@ -1,0 +1,33 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Arquivo privado com mensagens e mídias reais",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Busca, contexto, abas e exportação no site",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Consulta e arquivos reais no Codex",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Operação e restauração na VPS",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (plan phase 2)",
+    "reason": "Phase 2 of 4 — needs a plan"
+  },
+  "updated_at": "2026-10-11T04:27:42.527Z"
+}

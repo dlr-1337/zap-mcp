@@ -6,7 +6,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ## Phases
 
-- [ ] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício.
+- [x] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício. (completed 2026-10-11)
 - [ ] **Phase 2: Busca, contexto, abas e exportação no site** - Encontrar evidências, comparar conversas e exportar o recorte completo com seus arquivos.
 - [ ] **Phase 3: Consulta e arquivos reais no Codex** - Usar o MCP privado no Codex instalado e comprovar recebimento ou download dos binários.
 - [ ] **Phase 4: Operação e restauração na VPS** - Manter o serviço supervisionado, backup privado fora da VPS e o fluxo real verificável após restauração.
@@ -15,19 +15,27 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ### Phase 1: Arquivo privado com mensagens e mídias reais
 
-**Goal:** O proprietário consegue vincular sua conta sem navegador e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, inclusive sem conexão com o WhatsApp.
+**Goal:** As a proprietário da conta, I want to vincular minha conta sem navegador no coletor e consultar um arquivo privado durável de mensagens e anexos efetivamente recebidos, so that eu possa recuperar esse material inclusive sem conexão com o WhatsApp.
 **Mode:** mvp
 **Depends on**: Nothing (primeira fase)
 **Requirements**: PRIV-01, PRIV-02, PRIV-03, SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, EVID-01, MEDIA-01, MEDIA-02, MEDIA-03, WEB-01
 **Success Criteria** (o que deve ser observável):
 
 1. O proprietário entra e sai da interface privada, vincula a conta pelo QR no celular sem navegador no coletor e vê o estado da conexão; acesso sem credencial ao QR ou ao acervo, inclusive por ID/URL direto, é recusado. Credenciais e chaves não aparecem no Git, logs ou respostas, e conteúdo recebido é tratado como dado sem execução privilegiada.
-2. Em uma conversa real conhecida, o proprietário confere as mensagens de cada lote recebido e novas mensagens individuais/de grupo, recebidas ou enviadas pelo celular, com referência estável, chave de origem, autoria/direção, data original, tipo, texto/legenda, citação e estados de anexos; campos desconhecidos ficam explícitos e homônimos ou identidades PN/LID não são mesclados sem evidência.
+2. Em uma conversa real conhecida, a comparação autorizada com WhatsApp Web confere as mensagens de cada lote recebido e novas mensagens individuais/de grupo, recebidas ou enviadas pela própria conta, com referência estável, chave de origem, autoria/direção, data original, tipo, texto/legenda, citação e estados de anexos; campos desconhecidos ficam explícitos e homônimos ou identidades PN/LID não são mesclados sem evidência.
 3. O proprietário reabre conversas e anexos já arquivados com o WhatsApp desconectado; após reinício/reconexão, uma sessão ainda válida retoma sem novo QR por perda de chaves locais, mantém um único coletor e conserva mensagens sem duplicação ou regressão de atualizações quando eventos são repetidos ou chegam fora de ordem.
 4. Áudios, imagens, vídeos e documentos acessíveis começam a ser preservados junto da ingestão e seus bytes originais ficam disponíveis offline somente após conferência de tamanho/hash; o proprietário distingue pendência, falha recuperável e indisponibilidade, observa retomada após interrupção com tentativas/concorrência limitadas e não perde material já salvo quando uma mídia falha ou o disco fica sem espaço.
-5. O proprietário vê última sincronização, intervalo observado, falhas, edições/revogações com momento de observação e o conteúdo anteriormente capturado identificado como histórico; tipos desconhecidos e conteúdo temporário não recuperado permanecem explícitos. A comparação com o celular registra a cobertura realmente observada, e ausência é descrita como “não encontrado no acervo”, sem promessa de histórico integral.
+5. O proprietário vê última sincronização, intervalo observado, falhas, edições/revogações com momento de observação e o conteúdo anteriormente capturado identificado como histórico; tipos desconhecidos e conteúdo temporário não recuperado permanecem explícitos. A comparação com WhatsApp Web registra a cobertura realmente observada, e ausência é descrita como “não encontrado no acervo”, sem promessa de histórico integral. O usuário dispensou a comparação manual pelo celular em 2026-10-11.
 
 **Plans**: 0 (não planejados)
+- [x] 01-01-PLAN.md
+- [x] 01-02-PLAN.md
+- [x] 01-03-PLAN.md
+- [x] 01-04-PLAN.md
+- [x] 01-05-PLAN.md
+- [x] 01-06-PLAN.md
+- [x] 01-07-PLAN.md
+
 **UI hint**: yes
 
 **Condições do piloto:** Preparar e conferir uma cópia privada recuperável antes de vincular a conta ou acumular dados reais, antecipando a proteção de OPS-02 sem duplicar sua responsabilidade final. O pareamento exige o celular do usuário para ler o QR. Fixtures não substituem a conversa e as mídias reais conhecidas; uma lacuna essencial deve ser registrada e ter sua viabilidade resolvida antes de avançar à interface completa. Revalidar a tag/release Baileys recomendada, `7.0.0-rc14` fixada e ainda prerelease, suas correções, persistência de todas as chaves, PN/LID e semântica dos eventos antes de instalar e pilotar. Definir a retenção de alterações e conteúdo temporário antes da ingestão; visualização única ou material indisponível não será contornado.
@@ -101,7 +109,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Arquivo privado com mensagens e mídias reais | 0/0 | Not started | - |
+| 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 0/0 | Not started | - |
 | 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |

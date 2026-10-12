@@ -15,7 +15,8 @@
     "create_tag": false,
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
-    "quick_branch_template": null
+    "quick_branch_template": null,
+    "allow_default_branch_commits": true
   },
   "workflow": {
     "research": true,
@@ -50,7 +51,8 @@
     "security_block_on": "high",
     "tdd_mode": true,
     "ui_review": true,
-    "use_worktrees": true
+    "use_worktrees": true,
+    "_auto_chain_active": true
   },
   "ship": {
     "pr_body_sections": []
