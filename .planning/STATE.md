@@ -3,12 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: Not started
-status: planning
+status: "Phase 03 shipped — PR #3"
 stopped_at: "UAT da fase 3 concluída: 12/12 e verification passed; próxima ação: discutir a fase 4"
-last_updated: "2026-10-12T21:08:16.864Z"
+last_updated: "2026-10-12T21:41:08.797Z"
 last_activity: 2026-10-12
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 58b90da1049c5f8b70e70a304465e0ef0780e08b
+state_head: 6246c97211fa135244521279fd9f9304c21633c7
 progress:
   total_phases: 4
   completed_phases: 3
@@ -33,8 +32,8 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 Phase: 4 — Operação e restauração na VPS
 Current Plan: Not started
 Total Plans in Phase: 0
-Status: Ready to plan
-Last activity: 2026-10-12 — Phase 03 complete, transitioned to Phase 4
+Status: Phase 03 shipped — PR #3
+Last activity: 2026-10-12
 
 Progress: [████████░░] 75% — 3/4 fases; 17/17 planos definidos concluídos
 
@@ -117,6 +116,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: Endpoint MCP de aceite transitório: HTTPS verificado, CA e configuração somente no subprocesso; zero chaves MCP/tokens residuais e acervo, sessão, autenticação web e TOML preservados.
 - [Phase 03]: Próxima ação é discutir a fase 4; VPS permanente, HTTPS/login web Origin403, backup externo e restauração operacional seguem pendentes. Ponteiros antigos para tarefas das fases 1/2 são históricos, já concluídos.
 - [Phase 03]: UAT autônoma da fase 3 passou 12/12 cenários, zero issues/bloqueadores; dez entregas auto-covered e prova nova Codex/TLS/dois originais/cleanup1/1. Predicate uat-passed exige e confirma verification passed; confirmação humana não presumida.
+- [Phase 03]: Fase 3 publicada no PR #3: https://github.com/dlr-1337/zap-mcp/pull/3; branch codex/phase-3-codex-mcp sobre main. Réplica sanitizada preserva67commits reais e fonte/testes/pins; CI remoto em acompanhamento, sem implantação na VPS.
 
 ### Pending Todos
 

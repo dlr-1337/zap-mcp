@@ -42,6 +42,8 @@ CI da main final5a95123: **144/144**,0fail/cancelled/skipped/todo, na [execuçã
 
 # Publicação da fase 3
 
+[PR #3](https://github.com/dlr-1337/zap-mcp/pull/3): Fase3 — consulta e originais privados no Codex por MCP, branch codex/phase-3-codex-mcp → main. Criado em2026-10-12; verificação da réplica passed21/21 e UAT12/12. Revisões independentes atuais e comparação do diff foram reutilizadas porque não há mudança funcional na publicação; não houve solicitação a colegas ou comando externo configurado. CI remoto em acompanhamento.
+
 A publicação parte de origin/main e preserva a sequência de67commits reais da fase3, com autores/datas, testes RED e implementações GREEN. Uma réplica sanitizada remove os dois hashes de anexos reais dos documentos de aceite em todas as versões e substitui caminhos locais privados por marcadores. Referências aos commits da fase3 nos documentos são mapeadas aos hashes da réplica; as janelas dos quatro SUMMARYs continuam8/8,7/7,4/4,4/4. Não há testes ou commits funcionais inventados. O histórico original permanece no checkout de implementação, sem alterações.
 
 Fontes, testes, scripts, frontend, pins/lock e CI são byte a byte iguais ao estado local verificado. Os demais documentos das fases1/2 não foram alterados. A auditoria prévia encontrou140blobs novos e somente os dois hashes reais mencionados; a correspondência por nome era um rótulo público do caminho do projeto. Não foram encontrados valores conhecidos de credenciais, identidades/IDs reais ou caminhos do runtime privado. Banco, mídia, sessão, tokens e provas completas continuam fora do Git.
