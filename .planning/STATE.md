@@ -4,10 +4,10 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: Not started
 status: planning
-stopped_at: "Fase 3 publicada no PR #3, CI190/190 aprovado; fase4 pronta para discussão"
-last_updated: "2026-10-12T22:07:36.415Z"
+stopped_at: "Fase 3 integrada em main via PR #3, CI190/190 aprovado; próxima ação: discutir a fase4"
+last_updated: "2026-10-12T22:16:58.811Z"
 last_activity: 2026-10-12
-state_head: 89d94ec4bc069abc69cc9a77e94228575b42d2aa
+state_head: 905028aea7afbd25156b28c7d9d1c0f553f7a7f9
 progress:
   total_phases: 4
   completed_phases: 3
@@ -118,6 +118,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: UAT autônoma da fase 3 passou 12/12 cenários, zero issues/bloqueadores; dez entregas auto-covered e prova nova Codex/TLS/dois originais/cleanup1/1. Predicate uat-passed exige e confirma verification passed; confirmação humana não presumida.
 - [Phase 03]: Fase 3 publicada no PR #3: https://github.com/dlr-1337/zap-mcp/pull/3; branch codex/phase-3-codex-mcp sobre main. Réplica sanitizada preserva67commits reais e fonte/testes/pins; CI remoto em acompanhamento, sem implantação na VPS.
 - [Phase 03]: CI do PR #3 e do push89d94ec concluído190/190 no Ubuntu/Node24.21.0, zero fail/cancelled/skipped/todo. Correção test-only do preflight de cleanup isolou Codex pessoal; produto/driver/pins/workflow não mudaram. Fase4 continua não iniciada.
+- [Phase 03]: PR #3 integrado por merge commit905028a; CI da main38314994967 aprovado. Checkout main sincronizado, histórico original protegido no backup local; código de execução/pins/serviço/dados privados preservados. Próxima capacidade permanece fase4.
 
 ### Pending Todos
 
@@ -146,8 +147,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T22:07:36.367Z
-Stopped at: Fase 3 publicada no PR #3, CI190/190 aprovado; fase4 pronta para discussão
+Last session: 2026-10-12T22:16:58.760Z
+Stopped at: Fase 3 integrada em main via PR #3, CI190/190 aprovado; próxima ação: discutir a fase4
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
