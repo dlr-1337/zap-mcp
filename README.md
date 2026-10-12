@@ -31,7 +31,7 @@ Veja o [contexto do projeto](.planning/PROJECT.md), os [requisitos](.planning/RE
 
 Depois de entrar, escolha um contato ou grupo pelos candidatos apresentados e combine termo e período. Datas dos filtros usam America/Sao_Paulo; mensagens sem instante original conhecido ficam explícitas e não recebem uma data inventada. Um resultado abre sua mensagem no contexto; abas conservam posições de leitura independentes.
 
-Imagem, áudio e vídeo suportados abrem sob ação. Arquivos disponíveis continuam com download privado quando o navegador não suporta o formato. “Exportar conversa” permite gerar um ZIP de toda a conversa arquivada ou do período escolhido, incluindo mensagens além da página visível. O pacote inclui messages.txt, manifest.json e os originais disponíveis; anexos faltantes e versões capturadas são relacionados no manifesto. Falha não produz um pacote rotulado como pronto.
+Imagem, áudio e vídeo suportados abrem sob ação. Arquivos disponíveis continuam com download privado quando o navegador não suporta o formato. “Exportar conversa” permite gerar um ZIP de toda a conversa arquivada ou do período escolhido, incluindo mensagens além da página visível. O pacote inclui mensagens.txt, manifest.json e os originais disponíveis; anexos faltantes e versões capturadas são relacionados no manifesto. Falha não produz um pacote rotulado como pronto.
 
 O recorte fica congelado, mas uma restrição de privacidade recebida depois bloqueia conteúdo e bytes futuros, inclusive em downloads já abertos. Bytes que já foram entregues não podem ser recolhidos. Não há envio, edição, exclusão ou confirmação de leitura no WhatsApp.
 
