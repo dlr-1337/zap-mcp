@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, appendFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import Database from 'better-sqlite3';
+import { createService } from '../src/main.js';
+import { createAuthState } from '../src/whatsapp.js';
 
 // Dynamic loading makes a missing verifier an assertion failure, not a test-load error.
 const modulePath = '../../scripts/phase3-acceptance.mjs';
@@ -28,6 +31,53 @@ function control(t: { after(fn: () => void): void }) {
 test('aceite rejeita replay JSON antigo sem processo Codex atual', t => {
   const { proof, live } = control(t); assert.deepEqual(audit(proof), { accepted: false });
   assert.deepEqual(audit(proof, JSON.parse(JSON.stringify(live))), { accepted: false }, 'serialized live evidence cannot recreate a current run');
+});
+
+for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state capture', 'listener cleanup', 'restore cleanup']) test(`WR-02 cleanup releases live service and readonly DB after ${fault}`, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-setup-')), dataDir = join(dir, 'data'), destination = join(dir, 'proof');
+  mkdirSync(destination, { mode: 0o700 });
+  const seed = createService({ dataDir });
+  try {
+    const auth = createAuthState(seed.authDb, { newProfile: true }); auth.saveCreds({ me: { id: 'synthetic@lid', name: 'fixture' }, account: {} as any, signalIdentities: [{}] as any });
+    for (let i = 0; i < 130; i++) seed.writeMessage({ reference: 'synthetic-' + i, conversationId: 'fixture@lid', conversationName: 'fixture', text: 'testword', originalTimestamp: new Date(1700000000000 + i * 1000).toISOString() });
+    const creds = JSON.parse((seed.authDb.prepare('SELECT creds FROM whatsapp_profile WHERE id=1').get() as any).creds);
+    writeFileSync(join(dataDir, 'manifest.json'), JSON.stringify({ databases: { 'archive.sqlite': { counts: { messages: 130 } } }, profile: createHash('sha256').update(Buffer.from(creds.signedIdentityKey.public.data, 'base64')).digest('hex') }), { mode: 0o600 });
+    writeFileSync(join(dataDir, 'restored.json'), JSON.stringify({ offlineOnly: true }), { mode: 0o600 });
+  } finally { await seed.close(); }
+  const keyFile = join(dir, 'key'), certFile = join(dir, 'cert'), caFile = join(dir, 'ca'), caseFile = join(dir, 'case');
+  for (const file of [keyFile, certFile, caFile]) writeFileSync(file, 'INVALID_PEM', { mode: 0o600 });
+  if (fault === 'key permissions') chmodSync(keyFile, 0o644);
+  writeFileSync(caseFile, JSON.stringify({ synthetic: false, dataDir, destination, keyFile, certFile, caFile }), { mode: 0o600 });
+  const databases: Database.Database[] = []; let service: ReturnType<typeof createService> | undefined;
+  const originalDb = new Database(join(dataDir, 'auth.sqlite'), { readonly: true });
+  const originalOwner = originalDb.prepare('SELECT * FROM web_owner').all(), originalConfig = originalDb.prepare('SELECT * FROM web_config').all(); originalDb.close();
+  class ObservedDatabase extends Database {
+    constructor(path: string, options: Database.Options) { super(path, options); databases.push(this); if (fault === 'initial SQL' && path.endsWith('archive.sqlite')) this.prepare = (() => { throw Error('initial SQL fault'); }) as typeof this.prepare; }
+  }
+  const fs = await import('node:fs'), paths = await import('node:path'), os = await import('node:os'), crypto = await import('node:crypto'), cp = await import('node:child_process'), https = await import('node:https'), http = await import('node:http'), url = await import('node:url'), util = await import('node:util');
+  const phase2Path = '../../scripts/phase2-acceptance.mjs', phase2 = await import(phase2Path);
+  const deps = { assert, ...fs, ...paths, ...os, ...crypto, ...cp, ...https, pathToFileURL: url.pathToFileURL, plainRequest: http.request, same: util.isDeepStrictEqual,
+    Database: ObservedDatabase, createService: (options: any) => {
+      service = createService(options);
+      if (fault === 'state capture') { const prepare = service.authDb.prepare.bind(service.authDb); service.authDb.prepare = ((sql: string) => { if (sql === 'SELECT * FROM web_sessions') throw Error('state capture fault'); return prepare(sql); }) as typeof prepare; }
+      if (fault === 'restore cleanup') service.authDb.transaction = (() => { throw Error('restore cleanup fault'); }) as typeof service.authDb.transaction;
+      return service;
+    }, calendarStart: phase2.calendarStart,
+    ...(fault.endsWith('cleanup') ? { createServer: (_options: any, listener: any) => { const server = https.createServer({}, listener); if (fault === 'listener cleanup') server.closeAllConnections = () => { throw Error('listener cleanup fault'); }; return server; }, rotateMcpToken: () => { throw Error('transport fault'); } } : {}) };
+  // Evaluate the unchanged acceptance flow with real resources; capture ownership for assertions/RED cleanup.
+  const body = source.slice(0, source.indexOf('if (process.argv[1]')).replace(/^import .*;\n/gm, '').replace(/\bexport /g, '').replaceAll('import.meta.url', JSON.stringify(new URL(modulePath, import.meta.url).href));
+  const names = Object.keys(deps).filter(name => name !== 'default');
+  const run = new Function(...names, 'return (() => {' + body + ';return runAcceptance;})()')(...names.map(name => (deps as any)[name]));
+  try {
+    await assert.rejects(run(caseFile), /initial SQL|state capture|cleanup fault|private file|PEM|DECODER|Aceite recusado/);
+    assert.equal(existsSync(join(dataDir, 'service.lock')), false, 'setup failure retained live service lock');
+    assert.ok(databases.every(db => !db.open), 'setup failure retained readonly database');
+    const reopened = createService({ dataDir });
+    try { assert.deepEqual(reopened.authDb.prepare('SELECT * FROM web_owner').all(), originalOwner); assert.deepEqual(reopened.authDb.prepare('SELECT * FROM web_config').all(), originalConfig); }
+    finally { await reopened.close(); }
+  } finally {
+    await service?.close(); for (const db of databases) if (db.open) db.close(); rmSync(dir, { recursive: true });
+  }
 });
 test('aceite exige processo, protocolo, TLS, quatro ferramentas e oráculos independentes', t => {
   const { proof, live } = control(t); assert.deepEqual(audit(proof, live), { accepted: true });
