@@ -1,7 +1,8 @@
 ---
 phase: 03-consulta-e-arquivos-reais-no-codex
-reviewed: 2026-10-12T18:03:40Z
+reviewed: 2026-10-12T18:47:28Z
 depth: standard
+iteration: 3
 files_reviewed: 12
 files_reviewed_list:
   - README.md
@@ -18,53 +19,58 @@ files_reviewed_list:
   - test/readonly.test.ts
 findings:
   critical: 0
-  warning: 2
+  warning: 0
   info: 0
-  total: 2
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Fase 3: Code Review Report
 
-**Reviewed:** 2026-10-12T18:03:40Z
+**Reviewed:** 2026-10-12T18:47:28Z
 **Depth:** standard
 **Files Reviewed:** 12
-**Status:** issues_found
+**Iteration:** 3
+**Status:** clean
 
 ## Summary
 
-Revisão adversarial do escopo explícito atual da fase 3, com leitura dos arquivos, comparação com o baseline informado e rastreamento das chamadas a Archive, mídia, autenticação e trava do serviço. Dois achados WARNING afetam a recuperação do roteiro diante de timeout ou configuração TLS inválida. Nenhum BLOCKER foi confirmado no acesso, nas consultas, nos cursores ou na entrega do MCP.
+Revisão adversarial concluída no mesmo escopo explícito da fase 3, após as correções dos dois avisos anteriores. Nenhum achado BLOCKER ou WARNING permanece nesta revisão padrão. Todos os arquivos revisados atendem aos critérios aplicados; nenhum problema adicional foi confirmado.
 
-O resolver de escopo foi informado como `degraded/no-task-commit-rows`; a lista explícita fornecida pelo orquestrador definiu o escopo, sem inferir uma faixa de HEAD. O lockfile foi incluído deliberadamente nessa lista para conferir a mudança de dependências e a revalidação corretiva documentada; não houve nova instalação ou auditoria de registry nesta revisão. Nenhum pre-pass fallow ou evidência de reviewer externo foi fornecido.
+O escopo original informado como `degraded/no-task-commit-rows` permanece definido pelos 12 arquivos explícitos, sem faixa arbitrária de HEAD. O lockfile foi deliberadamente incluído pelo orquestrador para conferir a mudança de dependências e sua revalidação corretiva documentada. Nenhum pre-pass fallow ou evidência de reviewer externo foi fornecido.
 
-Os achados abaixo foram confirmados por verificações sintéticas em memória do código atual, sem modificar fonte ou executar outro coletor. A suíte integral e o aceite real já concluídos não foram repetidos: os achados dizem respeito aos caminhos de falha, não constituem evidência de que a rodada real registrada tenha falhado. A pendência conhecida do login HTTPS do site e a operação VPS permanecem fora desta fase.
+A leitura inicial cobriu os arquivos e as chamadas necessárias a Archive, autenticação, mídia e trava do serviço. As iterações seguintes reavaliaram o código atual, os diffs corretivos, os callers, os testes e as evidências RED. A última mudança comportamental em a512a69 atua somente no encerramento por timeout do wrapper compartilhado; não altera consultas, adapter, autenticação, arquivos originais, dependências, transporte ou consumo de sucesso.
 
 ## Narrative Findings (AI reviewer)
 
-## Warnings
+Nenhum achado ativo.
 
-### WR-01: WARNING — Timeout encerra a espera antes de encerrar o subprocesso
+### Disposição dos avisos anteriores
 
-**File:** `<checkout>/scripts/phase3-acceptance.mjs:52`
-**Affected caller:** `scripts/phase3-acceptance.mjs:240-249`; o mesmo padrão afeta a confiabilidade do tracer em `test/mcp.test.ts:124`.
-**Severity:** WARNING
-**Issue:** Ao atingir 240 segundos, `runCodex` envia SIGTERM e rejeita imediatamente. Não aguarda `close` nem encerra à força um filho que não responda ao sinal. Assim, `runAcceptance` inicia seu `catch/finally`, restaura o clone e fecha serviço/listeners enquanto o filho ainda pode executar e manter pipes/handles abertos. Um filho que ignore SIGTERM pode manter o comando Node vivo indefinidamente, mesmo depois do erro de orçamento; a transcrição também continua recebendo eventos após a limpeza. O wrapper do tracer repete o problema.
-**Evidence:** A função atual foi extraída e executada em memória com um subprocesso Node sintético que registra um handler de SIGTERM e mantém o event loop ativo. Somente o relógio de 240 segundos foi acelerado para 250 ms; a operação de spawn/sinal/Promise permaneceu a do código. Após a rejeição esperada, `exitCode` e `signalCode` ainda eram null e `process.kill(pid, 0)` confirmou o processo vivo. A fixture foi encerrada com SIGKILL e seu `close` foi aguardado. Não houve acesso a dados reais.
-**Fix:** Marcar o timeout, solicitar SIGTERM e aguardar `close` antes de rejeitar; depois de um prazo curto de encerramento, enviar SIGKILL ao filho ainda ativo. Limpar ambos os timers em `close/error` e garantir que toda saída do wrapper só ocorra após o encerramento confirmado. Aplicar a mesma correção ao wrapper do tracer. Acrescentar um teste com subprocesso sintético que ignore SIGTERM e verificar que a Promise só termina após `close`, sem handles remanescentes.
+| Aviso | Disposição verificada | Evidência atual |
+|---|---|---|
+| WR-01 — Timeout e encerramento do subprocesso/grupo | Resolvido | `scripts/phase3-acceptance.mjs:48-62` espera close, envia TERM ao grupo Linux, escala a KILL após 2s e, se o pai fecha com escalada pendente, envia KILL antes de limpar os timers e concluir a Promise. O tracer importa esse mesmo wrapper. |
+| WR-02 — Setup TLS fora do cleanup | Resolvido | `scripts/phase3-acceptance.mjs:120-145` protege aquisição de banco/serviço e TLS; `scripts/phase3-acceptance.mjs:251-265` tenta todas as ações de cleanup independentemente, fecha recursos adquiridos e limita a restauração ao estado completamente capturado antes da primeira mutação. |
 
-### WR-02: WARNING — Falha no setup TLS contorna a limpeza do serviço já aberto
+A correção de WR-01 foi conferida contra a reprodução que motivou a iteração 2, não apenas contra o caso original. O teste atual executa processos reais em duas variantes: pai/descendente que ignoram TERM com pipes herdados, e pai que termina por TERM com descendente no mesmo grupo que ignora TERM e usa pipes independentes. Ambos confirmam prontidão antes do orçamento, close antes de a chamada terminar, pai ausente, descendente ausente ou zombie sem execução e timers vazios. O novo SIGKILL no close elimina o cancelamento prematuro que mantinha esse descendente executando.
 
-**File:** `<checkout>/scripts/phase3-acceptance.mjs:119-135`
-**Affected callees:** `src/main.ts:31`, `src/main.ts:234`, `src/whatsapp.ts:15-48`.
-**Severity:** WARNING
-**Issue:** `createService` abre os bancos e adquire a trava na linha 119, mas a leitura da chave e `createServer` ocorrem na linha 122, antes do `try` da linha 135. Uma chave com permissões 0644, um arquivo de chave ilegível ou PEM inválido provoca throw sem executar `s.close()` ou `db.close()`. O serviço fica aberto e conserva a trava; outra chamada no mesmo processo recebe “Serviço já ativo”, mesmo após corrigir a chave. A recuperação automática da trava órfã depois do término do processo não substitui o fechamento da instância viva. O bloco atual também deixa leituras iniciais do banco fora da proteção de cleanup.
-**Evidence:** `privateFile` rejeita os bits 0077, portanto uma chave 0644 é um gatilho direto. Execução em memória do `runAcceptance` atual com dependências sintéticas e spies, mantendo esse throw da chave no mesmo ponto do fluxo, confirmou `createService` chamado e `close` não chamado. O rastreamento de `createService/close/acquireServiceLock` confirmou que a liberação depende desse fechamento. Nenhum perfil real foi aberto para a reprodução.
-**Fix:** Colocar a aquisição dos bancos/serviço e a inicialização TLS dentro de um `try/finally` que alcance todas as instâncias já criadas. Validar chave/certificado antes de abrir o serviço também reduz a janela, mas o cleanup deve cobrir as demais falhas de setup. No `finally`, fechar somente listeners criados/ativos e, independentemente do resultado desses fechamentos, fechar serviço e banco. Acrescentar um controle que injete falha na chave ou no construtor HTTPS depois de abrir o serviço e confirme `close` e uma nova abertura no mesmo processo.
+Os seis controles de WR-02 executam serviço, trava e SQLite reais com dados sintéticos: chave 0644, PEM inválido, SQL inicial, captura parcial, falha no cleanup do listener e falha na restauração. Confirmam fechamento dos bancos, liberação da trava e nova abertura no mesmo processo, incluindo preservação da configuração em falhas anteriores à rotação. A execução independente desta iteração confirma que esses caminhos continuam resolvidos após a última mudança.
+
+O marcador `fixed: requires human verification` dos relatórios do fixer é um rótulo do contrato daquele workflow. Os comportamentos destes dois achados foram confirmados por verificações automatizadas reproduzíveis e revisão independente do código atual. Não há check humano indispensável nem alegação de aprovação ou teste manual realizado pelo usuário.
+
+## Verificação e limites
+
+- Lidos o FIX atual, o RED adicional `03-review-wr01-iter2-red.json`, o diff integral de 94f8332/a512a69 e os trechos/callers atuais. Os históricos de REVIEW/FIX e REDs anteriores foram preservados.
+- Executado independentemente: `mise exec node@24.21.0 -- node --test --test-name-pattern='WR-01|WR-02' --test-reporter=tap dist/test/mcp-acceptance.test.js`: **7/7, exit0 normal**, zero fail/cancel/skip/todo, duração TAP **5647,08 ms**. O controle WR-01 inclui as duas variantes.
+- `git diff --check` passou. O escopo e as contagens deste relatório foram conferidos.
+- Suíte integral 184/184, foco 40/40 e self-test 11/11 posteriores à última correção foram registrados pelo fixer/orquestrador; não foram repetidos por este reviewer. Esta revisão executou os controles semânticos diretamente relacionados aos achados.
+- O tracer real de **2026-10-12T18:24:13.110Z** e a prova integrada de 12 chamadas de **2026-10-12T17:13:27.794Z** são evidências anteriores preservadas. Não constituem uma nova execução real desta iteração. A mudança exclusiva no timeout não alterou o caminho positivo de protocolo, consultas ou entrega.
+- Nenhuma fonte, teste, dependência, configuração, dado privado, coletor, tracking ou commit foi alterado por este reviewer. Somente este REVIEW foi atualizado; milestone.lock e os demais trabalhos foram preservados.
 
 ---
 
-_Reviewed: 2026-10-12T18:03:40Z_
+_Reviewed: 2026-10-12T18:47:28Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
 
-Não foram alterados fontes, testes, dependências, dados privados, configuração ou estado do planejamento; somente este relatório foi criado. VPS, dispositivos físicos e conexão atual do coletor não foram revalidados.
+Não foram revalidados VPS, dispositivos físicos, conexão atual do coletor ou plataformas fora do Linux. A limitação conhecida do login HTTPS do site permanece para a fase 4; este relatório não conclui requisitos nem o veredito final da fase.
