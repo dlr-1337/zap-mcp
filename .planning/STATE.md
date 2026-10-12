@@ -4,16 +4,16 @@ current_phase: 2
 current_phase_name: Busca, contexto, abas e exportação no site
 current_plan: 5
 status: Phase 2 in progress — 02-02 complete; next 02-03
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-10-11T23:59:52.368Z"
+stopped_at: Completed 02-05-PLAN.md; awaiting independent Phase2 reviews/verifier
+last_updated: "2026-10-12T00:24:22.933Z"
 last_activity: 2026-10-11
 last_activity_desc: "02-02 verified: 105 tests passed"
-state_head: 66d584c34217c36ebf106433c560a1886d5bd4f9
+state_head: e14b0af9778ca753ed9be2f44d8a825da85530be
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
   percent: 25
 ---
 
@@ -72,6 +72,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 02 P02 | 16min | 3 tasks | 10 files |
 | Phase 02 P03 | 12min | 3 tasks | 9 files |
 | Phase 02 P04 | 17min | 3 tasks | 9 files |
+| Phase 02 P05 | 18min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 02]: Contexto reutiliza snapshots existentes; abas conservam DOM e posições próprios com geração por sessão/aba e purge TTL/logout/reset;105 testes sintéticos passaram, aceite real segue02-05.
 - [Phase 02]: Preview usa fd verificado, assinatura/MIME e controls nativos sob ação; 113 testes sintéticos passaram, codecs reais permanecem02-05.
 - [Phase 02]: Exportação congela DTOs e expected media por sessão; ZIP pronto só após releitura CRC/SHA/conjunto, fsync e publicação exclusiva;127 testes sintéticos passaram, aceite real segue02-05.
+- [Phase 02]: Aceite real offline/browser conferiu 1.028 mensagens,190originais e112faltantes por SQL/bytes independentes; fonte local atualizada preservando 8.771mensagens/853originais e credenciais, sem confirmar conexão original atual.
 
 ### Pending Todos
 
@@ -120,8 +122,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-11T23:59:52.335Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-10-12T00:24:22.899Z
+Stopped at: Completed 02-05-PLAN.md; awaiting independent Phase2 reviews/verifier
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
