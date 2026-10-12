@@ -16,6 +16,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { openVerifiedAttachment } from '../src/media.js';
 import { closeSync, readSync } from 'node:fs';
 import Database from 'better-sqlite3';
+import { parsePeriod, searchTerms } from '../src/archive.js';
 
 async function seed(f: Awaited<ReturnType<typeof mcpFixture>>, bytes: Buffer, type = 'imageMessage') {
   const key = { remoteJid: '1@lid', id: String(Date.now()), fromMe: false };
@@ -190,6 +191,46 @@ export async function mcpFixture(t: { after(fn: () => unknown): void }) {
   return { dir, s, base, token, headers, rpc };
 }
 
+async function callQuery(f: Awaited<ReturnType<typeof mcpFixture>>, name: string, args: Record<string, unknown>) {
+  const reply = await f.rpc('tools/call', { name, arguments: args });
+  assert.ok(reply.result && !reply.result.isError, JSON.stringify(reply));
+  return reply.result.structuredContent;
+}
+
+test('MCP candidatos preservam homônimos grupo e identidades recebidas', async t => {
+  const f = await mcpFixture(t);
+  f.s.archive.ingestHistory({ chats: ['1@lid', '1@s.whatsapp.net', '2@g.us'].map(id => ({ id, subject: 'Homônimo' })), messages: [] });
+  const result = await callQuery(f, 'find_conversations', { query: 'Homônimo' });
+  const expected = f.s.archive.listConversations({ q: 'Homônimo' }).conversations.map(c => ({ ...c, ...f.s.archive.conversationEvidence(c.id), conversationId: c.id }));
+  assert.deepEqual(result.conversations, expected);
+  assert.equal(new Set(result.conversations.map((c: any) => c.conversationId)).size, 3);
+  assert.deepEqual(result.conversations.map((c: any) => c.kind).sort(), ['group', 'individual', 'individual']);
+  assert.equal(result.coverage.completeAccount, false);
+  assert.match((await callQuery(f, 'find_conversations', { query: 'ausente' })).absence, /não encontrado no acervo/i);
+});
+
+test('MCP busca AND legenda filename histórico e calendário reutiliza oráculo Archive', async t => {
+  const f = await mcpFixture(t), key = { remoteJid: 'synthetic@lid', id: 'doc', fromMe: false };
+  f.s.archive.ingestHistory({ messages: [{ key, messageTimestamp: Date.parse('2018-11-04T03:00:00Z') / 1000, privateEnvelope: 'PRIVATE_SENTINEL', message: { documentMessage: { caption: 'café orçamento', fileName: 'acordo.pdf', mediaKey: Buffer.alloc(32), url: 'https://private/PRIVATE_SENTINEL' } } }] });
+  f.s.archive.ingestUpdates([{ key, update: { messageTimestamp: Date.parse('2018-11-05T03:00:00Z') / 1000, message: { conversation: 'texto atualizado' } } }]);
+  const conversationId = f.s.archive.readStoredMessage(key)!.conversationId;
+  f.s.writeMessage({ reference: 'end', conversationId: key.remoteJid, conversationName: null, text: 'café orçamento acordo', originalTimestamp: '2018-11-05T02:00:00Z' });
+  f.s.archive.ingestHistory({ messages: [{ key: { ...key, id: 'unknown' }, message: { conversation: 'café orçamento acordo' } }] });
+  for (const args of [{ query: 'cafe orçamento acordo', conversationId }, { query: 'cafe orçamento acordo', conversationId, from: '2018-11-04', to: '2018-11-04' }, { query: '', from: '2019-02-16', to: '2019-02-16' }]) {
+    const terms = searchTerms(args.query), filters = { terms, conversationId: args.conversationId ?? null, ...parsePeriod(args.from, args.to) };
+    const expected = f.s.archive.searchMessages({ terms, conversationId: args.conversationId ?? null, filters, session: 'web-oracle' });
+    const result = await callQuery(f, 'search_messages', args);
+    assert.deepEqual(result.messages, expected.messages); assert.deepEqual(result.effectiveFilters, expected.effectiveFilters);
+    assert.equal(result.coverage.completeAccount, false); assert.equal(result.limits.pageItems, 50);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SENTINEL|mediaKey|payload|descriptor/);
+  }
+  const unknown = await callQuery(f, 'search_messages', { query: '', conversationId });
+  assert.ok(unknown.messages.some((m: any) => m.originalTimestamp === null));
+  for (const args of [{ query: '', sql: 'SELECT *' }, { query: '', path: '/secret' }, { query: '', limit: 10000 }, { query: 'a'.repeat(2001) }, { query: Array(26).fill('a').join(' ') }, { query: '', conversationId: '../secret' }, { query: '', from: '2026-02-30' }]) {
+    const reply = await f.rpc('tools/call', { name: 'search_messages', arguments: args }); assert.ok(reply.error || reply.result?.isError);
+  }
+});
+
 test('MCP negocia, lista fechada e entrega original com schema e origem protegidos', async t => {
   const f = await mcpFixture(t), bytes = Buffer.from('ffd8ff'+ '01'.repeat(100), 'hex');
   const key = { remoteJid: '1@lid', id: 'a', fromMe: false };
@@ -197,7 +238,7 @@ test('MCP negocia, lista fechada e entrega original com schema e origem protegid
   const worker = startMediaWorker({ archive: f.s.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   const id = f.s.archive.readStoredMessage(key)!.attachments[0]!.id;
   const init = await f.rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'synthetic', version: '1' } }); assert.ok(init.result.protocolVersion);
-  assert.deepEqual((await f.rpc('tools/list')).result.tools.map((x: any) => x.name), ['get_attachment']);
+  assert.deepEqual((await f.rpc('tools/list')).result.tools.map((x: any) => x.name), ['find_conversations', 'search_messages', 'get_attachment']);
   const result = (await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: id } })).result;
   assert.deepEqual(Buffer.from(result.content[1].data, 'base64'), bytes); assert.equal(result.structuredContent.delivery, 'inline');
   assert.doesNotMatch(JSON.stringify(result), /mediaKey|descriptor|source_key|payload/);
