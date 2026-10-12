@@ -252,7 +252,7 @@ test('MCP contexto reutiliza busca histórica e redirect sem perder unknowns ou 
 test('MCP contexto recusa cursores referência direção geração ordinal e TTL inválidos', async t => {
   const f = await mcpFixture(t);
   f.s.archive.ingestHistory({ messages: Array.from({ length: 60 }, (_, i) => ({ key: { remoteJid: 'invalid@lid', id: String(i), fromMe: false }, messageTimestamp: i, message: { conversation: 'validar ' + i } })) });
-  const search = await callQuery(f, 'search_messages', { query: '' }), reference = search.messages[20].reference;
+  const search = await callQuery(f, 'search_messages', { query: '' }), reference = f.s.archive.readStoredMessage({ remoteJid: 'invalid@lid', id: '20', fromMe: false })!.reference;
   const page = await callQuery(f, 'get_context', { reference });
   const cursor = page.nextCursor;
   for (const args of [{ reference, direction: 'after' }, { reference, cursor }, { reference, direction: 'before', cursor }, { reference, direction: 'after', cursor: cursor + 'x' }, { reference, direction: 'after', cursor, searchCursor: search.searchCursor }, { reference, searchCursor: page.nextCursor }, { reference: search.messages[0].reference, direction: 'after', cursor }, { reference, sql: 'SELECT *' }, { reference: '00000000-0000-0000-0000-000000000000' }]) {
