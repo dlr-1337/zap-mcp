@@ -1,22 +1,11 @@
 ---
 phase: 03-consulta-e-arquivos-reais-no-codex
-reviewed: 2026-10-12T18:47:28Z
+reviewed: 2026-10-12T20:09:23Z
 depth: standard
-iteration: 3
-files_reviewed: 12
+iteration: 4
+files_reviewed: 1
 files_reviewed_list:
-  - README.md
-  - package-lock.json
-  - package.json
-  - scripts/phase3-acceptance.mjs
-  - src/main.ts
-  - src/mcp.ts
-  - test/auth.test.ts
-  - test/context.test.ts
-  - test/export.test.ts
-  - test/mcp-acceptance.test.ts
   - test/mcp.test.ts
-  - test/readonly.test.ts
 findings:
   critical: 0
   warning: 0
@@ -27,50 +16,52 @@ status: clean
 
 # Fase 3: Code Review Report
 
-**Reviewed:** 2026-10-12T18:47:28Z
+**Reviewed:** 2026-10-12T20:09:23Z
 **Depth:** standard
-**Files Reviewed:** 12
-**Iteration:** 3
+**Files Reviewed:** 1
+**Iteration:** 4 — revisão incremental do cleanup do tracer
 **Status:** clean
 
 ## Summary
 
-Revisão adversarial concluída no mesmo escopo explícito da fase 3, após as correções dos dois avisos anteriores. Nenhum achado BLOCKER ou WARNING permanece nesta revisão padrão. Todos os arquivos revisados atendem aos critérios aplicados; nenhum problema adicional foi confirmado.
+Revisão adversarial incremental de `test/mcp.test.ts`, incluindo o diff RED 99988d5 → GREEN e6040da e as seis regressões adicionadas desde a revisão anterior. Nenhum achado BLOCKER ou WARNING foi confirmado no escopo atual. A leitura integral do arquivo foi complementada pelos contratos diretamente relacionados de autenticação/rotação em `src/mcp.ts` e aquisição/encerramento em `src/main.ts`; esses contratos são contexto, não arquivos alterados desta rodada.
 
-O escopo original informado como `degraded/no-task-commit-rows` permanece definido pelos 12 arquivos explícitos, sem faixa arbitrária de HEAD. O lockfile foi deliberadamente incluído pelo orquestrador para conferir a mudança de dependências e sua revalidação corretiva documentada. Nenhum pre-pass fallow ou evidência de reviewer externo foi fornecido.
-
-A leitura inicial cobriu os arquivos e as chamadas necessárias a Archive, autenticação, mídia e trava do serviço. As iterações seguintes reavaliaram o código atual, os diffs corretivos, os callers, os testes e as evidências RED. A última mudança comportamental em a512a69 atua somente no encerramento por timeout do wrapper compartilhado; não altera consultas, adapter, autenticação, arquivos originais, dependências, transporte ou consumo de sucesso.
+A revisão anterior de 12 arquivos, registrada em 2026-10-12T18:47:28Z, permanece como contexto histórico. Esta rodada não afirma repetir aquela revisão nem contar novamente seus 12 arquivos. Os dois avisos anteriores continuam resolvidos e sua disposição canônica em `03-REVIEW-DISPOSITION.md` não foi alterada. Nenhum pre-pass fallow ou evidência de reviewer externo foi fornecido. Após e6040da, o diff até 5dca39d contém apenas documentos de evidência, sem mudança adicional no teste ou no produto.
 
 ## Narrative Findings (AI reviewer)
 
 Nenhum achado ativo.
 
-### Disposição dos avisos anteriores
+### Cleanup do tracer e confiabilidade das regressões
 
-| Aviso | Disposição verificada | Evidência atual |
+- `test/mcp.test.ts:135-141` mantém o caminho exato do arquivo temporário e captura o estado MCP anterior antes da primeira rotação, dentro do bloco protegido. A inspeção de originais e a preparação TLS também ocorrem nesse bloco.
+- `test/mcp.test.ts:176-195` restaura transacionalmente somente as chaves MCP capturadas. O `finally` da restauração tenta remover o arquivo mesmo quando a leitura do token falha; o encerramento do listener e do serviço permanece em blocos independentes da restauração, exclusão e assertions. Falhas de cleanup propagam como falha do teste.
+- `test/mcp.test.ts:185-191` verifica ausência do arquivo, igualdade do estado anterior e rejeição do bearer emitido; quando há listener ativo e token disponível, exige também HTTP401 antes de fechá-lo. Restaurar um grant anterior deliberado conserva seu digest, geração e segredo; o bearer temporário não corresponde a esse estado restaurado.
+- `test/mcp.test.ts:200-239` executa o callback compilado do tracer com SQLite, autenticação, rotação, serviço e lock reais. As substituições restringem originais, TLS e subprocesso a controles sintéticos. Cinco caminhos exercitam falhas de inspeção, TLS, publicação, leitura e Codex; o sexto retorna pelo mesmo `finally` e parte de um grant anterior deliberado. Outra conexão SQLite somente leitura confere rejeição do token e preservação do baseline, além de arquivo, lock, listener e banco encerrados.
+- O retorno normal sintético interrompe o corpo antes das chamadas ao cliente e da produção do recibo. Ele comprova o cleanup de sucesso, sem constituir negociação TLS ou entrega real. Os REDs registrados falharam na assertion semântica de bearer vigente; a leitura do diff e a execução independente abaixo confirmam que as assertions atuais continuam ligadas à correção.
+
+### Disposição dos avisos anteriores — contexto preservado
+
+| Aviso | Disposição anterior mantida | Evidência da revisão anterior |
 |---|---|---|
-| WR-01 — Timeout e encerramento do subprocesso/grupo | Resolvido | `scripts/phase3-acceptance.mjs:48-62` espera close, envia TERM ao grupo Linux, escala a KILL após 2s e, se o pai fecha com escalada pendente, envia KILL antes de limpar os timers e concluir a Promise. O tracer importa esse mesmo wrapper. |
-| WR-02 — Setup TLS fora do cleanup | Resolvido | `scripts/phase3-acceptance.mjs:120-145` protege aquisição de banco/serviço e TLS; `scripts/phase3-acceptance.mjs:251-265` tenta todas as ações de cleanup independentemente, fecha recursos adquiridos e limita a restauração ao estado completamente capturado antes da primeira mutação. |
+| WR-01 — Timeout e encerramento do subprocesso/grupo | Resolvido | Wrapper compartilhado `scripts/phase3-acceptance.mjs:48-62`; a revisão de 18:47 confirmou duas variantes de pai/descendente reais, close, ausência de processos em execução e timers vazios. |
+| WR-02 — Setup TLS fora do cleanup | Resolvido | `scripts/phase3-acceptance.mjs:120-145,251-265`; a revisão anterior confirmou seis controles reais de serviço/SQLite/lock, preparação parcial e falhas de cleanup/restauração. |
 
-A correção de WR-01 foi conferida contra a reprodução que motivou a iteração 2, não apenas contra o caso original. O teste atual executa processos reais em duas variantes: pai/descendente que ignoram TERM com pipes herdados, e pai que termina por TERM com descendente no mesmo grupo que ignora TERM e usa pipes independentes. Ambos confirmam prontidão antes do orçamento, close antes de a chamada terminar, pai ausente, descendente ausente ou zombie sem execução e timers vazios. O novo SIGKILL no close elimina o cancelamento prematuro que mantinha esse descendente executando.
-
-Os seis controles de WR-02 executam serviço, trava e SQLite reais com dados sintéticos: chave 0644, PEM inválido, SQL inicial, captura parcial, falha no cleanup do listener e falha na restauração. Confirmam fechamento dos bancos, liberação da trava e nova abertura no mesmo processo, incluindo preservação da configuração em falhas anteriores à rotação. A execução independente desta iteração confirma que esses caminhos continuam resolvidos após a última mudança.
-
-O marcador `fixed: requires human verification` dos relatórios do fixer é um rótulo do contrato daquele workflow. Os comportamentos destes dois achados foram confirmados por verificações automatizadas reproduzíveis e revisão independente do código atual. Não há check humano indispensável nem alegação de aprovação ou teste manual realizado pelo usuário.
+Esses avisos pertencem ao driver de aceite integrado e não são reabertos ou renumerados como achados do tracer. O marcador `fixed: requires human verification` do fixer continua sendo um rótulo daquele workflow; não implica teste manual realizado pelo usuário nem intervenção humana indispensável nesta revisão.
 
 ## Verificação e limites
 
-- Lidos o FIX atual, o RED adicional `03-review-wr01-iter2-red.json`, o diff integral de 94f8332/a512a69 e os trechos/callers atuais. Os históricos de REVIEW/FIX e REDs anteriores foram preservados.
-- Executado independentemente: `mise exec node@24.21.0 -- node --test --test-name-pattern='WR-01|WR-02' --test-reporter=tap dist/test/mcp-acceptance.test.js`: **7/7, exit0 normal**, zero fail/cancel/skip/todo, duração TAP **5647,08 ms**. O controle WR-01 inclui as duas variantes.
-- `git diff --check` passou. O escopo e as contagens deste relatório foram conferidos.
-- Suíte integral 184/184, foco 40/40 e self-test 11/11 posteriores à última correção foram registrados pelo fixer/orquestrador; não foram repetidos por este reviewer. Esta revisão executou os controles semânticos diretamente relacionados aos achados.
-- O tracer real de **2026-10-12T18:24:13.110Z** e a prova integrada de 12 chamadas de **2026-10-12T17:13:27.794Z** são evidências anteriores preservadas. Não constituem uma nova execução real desta iteração. A mudança exclusiva no timeout não alterou o caminho positivo de protocolo, consultas ou entrega.
-- Nenhuma fonte, teste, dependência, configuração, dado privado, coletor, tracking ou commit foi alterado por este reviewer. Somente este REVIEW foi atualizado; milestone.lock e os demais trabalhos foram preservados.
+- Executado independentemente nesta rodada: `mise exec node@24.21.0 -- env -u ZAP_MCP_REAL_MODE -u ZAP_MCP_REAL_CASE_FILE node --test --test-name-pattern='tracer cleanup' --test-reporter=tap dist/test/mcp.test.js`: **6/6, exit0 normal**, zero fail/cancel/skip/todo; duração TAP **398,105642 ms**.
+- `git diff --check` passou. Conferidos o escopo explícito, os diffs corretivos, o gap de cleanup em `03-VERIFICATION.md`, o RED semântico e as evidências sanitizadas `03-TRACER-CLEANUP.md/.json`.
+- A suíte integral **190/190**, exit0 normal, zero fail/cancel/skip/todo, **96806,345933 ms**, foi repetida pelo orquestrador no checkout atual. O foco **46/46** também é evidência do executor/orquestrador, não uma nova execução deste reviewer. Não foram repetidos nesta rodada.
+- O tracer real de **2026-10-12T19:51:23.244Z** registra Codex 0.162.1, protocolo 2025-06-18, TLS positivo/negativo, dois arquivos de 4200/271485 bytes com SHA iguais e revogação/authnull/HTTP401 com baseline0. A conferência sanitizada posterior registra **0 chaves MCP e 0 arquivos token-***. São evidências fornecidas e lidas, não nova operação sobre a prova privada pelo reviewer.
+- A prova integrada de **12 chamadas em 2026-10-12T17:13:27.794Z** permanece evidência anterior preservada; o produto de consulta e entrega não mudou nesta correção. Este relatório não a representa como nova execução.
+- Somente este REVIEW foi atualizado. Fontes, testes, dependências, tracking, dados privados, coletor, sessão, configuração global, demais trabalhos e milestone.lock foram preservados. Nenhum commit foi criado.
 
 ---
 
-_Reviewed: 2026-10-12T18:47:28Z_
+_Reviewed: 2026-10-12T20:09:23Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
 
-Não foram revalidados VPS, dispositivos físicos, conexão atual do coletor ou plataformas fora do Linux. A limitação conhecida do login HTTPS do site permanece para a fase 4; este relatório não conclui requisitos nem o veredito final da fase.
+Não foram repetidos cliente real, suíte integral, inspeção dos arquivos privados ou a revisão original de 12 arquivos. VPS, login HTTPS do site, backup externo e restauração operacional permanecem fora desta revisão incremental; este relatório não conclui requisitos nem o veredito final da fase.
