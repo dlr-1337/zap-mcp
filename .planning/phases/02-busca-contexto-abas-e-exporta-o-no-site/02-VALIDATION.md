@@ -242,6 +242,16 @@ RED de HTTP404, formulário ausente, datasHTTP400 e seletor de contato ausente o
 |02-04| src/archive.ts freezeExportSelection; src/export.ts createExportManager/createExportJob/getExportJob/openExport/buildZip/verifyZip; /api/exports | export.test.ts (inclui readonly novo); ui/security; readonly existente só regressão |
 |02-05| scripts/phase2-acceptance.mjs --mode real-offline/real-browser | acceptance.test.ts;02-ACCEPTANCE.md; ledgerVALIDATION |
 
+### Apêndice final pós-review — 2026-10-11
+
+Build integrado79faf03 incluia4e3c66/CR-01 (restrições atuais negam DTO/matchedEvidence/páginas congeladas/original/preview/ZIP, preservando primários),b7a41c9/CR-02 (leituras retomáveis e POSTexport requestId idempotente por sessão/recorte) e79faf03/WR-01 (Unicode NFC/NFD/pt-BR em candidatos). Registros anteriores permanecem históricos; **suíte atual138/138,0fail/skip/todo,58,871s**, executada pelo orquestrador no checkout principal, dist/02-final-tests.log. Falha ambiental da fixtureauth em worktree não foi usada como resultado do principal; o alvo e a suíte passaram neste checkout.
+
+**Reexecução real final:** script existente, uma rodada real-offline+real-browser, sobre snapshot privado validado8.684, sem alterar oráculo/script/testes. Resultados de2026-10-12T01:15:44.959Z e01:16:40.511Z (dia11local):1.028refs no período/1.037contexto,190originais/112faltantes,1.088revisões/40citações, quatrodownloads HTTP/nativos comhash/tamanho igual, ZIP além da página e conjunto exato contraSQL/files, calendáriosUTC, JPEG/Ogg/MP4 reais, documento por download, A/Bscroll/DOM/foco/teclado/close/storage/reflow/logoutretido. Todos passaram, sem coletor/socket/QR na cópia. ProvasP2-OFFLINE/P2-BROWSER finais0600 foraGit; fontes/relatórios anteriores preservados. Negativas de restrição/idempotência/Unicode permanecem rastreáveis aos novos testes da revisão e à suíte138; o roteiro não força essas adversidades no perfil real.
+
+**Operação local final:** snapshotfresh8.775/853,restoreisolado e fallbackcompilado anteriores ao reinício prontos. Sete tabelas primárias iguais ao snapshot comfonteparada; apósstart todasrefs preservadas, senha/chaveidentidadeiguais, índicepronto e853originais reverificados porSHA/tamanho. Comando/Environment/WorkingDirectory/Restart/TimeoutStop da unidade transitória exatamente preservados; umcoletor exato. CincoGETs401 ePOSTexport requestId401anônimo; backend compilado atual contémrequestId/unicode_lower/guardrestrição. Primeira contagem8.775; posterior8.778 comtrês novaslinhas emmessages/origins/revisions/batches/batch_items eattachments1840/media_jobs1839inalterados. Contagens adicionais não são prova de cobertura integral ou statusautenticado da conexão. P2-SERVICE-REVIEW privada0600 permite inspeção independente.
+
+Senha original/statusautenticado da conexão original indisponíveis; nenhuma alteração de senha,bypass,inferência porprocesso/socket ou QR. Zoomnativo/dispositivosfísicos seguem sem teste. Esta rodada acrescenta evidência semreexecutar tarefas documentais do plano05, alterarSTATE/ROADMAP/SUMMARY/requisitos ou declarar fechamento independente da fase. Semmudanças deproduto/testes, instalação,push/VPS/fase seguinte.
+
 ## Validation Audit 2026-10-12
 
 | Metric | Count |
