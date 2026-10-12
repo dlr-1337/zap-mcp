@@ -30,3 +30,9 @@ Registry e repos oficiais, engines/peer, integridades, scripts e transitivas nov
 Suíte final **154/154**, zero fail/cancel/skip/todo, **91,255s**, por `TMPDIR` privado na partição/home + `mise exec node@24.21.0 -- npm test`. Logs locais ignorados em dist. A primeira tentativa em/tmp teve SQLITE_IOERR_WRITE sob temporários concorrentes; a repetição na partição/home eliminou esses erros. Uma expectativa histórica de/mcp=404 também existia em export.test.ts; passou a401, mantendo todas recusas de operações WhatsApp404.
 
 **Limite:** prova de compatibilidade/entrega local no Codex instalado. Não demonstra operação na VPS, histórico integral ou conclusão de toda a fase3. A implantação/proxy/supervisão e o aceite operacional final pertencem à fase4.
+
+## Diagnóstico e reteste pós-wave
+
+O pós-wave em TMPDIR/home encontrou153/154 com ECONNRESET no caso HTTP de janelas/auth. Quatro focos passaram, mas a suíte completa reproduziu o mesmo reset. Instrumentação temporária e pausa determinística7.500ms localizaram o erro no primeiro GET de paginação após260 escritas síncronas, enquanto ambos os sockets idle expiravam ao retomar o event loop. A hipótese de bodies não consumidos foi rejeitada e seu ajuste descartado.
+
+Correção de fixture `c772a24`:uma volta de setImmediate depois do seed, antes do próximo HTTP, permitindo processar timers/I/O atrasados. Sem retry, mudança de timeout, produto ou assertivas; instrumentação não permanece no código. Mesmo repro controlado passou duas vezes após a correção, inclusive sem instrumentação. Suíte final no runtime/TMPDIR originais: **154/154, zero fail/cancel/skip/todo,102,974s**, com caso natural corrigido12,23s. Logs sintéticos preservados privadamente. Transporte MCP, arquivos reais, configuração do Codex, coletor original e tracking não foram alterados neste follow-up.

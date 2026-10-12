@@ -12,18 +12,18 @@ provides:
   - Prova do Codex instalado por TLS com dois originais reais salvos e conferidos
 affects: [03-02, 03-03, 03-04, 04-operacao-e-restauracao-na-vps]
 actuals:
-  tokens: 13601
+  tokens: 17488
   tasks: 2
-  commits: 4
-commits: 4
+  commits: 8
+commits: 8
 plan_head_before: a5d7d8c219ff3353d2c072aebfeeecbca4faca68
-plan_head_after: 32e852e70224a7303d8566692e22f66d8a198058
+plan_head_after: c772a248814e02d4e666485ddff35d1604eefec1
 tech-stack:
   added: ["@modelcontextprotocol/server@2.3.1", "@modelcontextprotocol/node@2.1.1", "zod@4.6.6"]
   patterns: [Bearer antes de parsing e cookie, grant por closure de requisição, gate em cada write/end, TLS privado por ambiente do cliente]
 key-files:
   created: [src/mcp.ts, test/mcp.test.ts, .planning/phases/03-consulta-e-arquivos-reais-no-codex/03-ACCEPTANCE.md]
-  modified: [package.json, package-lock.json, src/main.ts, test/readonly.test.ts, test/export.test.ts]
+  modified: [package.json, package-lock.json, src/main.ts, test/readonly.test.ts, test/export.test.ts, test/auth.test.ts]
 key-decisions:
   - "Codex0.162.1 negociou initialize2025-06-18; SDKv2 não determina era do cliente."
   - "Imagem pequena suporta inline observado; salvar os dois originais usa GET explícito autenticado do mesmo origin TLS, com SHA/tamanho no destino."
@@ -60,7 +60,7 @@ status: complete
 
 - Início de referência:2026-10-12T13:47:06Z, timestamp do prompt de despacho; duração27min até o SUMMARY, sem contador de início persistido separado.
 - Tarefas:2/2; oito arquivos de implementação/aceite e dois registros RED.
-- Actuals:13.601 tokens pela contagem chars/4 do diff realizado, incluindo evidências RED; quatro commits medidos pelo ledger. Não representa tokens do harness.
+- Actuals atualizados após o follow-up:17.488 tokens pela contagem chars/4 do diff realizado atéc772a24, incluindo evidências RED e documentos já integrados; oito commits medidos pelo ledger até esse HEAD, incluindo os três metadados anteriores. Não representa tokens do harness. A duração27min registra a execução original até o primeiro SUMMARY; o diagnóstico posterior é descrito abaixo.
 
 ## Accomplishments
 
@@ -118,9 +118,19 @@ status: complete
 
 Nenhum stub impede a capacidade deste plano. Ausência/restrição/estados de mídia são resultados explícitos, não dados simulados de produto.
 
+## Follow-up pós-wave — ECONNRESET da fixture HTTP
+
+- O pós-wave do orquestrador registrou153/154 com ECONNRESET em `UI HTTP vazia, texto hostil e janelas com cursor estável sem coletor`, usando TMPDIR na partição/home. Não foi atribuído ao tmpfs. Quatro execuções focadas passaram em1,39–1,42s; a reprodução integral exata voltou a153/154 com o mesmo caso9,44s.
+- Instrumentação temporária da fixture registrou a rota e eventos dos sockets sem headers/segredos. Com pausa determinística de7.500ms na primeira escrita sintética, o caso falhou no primeiro GET/api/conversations depois do seed:gap8.339ms e timeout dos dois sockets ao retomar o event loop. O cliente fetch e o servidor de teste compartilham esse loop;260 escritas SQLite síncronas sob carga adiam timers/I/O e deixam o próximo GET concorrer com expiração de conexões idle.
+- A hipótese de bodies não consumidos foi rejeitada por A/B: consumir bodies manteve o reset no repro nativo e na fixture. Nenhuma mudança de consumo foi mantida.
+- Correção `c772a24`:somente comentário e uma volta de setImmediate após o seed, antes de reiniciar consultas HTTP. Instrumentação removida; nenhum retry, timeout, header, produto ou assertiva alterado.
+- Repro controlado antes:1/1 vermelho com ECONNRESET e rastreamento da rota; depois:1/1 verde9,07s, e novamente no diff final sem instrumentação:1/1 verde9,14s sob a mesma pausa7.500ms.
+- Suíte final no mesmo Node24.21.0/TMPDIR do orquestrador, sem flags/env adicionais: **154/154, zero fail/cancel/skip/todo,102,974s**. O caso corrigido passou naturalmente sob carga em12,23s. Logs e preload diagnóstico sintético preservados no diretório privado do pós-wave; nenhum dado real acessado.
+- Nenhuma alteração em transporte/consumo MCP:tracer real anterior permanece válido e não foi repetido. STATE/ROADMAP não foram avançados de novo; plano atual continua2.
+
 ## Self-Check: PASSED
 
-Arquivos criados presentes; todos quatro commits são ancestrais do HEAD. evaluation-scope resolveu exatamente os quatro commits do plano nesta branch; nenhum arquivo de dado, chave ou sessão foi versionado.
+Arquivos criados presentes; commits originais e02a28df são ancestrais do HEAD. evaluation-scope original resolveu os quatro commits de implementação; o follow-up de fixture está identificado acima e o ledger foi medido novamente. Nenhum arquivo de dado, chave ou sessão foi versionado.
 
 ## Next Phase Readiness
 
