@@ -114,6 +114,7 @@ export function openArchive(dataDir: string) {
   if (existsSync(path) && (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink())) throw Error('Arquivo privado inválido');
   chmodSync(location, 0o700);
   const db = new Database(path);
+  db.function('unicode_lower', { deterministic: true }, value => typeof value === 'string' ? value.normalize('NFC').toLocaleLowerCase('pt-BR') : '');
   db.function('original_ms', { deterministic: true }, value => { const ms = typeof value === 'string' ? Date.parse(value) : NaN; return Number.isSafeInteger(ms) ? ms : null; });
   chmodSync(path, 0o600);
   // Rebuild the attachment table inside the migration; validate all references before committing.
@@ -537,7 +538,7 @@ export function openArchive(dataDir: string) {
     },
     listConversations({ limit = 50, cursor = '', q = '' }: { limit?: number; cursor?: string; q?: string } = {}) {
       const size = Math.max(1, Math.min(50, limit));
-      const rows = db.prepare("SELECT c.id,c.name,(SELECT max(original_timestamp) FROM messages WHERE conversation_id=c.id) AS lastTimestamp FROM conversations c WHERE c.id>? AND (instr(lower(coalesce(c.name,'')),lower(?))>0 OR instr(lower(coalesce(c.source_id,'')),lower(?))>0) ORDER BY c.id LIMIT ?").all(cursor, q, q, size + 1) as { id: string; name: string | null; lastTimestamp: string | null }[];
+      const rows = db.prepare("SELECT c.id,c.name,(SELECT max(original_timestamp) FROM messages WHERE conversation_id=c.id) AS lastTimestamp FROM conversations c WHERE c.id>? AND (instr(unicode_lower(c.name),unicode_lower(?))>0 OR instr(unicode_lower(c.source_id),unicode_lower(?))>0) ORDER BY c.id LIMIT ?").all(cursor, q, q, size + 1) as { id: string; name: string | null; lastTimestamp: string | null }[];
       return { conversations: rows.slice(0, size), nextCursor: rows.length > size ? rows[size - 1].id : null };
     },
     readConversation(id: string, { limit = 100, cursor }: { limit?: number; cursor?: { timestamp: string; reference: string } } = {}) {

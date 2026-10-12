@@ -26,6 +26,22 @@ export async function searchFixture(t: TestContext) {
   return { s, dir, base, headers, login, read };
 }
 const key = { remoteJid: '1@s.whatsapp.net', id: 'a', fromMe: false };
+test('contatos Unicode usam caixa e NFC sem fundir homônimos nem mudar nomes', async t => {
+  const { s, base, headers } = await searchFixture(t);
+  const names = ['ÁLVARO', 'A\u0301LVARO', 'JOÃO', 'JOA\u0303O', 'álvaro'];
+  s.archive.ingestContacts(names.map((name, i) => ({ id: (i + 10) + '@lid', name })));
+  for (const query of ['ÁLVARO', 'álvaro', 'A\u0301LVARO', 'a\u0301lvaro', 'JOÃO', 'joão', 'JOA\u0303O', 'joa\u0303o']) {
+    const expected = names.filter(n => n.normalize('NFC').toLocaleLowerCase('pt-BR').includes(query.normalize('NFC').toLocaleLowerCase('pt-BR')));
+    const found: any[] = []; let cursor = '';
+    do {
+      const r = await fetch(base + '/api/conversations?' + new URLSearchParams({ q: query, limit: '1', ...(cursor ? { cursor } : {}) }), { headers });
+      assert.equal(r.status, 200); const page = await r.json(); found.push(...page.conversations); cursor = page.nextCursor;
+    } while (cursor);
+    assert.deepEqual(found.map(c => c.name).sort(), expected.sort(), query);
+    assert.equal(new Set(found.map(c => c.id)).size, expected.length);
+  }
+  assert.equal((await (await fetch(base + '/api/conversations?q=alvaro', { headers })).json()).conversations.length, 0, 'sem busca aproximada por acento');
+});
 
 test('busca HTTP encontra termo literal em evidência congelada', async t => {
   const { s, read } = await searchFixture(t);
