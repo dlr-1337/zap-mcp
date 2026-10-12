@@ -43,7 +43,7 @@ status: clean
 
 Rechecagem final no checkout principal, HEAD1a5b7c84cec19b3779be0a88c35f27c6561a93bb. Nenhum achado restante confirmado no escopo revisado. Os seis gatilhos registrados nas rodadas anteriores estão corrigidos; o resultado clean representa esta revisão delimitada, não certificação de ausência de toda vulnerabilidade possível nem conclusão automática da fase.
 
-Mantido o escopo explícito de21 entradas em /tmp/zap-phase2-planning-ox9y5om6/code-review-files.json:20 arquivos de fonte/configuração/testes listados no frontmatter; package-lock.json consultado para pins, excluído da contagem pelo filtro do workflow. O resolver original estava degraded; a lista explícita evita inferência de commits. Sem substrate fallow ou lane externa. Histórico de achados e fixes preservado em02-REVIEW.iter2.md,02-REVIEW.iter3.md e relatórios FIX correspondentes.
+Mantido o escopo explícito de21 entradas em /tmp/zap-phase2-planning-ox9y5om6/code-review-files.json:20 arquivos de fonte/configuração/testes listados no frontmatter; package-lock.json consultado para pins, excluído da contagem pelo filtro do workflow. O resolver original estava degraded; a lista explícita evita inferência de commits. Sem substrate fallow ou lane externa. O ledger 02-REVIEW-DISPOSITION.md registra os seis achados encerrados; os commits históricos 6009587/5e485f5 e as cópias privadas protegidas em /tmp/zap-phase2-planning-ox9y5om6/review-history preservam a trilha das revisões anteriores.
 
 ## Narrative Findings (AI reviewer)
 
