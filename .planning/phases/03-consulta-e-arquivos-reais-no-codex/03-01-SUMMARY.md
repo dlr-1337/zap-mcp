@@ -75,7 +75,7 @@ status: complete
 1. **03-01-01 — Recuperar originais no Codex instalado:** RED `8c635db`, GREEN `6827d19`.
 2. **03-01-02 — Invalidar transferências e comprovar isolamento:** RED `9a589cb`, GREEN `32e852e`.
 
-## Verification
+## Verificações
 
 - Build TypeScript com Node24.21.0 passou.
 - Foco MCP/auth/media/readonly:43/43, zero falhas, antes do último caso HEAD/symlink; a suíte integral final inclui esse caso e a expectativa de exportação corrigida.
