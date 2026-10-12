@@ -30,3 +30,13 @@ test('self-check do oráculo aceita conjunto completo sem declarar fixture real'
   assert.equal((await audit(proof)).accepted, true);
   assert.equal((await audit({ ...proof, synthetic: true })).accepted, false);
 });
+test('roteiro browser recusa perda de leitura logout tardio bytes divergentes e codec tratado como falta', async () => {
+  const m = await import(script).catch(() => null);
+  const valid = { anchor: true, independentPositions: true, keyboard: true, noEagerMedia: true,
+    downloadHashes: true, zipVerified: true, logoutRace: true, storageEmpty: true, reflow: true,
+    formats: [{ type: 'imageMessage', state: 'decoded', originalVerified: true }, { type: 'audioMessage', state: 'played', originalVerified: true }, { type: 'videoMessage', state: 'fallback', originalVerified: true }] };
+  for (const key of ['anchor', 'independentPositions', 'keyboard', 'noEagerMedia', 'downloadHashes', 'zipVerified', 'logoutRace', 'storageEmpty', 'reflow'])
+    assert.equal(m?.auditBrowserEvidence?.({ ...valid, [key]: false })?.accepted ?? true, false, 'um check real ausente impede aprovação');
+  assert.equal(m.auditBrowserEvidence({ ...valid, formats: [{ type: 'videoMessage', state: 'missing', originalVerified: true }] }).accepted, false);
+  assert.equal(m.auditBrowserEvidence(valid).accepted, true);
+});
