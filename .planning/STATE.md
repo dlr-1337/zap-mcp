@@ -4,11 +4,11 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: Not started
 status: planning
-stopped_at: Phase 03 complete, ready to plan Phase 4
-last_updated: "2026-10-12T20:26:56.693Z"
+stopped_at: "Fase 3 local concluída e verificada; próxima ação: discutir a fase 4, ainda não iniciada"
+last_updated: "2026-10-12T20:31:12.956Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 423610c0bca023b13fe3674451a76fd73f7f4b86
+state_head: 70edce9240cc90ca8192f54f10ccca9db09d1f34
 progress:
   total_phases: 4
   completed_phases: 3
@@ -24,7 +24,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-12)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase 03 — Consulta e arquivos reais no Codex
+**Current focus:** Phase 4 — Operação e restauração na VPS
 
 **Publicação da Phase1:** [PR #1](https://github.com/dlr-1337/zap-mcp/pull/1), branch codex/phase-1-private-archive; fase local verificada, sem implantação na VPS.
 
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 
 Phase: 4 — Operação e restauração na VPS
 Current Plan: Not started
-Total Plans in Phase: 4
+Total Plans in Phase: 0
 Status: Ready to plan
 Last activity: 2026-10-12 — Phase 03 complete, transitioned to Phase 4
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 75% — 3/4 fases; 17/17 planos definidos concluídos
 
 ## Performance Metrics
 
@@ -113,6 +113,9 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: Cobertura MCP agrega explicitamente lotes em batchSummary preservando contagens/intervalos/estados; envelope32KiB e DTOs inalterados, conferidos porSQL/site.
 - [Phase 03]: Aceite Codex0.162.1/protocolo2025-06-18 completou12calls atuais e dois originais4200/271485bytes SHAiguais; gate emWeakSet impede JSONreplay.
 - [Phase 03]: Oraculo siteHTTP apenasloopback no clone; MCP/originaisHTTPSverificado. Login siteTLS OriginHTTPS403 pendente emfase4/WINDOWS13.
+- [Phase 03]: Fase 3 local concluída: verificador passed21/21, MCP-01 a MCP-05 satisfeitos, 190/190 testes; 12 chamadas no Codex0.162.1 e dois originais com tamanho/SHA iguais.
+- [Phase 03]: Endpoint MCP de aceite transitório: HTTPS verificado, CA e configuração somente no subprocesso; zero chaves MCP/tokens residuais e acervo, sessão, autenticação web e TOML preservados.
+- [Phase 03]: Próxima ação é discutir a fase 4; VPS permanente, HTTPS/login web Origin403, backup externo e restauração operacional seguem pendentes. Ponteiros antigos para tarefas das fases 1/2 são históricos, já concluídos.
 
 ### Pending Todos
 
@@ -123,9 +126,9 @@ Nenhum todo avulso registrado. Próxima ação: executar02-02;02-01 concluído c
 Nenhum impedimento para iniciar o planejamento.
 
 - Phase1 concluída: Baileys/chaves/identidades/eventos, QR, comparaçãoWeb e restore/restart verificados; histórico permanece limitado ao recebido. Crash do auxiliar sem causa exata determinada; download Chrome normal passou.
-- Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
+- Phase 4: resolver HTTPS/proxy/login web (Origin403/WINDOWS13) e revalidar consulta/download no endpoint permanente; piloto MCP local temporário encerrado.
 
 ### Roadmap Evolution
 
@@ -141,8 +144,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T17:33:15.956Z
-Stopped at: Phase 03 complete, ready to plan Phase 4
+Last session: 2026-10-12T20:30:12.261Z
+Stopped at: Fase 3 local concluída e verificada; próxima ação: discutir a fase 4, ainda não iniciada
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
