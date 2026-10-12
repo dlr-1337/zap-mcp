@@ -96,13 +96,13 @@ status: complete
 
 Três RED→GREEN separados e ordenados, todos na branch atual. TAP íntegro e exit real de subprocessos estão em arquivos ignorados `dist/02-03-01-red.json`, `dist/02-03-02-red.json`, `dist/02-03-03-red.json`. Os três receberam RED_EVIDENCE_OK e semanticAssessment: fixtures/worker/login/browser executaram, falha por assertions planejadas, sem load/syntax/skip. Primeiro record foi repetido para capturar exit de subprocesso; command como array foi recusado INVALID_RED e serializado como comando string preservando o mesmo TAP antes de GREEN. Nenhuma recusa autorizou implementação. Fixture MP4 sem suporte foi acrescentada ao RED antes da expansão. Nenhuma refatoração adicional.
 
-## Verification
+## Verificação executada
 
 - Tarefa1: build +preview/ui9/9; tracer repetido9/9 antes da expansão.
 - Tarefa2: build +preview/security/readonly6/6,0skip; todos os dez formatos, mismatch/ativo/vazio, auth, Range/HEAD, fd/path e bytes. MP3 sem ID3 e fd abort/415 acrescentados no fechamento e comprovados pela suíte final.
 - Tarefa3: build +ui/preview15/15,0skip. WAV PCM reproduziu/currentTime>0; WebM VP8 decodificou/videoWidth16. MP4 MPEG-4 Part2 produzido por ffmpeg existente foi sem suporte no Chromium e recebeu fallback real; download final corresponde aos bytes, assim como PNG/WAV. Fixtures binárias pequenas estão em base64 no teste; ffmpeg não é dependência de execução do teste/produto.
 - Suíte final `mise exec node@24.21.0 -- npm test`:113/113,0fail/skip/todo,30,942s. Log ignorado `dist/02-03-full-tests.log`. `git diff --check` limpo; evaluation-scope resolveu seis commits da branch.
-- Playwright do bundle e Chromium152 existente, apenas temporários sintéticos sem socket real. Capturas `dist/02-03-ui-{320,768,1280}.png` e zoom200.png inspecionadas, sem overflow.200% representa fonte/reflow, não zoom nativo/dispositivo físico.
+- Playwright do bundle e Chromium152 existente, apenas temporários sintéticos sem socket real. Capturas `dist/02-03-ui-320.png`, `dist/02-03-ui-768.png`, `dist/02-03-ui-1280.png` e zoom200.png inspecionadas, sem overflow.200% representa fonte/reflow, não zoom nativo/dispositivo físico.
 - P-02-04 demonstrada por missing404, rejeição de ativo415, zero GET antes da ação e codec/fallback mantendo download igual; VALIDATION atualizada. `requirements.ready-ids` retorna0/1 paraWEB-05, compartilhado com02-05; requisito global permanece pendente.
 - Fontes primárias conferidas: [WHATWG MIME Sniffing](https://mimesniff.spec.whatwg.org/) para assinaturas/containers; [Node24 fs](https://nodejs.org/docs/latest-v24.x/api/fs.html) para descritor/posição/stream; [MDN preload](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/preload) para controls sob ação.
 

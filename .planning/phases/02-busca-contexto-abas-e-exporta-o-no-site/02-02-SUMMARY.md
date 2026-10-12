@@ -100,13 +100,13 @@ status: complete
 
 Os alvos RED executaram fixtures/login/browser válidos e assertions planejadas antes da implementação correspondente. TAP completo e exit1 preservados nos arquivos ignorados `dist/02-02-01-red.json`, `dist/02-02-01-ui-red.json`, `dist/02-02-02-red.json`, `dist/02-02-02-ui-red.json` e `dist/02-02-03-red.json`, todos aceitos por `gsd-tools.cjs check tdd-red-evidence` como RED_EVIDENCE_OK e com semanticAssessment. Reporter inicial spec foi recusado como INVALID_RED e repetido em TAP antes de autorizar GREEN. Assertions preliminares de status/copy foram ajustadas para alcançar os alvos corretos; esses resultados não foram usados como prova dos comportamentos seguintes. Cada tarefa tem RED antes do seu GREEN; nenhuma refatoração adicional.
 
-## Verification
+## Verificação executada
 
 - Tarefa1: build +context/ui/search13/13; repetição do tracer13/13 antes da expansão.
 - Tarefa2: build +context/ui/auth19/19,0skip.
 - Tarefa3: build +ui/security/context12/12,0skip; teclado/scroll em3abas, bordas/empates/null/restart, authGET/HEAD e redirects antigos, HMAC/direção/escopo/ordinal adulterados.
 - TesteHTTP afetado2/2 após correção determinística. Primeira suíte completa104/105 falhou na fixture preexistente documentada abaixo; suíte final `mise exec node@24.21.0 -- npm test`105/105,0fail/skip/todo,17,323s. Log ignorado `dist/02-02-full-tests-final.log`.
-- Browser real com Playwright do bundle e Chromium existente, somente temporários sintéticos sem socket real. Capturas `dist/02-02-ui-{320,768,1280}.png` e `dist/02-02-ui-zoom200.png` inspecionadas.200% corresponde a reflow de fonte, não zoom nativo.
+- Browser real com Playwright do bundle e Chromium existente, somente temporários sintéticos sem socket real. Capturas `dist/02-02-ui-320.png`, `dist/02-02-ui-768.png`, `dist/02-02-ui-1280.png` e `dist/02-02-ui-zoom200.png` inspecionadas.200% corresponde a reflow de fonte, não zoom nativo.
 - Segurança preserva no-store/nosniff/CSP, erros sanitizados e nenhuma leitura de payload/mediaKey/paths privados na nova consulta. P-02-03 comprovada pelos testes de retenção/close/logout/storage; VALIDATION atualizada sem concluir requisitos globais.
 - Documentação oficial consultada: [Express Session1.19.0](https://github.com/expressjs/session/blob/v1.19.0/README.md) para store/destroy; [W3C APG Tabs](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/) para interação de teclado.
 

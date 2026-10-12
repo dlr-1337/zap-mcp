@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Busca, contexto, abas e exportação no site",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -26,8 +26,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 2 of 4 · 25% · executing"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 4 — needs a plan"
   },
-  "updated_at": "2026-10-11T23:59:51.795Z"
+  "updated_at": "2026-10-12T02:53:38.040Z"
 }

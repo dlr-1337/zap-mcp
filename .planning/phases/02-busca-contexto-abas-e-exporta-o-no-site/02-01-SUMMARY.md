@@ -98,7 +98,7 @@ status: complete
 
 Os quatro alvos RED executaram assertions de comportamento com fixture/login/browser válidos, sem erro de importação ou sintaxe. Relatórios TAP completos e exit1 estão nos arquivos ignoradosdist/02-01-01-{search,ui}-red.json,dist/02-01-02-red.json,dist/02-01-03-red.json; cada registro foi aceito por `node /home/otavio/.codex/gsd-core/bin/gsd-tools.cjs check tdd-red-evidence <registro> --raw` comRED_EVIDENCE_OK. semanticAssessment registra a falha planejada, sem autoatestado substituindo o classificador. Cada tarefa temRED antes do seuGREEN. Não houve refatoração adicional.
 
-## Verification
+## Verificação executada
 
 - Tracer: `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/search.test.js dist/test/ui.test.js`4/4, repetido4/4 antes da expansão.
 - Calendário: build +search.test.js5/5.

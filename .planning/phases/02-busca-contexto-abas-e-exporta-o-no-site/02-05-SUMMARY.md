@@ -103,7 +103,7 @@ Início registrado2026-10-12T00:04:13Z, fechamento2026-10-12T00:22Z (dia11 emAme
 
 REDs `dist/02-05-01-red.json` e `dist/02-05-02-red.json` preservam TAP íntegro/exit real1, alvo executado e semanticAssessment. Ambos receberamRED_EVIDENCE_OK antes dos commitsGREEN. Primeiro alvo recusava origem sintética e recorte falso; segundo recusava checklistbrowser incompleto. Import faltante foi tratado somente como ausência do validador no selfcheck, sem autorizarGREEN por erro de import/sintaxe/setup. Reforço detectou ausência de provas de arquivos com arrayvazio e foi corrigido exigindo contador independente exato; testes3/3 verdes. Sem refatoração adicional.
 
-## Verification
+## Verificação executada
 
 - BuildNode24.21.0 atual passou. Selfcheck3/3; acceptance/ui16/16semfail/skip,31,335s.
 - Real-offline inicial, tracer repetido antes da expansão e execução final após reforçar oráculo passaram; real-browser após ajuste de seletor e repetição final passaram. Stdout somente agregados/checks; report/ZIP/capturas/IDs/hashes permanecem0600 foraGit. Rótulos privadosP2-OFFLINE/P2-BROWSER/P2-SERVICE discriminam a origem da prova.
