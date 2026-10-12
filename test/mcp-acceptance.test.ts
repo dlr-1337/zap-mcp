@@ -57,7 +57,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
   }
   const fs = await import('node:fs'), paths = await import('node:path'), os = await import('node:os'), crypto = await import('node:crypto'), cp = await import('node:child_process'), https = await import('node:https'), http = await import('node:http'), url = await import('node:url'), util = await import('node:util');
   const phase2Path = '../../scripts/phase2-acceptance.mjs', phase2 = await import(phase2Path);
-  const deps = { assert, ...fs, ...paths, ...os, ...crypto, ...cp, ...https, pathToFileURL: url.pathToFileURL, plainRequest: http.request, same: util.isDeepStrictEqual,
+  const deps = { assert, ...fs, ...paths, ...os, ...crypto, ...cp, ...https, homedir: () => dir, pathToFileURL: url.pathToFileURL, plainRequest: http.request, same: util.isDeepStrictEqual,
     Database: ObservedDatabase, createService: (options: any) => {
       service = createService(options);
       if (fault === 'state capture') { const prepare = service.authDb.prepare.bind(service.authDb); service.authDb.prepare = ((sql: string) => { if (sql === 'SELECT * FROM web_sessions') throw Error('state capture fault'); return prepare(sql); }) as typeof prepare; }
