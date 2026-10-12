@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync, renameSync, symlinkSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
@@ -59,22 +59,61 @@ test('restrição antes do consumo e estados/corrupção permanecem explícitos'
   const unavailable = await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: id } }); assert.ok(unavailable.result?.isError || unavailable.error);
   const other = await seed(f, bytes); writeFileSync(join(f.dir, 'media', other.id + '.bin'), Buffer.from('corrupt'));
   const failed = (await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: other.id } })).result;
-  assert.equal(failed.isError, true); assert.equal(JSON.parse(failed.content[0].text).delivery, 'unavailable'); assert.equal(f.s.archive.getAttachment(other.id)!.state, 'retryable');
+  assert.equal(failed.isError, true); assert.equal(JSON.parse(failed.content[0].text).delivery, 'unavailable'); assert.equal(f.s.archive.getAttachment(other.id)!.state, 'retry_wait');
+  for (const state of ['pending', 'failed', 'unavailable']) {
+    f.s.archiveDb.prepare('UPDATE attachments SET state=?,reason=? WHERE id=?').run(state, 'synthetic reason', other.id);
+    const response = (await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: other.id } })).result;
+    assert.equal(response.isError, true); const metadata = JSON.parse(response.content[0].text); assert.equal(metadata.attachment.state, state); assert.equal(metadata.delivery, 'unavailable');
+  }
 });
 
-test('streams simultâneos revogados interrompem sem publicar transferência completa', async t => {
-  const f = await mcpFixture(t), bytes = Buffer.alloc(8 * 1024 * 1024, 1), { id } = await seed(f, bytes, 'documentMessage');
+for (const mode of ['rotação', 'restrição']) test(`streams simultâneos com ${mode} interrompem sem publicar transferência completa`, async t => {
+  const f = await mcpFixture(t), bytes = Buffer.alloc(8 * 1024 * 1024, 1), { id, key } = await seed(f, bytes, 'documentMessage');
   const second = new Database(join(f.dir, 'auth.sqlite')); t.after(() => second.close());
   const start = () => new Promise<{ response: import('node:http').IncomingMessage; done: Promise<{ count: number; complete: boolean }> }>((resolve, reject) => {
     request(f.base + '/mcp/attachments/' + id, { headers: f.headers }, response => { response.pause(); let count = 0;
       const done = new Promise<{ count: number; complete: boolean }>(ok => { response.on('data', chunk => { count += chunk.length; }); response.on('error', () => {}); response.on('close', () => ok({ count, complete: response.complete })); }); resolve({ response, done });
     }).on('error', reject).end();
   });
-  const downloads = await Promise.all([start(), start()]); rotateMcpToken(second, join(f.dir, 'stream-rotated'));
+  const downloads = await Promise.all([start(), start()]);
+  if (mode === 'rotação') rotateMcpToken(second, join(f.dir, 'stream-rotated'));
+  else f.s.archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, message: { conversation: 'private' } }] });
   for (const d of downloads) d.response.resume();
   for (const d of downloads) { const result = await d.done; assert.equal(result.complete, false); assert.ok(result.count < bytes.length); }
   assert.deepEqual(readFileSync(join(f.dir, 'media', id + '.bin')), bytes);
-  const latest = readFileSync(join(f.dir, 'stream-rotated'), 'utf8').trim(); const cancelled = await fetch(f.base + '/mcp/attachments/' + id, { headers: { Authorization: 'Bearer ' + latest } }); await cancelled.body!.cancel();
+  if (mode === 'rotação') { const latest = readFileSync(join(f.dir, 'stream-rotated'), 'utf8').trim(); const cancelled = await fetch(f.base + '/mcp/attachments/' + id, { headers: { Authorization: 'Bearer ' + latest } }); await cancelled.body!.cancel(); }
+});
+
+test('restrição após leitura bloqueia inline já bufferizado', async t => {
+  const f = await mcpFixture(t), { id, key } = await seed(f, Buffer.from('ffd8ff' + '01'.repeat(100), 'hex'));
+  const get = f.s.archive.getAttachment; let restricted = false;
+  f.s.archive.getAttachment = attachmentId => { const found = get(attachmentId); if (!restricted) { restricted = true; queueMicrotask(() => f.s.archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, message: { conversation: 'private' } }] })); } return found; };
+  await assert.rejects(fetch(f.base + '/mcp', { method: 'POST', headers: f.headers, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_attachment', arguments: { attachmentId: id } } }) }));
+  f.s.archive.getAttachment = get;
+});
+
+test('HEAD, ID desconhecido e symlink não entregam bytes ou paths privados', async t => {
+  const f = await mcpFixture(t), bytes = Buffer.from('ffd8ff' + '01'.repeat(100), 'hex'), { id } = await seed(f, bytes);
+  const head = await fetch(f.base + '/mcp/attachments/' + id, { method: 'HEAD', headers: f.headers }); assert.equal(head.status, 200); assert.equal((await head.arrayBuffer()).byteLength, 0);
+  const unknown = (await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: '00000000-0000-0000-0000-000000000000' } })).result;
+  assert.equal(unknown.isError, true); assert.equal(JSON.parse(unknown.content[0].text).attachment, null);
+  const path = join(f.dir, 'media', id + '.bin'); renameSync(path, path + '.original'); symlinkSync(path + '.original', path);
+  assert.equal((await fetch(f.base + '/mcp/attachments/' + id, { headers: f.headers })).status, 404);
+  assert.deepEqual(readFileSync(path + '.original'), bytes);
+});
+
+test('CLI rotaciona sem tocar lock, senha, coleta ou queries web; logout web preserva MCP', async t => {
+  const f = await mcpFixture(t); await f.s.setPassword('synthetic-password');
+  const before = f.s.authDb.prepare('SELECT * FROM web_owner').all();
+  const cli = spawnSync(process.execPath, ['dist/src/main.js', 'mcp-token-rotate', join(f.dir, 'cli-token')], { encoding: 'utf8', env: { ...process.env, ZAP_DATA_DIR: f.dir } });
+  assert.equal(cli.status, 0); assert.equal(cli.stdout, ''); assert.equal(cli.stderr, '');
+  assert.deepEqual(f.s.authDb.prepare('SELECT * FROM web_owner').all(), before); assert.throws(() => createService({ dataDir: f.dir }), /ativo/);
+  const token = readFileSync(join(f.dir, 'cli-token'), 'utf8').trim(); const access = createMcpAccess(f.s.authDb), generation = access.authenticate('Bearer ' + token);
+  const challenge = await fetch(f.base + '/api/session'), info = await challenge.json();
+  const login = await fetch(f.base + '/login', { method: 'POST', headers: { Origin: f.base, Cookie: challenge.headers.get('set-cookie')!.split(';')[0], 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'synthetic-password', csrfToken: info.csrfToken }) }); assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie')!.split(';')[0]; const form = await (await fetch(f.base + '/api/session', { headers: { Cookie: cookie } })).json();
+  assert.equal((await fetch(f.base + '/logout', { method: 'POST', headers: { Cookie: cookie, Origin: f.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ csrfToken: form.csrfToken }) })).status, 200);
+  assert.equal(access.authenticate('Bearer ' + token), generation);
 });
 
 function runCodex(args: string[], env: NodeJS.ProcessEnv, cwd: string, transcript: string, prompt: string) {
@@ -95,8 +134,9 @@ if (process.env.ZAP_MCP_REAL_MODE) test('tracer real: Codex TLS negociado e dois
   assert.equal(statSync(path).mode & 0o077, 0); mkdirSync(c.destination, { recursive: true, mode: 0o700 });
   assert.ok(existsSync(join(c.dataDir, 'restored.json')), 'Aceite usa clone restaurado offline');
   c.destination = mkdtempSync(join(c.destination, 'attempt-')); chmodSync(c.destination, 0o700);
+  const configPath = join(homedir(), '.codex', 'config.toml'), originalConfig = existsSync(configPath) ? readFileSync(configPath) : null;
   const version = spawnSync('codex', ['--version'], { encoding: 'utf8' }); assert.equal(version.status, 0); assert.match(version.stdout, /^codex-cli /);
-  const s = createService({ dataDir: c.dataDir }), observed: { method: string; protocol?: string; client?: string }[] = [];
+  const s = createService({ dataDir: c.dataDir }), observed: { method: string; protocol?: string; client?: string; attachmentId?: string; preference?: string }[] = [];
   rotateMcpToken(s.authDb, join(c.destination, 'token-' + Date.now()));
   // Capture token from its private file, never argv, config text, transcript or model prompt.
   const tokenFile = (await import('node:fs')).readdirSync(c.destination).filter(x => x.startsWith('token-')).sort().at(-1)!;
@@ -110,7 +150,7 @@ if (process.env.ZAP_MCP_REAL_MODE) test('tracer real: Codex TLS negociado e dois
   const server = createServer({ key: readFileSync(c.keyFile), cert: readFileSync(c.certFile) }, (req, res) => {
     if (req.url === '/mcp' && req.method === 'POST') {
       let raw = ''; req.on('data', x => { if (raw.length < 65536) raw += x; }); req.on('end', () => {
-        try { const d = JSON.parse(raw); observed.push({ method: d.method, protocol: d.params?.protocolVersion, client: d.params?.clientInfo?.name }); } catch { /* no private body logging */ }
+        try { const d = JSON.parse(raw); observed.push({ method: d.method, protocol: d.params?.protocolVersion, client: d.params?.clientInfo?.name, attachmentId: d.params?.arguments?.attachmentId, preference: d.params?.arguments?.preference }); } catch { /* no private body logging */ }
       });
     }
     s.app(req, res);
@@ -131,11 +171,12 @@ if (process.env.ZAP_MCP_REAL_MODE) test('tracer real: Codex TLS negociado e dois
     assert.equal(positive.code, 0, 'Codex positivo deve concluir');
     assert.ok(observed.some(x => x.method === 'initialize' && x.client && x.protocol), 'Negociação real deve ser observada');
     assert.ok(observed.filter(x => x.method === 'tools/call').length >= 2, 'Codex deve invocar ambos originais');
+    for (const [attachmentId, preference] of [[c.smallId, 'inline'], [c.largeId, 'download']]) assert.ok(observed.some(x => x.method === 'tools/call' && x.attachmentId === attachmentId && x.preference === preference), 'Cada original exige sua invocação real');
     assert.ok(/get_attachment/.test(positive.output)); assert.ok(/download\.mjs/.test(positive.output));
-    const received = originals.map((original, i) => { const dest = join(c.destination, `received-${i}.bin`); assert.ok(existsSync(dest), 'Arquivo deve estar no destino real'); const bytes = readFileSync(dest); const sha256 = createHash('sha256').update(bytes).digest('hex'); assert.equal(bytes.length, original.size); assert.equal(sha256, original.sha256); return { bytes: bytes.length, sha256 }; });
+    const received = originals.map((original, i) => { const dest = join(c.destination, `received-${i}.bin`); assert.ok(existsSync(dest), 'Arquivo deve estar no destino real'); const bytes = readFileSync(dest); const sha256 = createHash('sha256').update(bytes).digest('hex'); assert.ok(bytes.length === original.size, 'Tamanho real igual ao original'); assert.ok(sha256 === original.sha256, 'SHA-256 real igual ao original'); return { bytes: bytes.length, sha256 }; });
     const receipt = { status: 'passed', synthetic: false, codex: version.stdout.trim(), node: process.version, tls: { positive: true, untrustedNegative: true, identity: 'localhost' }, negotiation: observed.filter(x => x.method === 'initialize'), toolCalls: observed.filter(x => x.method === 'tools/call').length, originals: received, inlineLimit: 256 * 1024, delivery: 'Codex tool calls then explicit authenticated GET, two saved original files', environment: 'local HTTPS offline clone; VPS not verified', at: new Date().toISOString() };
     writeFileSync(join(c.destination, 'receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 });
-  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await s.close(); }
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await s.close(); if (originalConfig) assert.deepEqual(readFileSync(configPath), originalConfig, 'Configuração Codex original preservada'); }
 });
 
 export async function mcpFixture(t: { after(fn: () => unknown): void }) {

@@ -285,6 +285,7 @@ test('ciclo completo de exportação consulta somente arquivo sem métodos Whats
   const collector = f.s.startCollector({ newProfile: true, socketFactory: () => { sockets++; return { ev, end() {}, sendMessage: reject, chatModify: reject, readMessages: reject, sendReceipt: reject, sendPresenceUpdate: reject, logout: reject } as unknown as ReturnType<SocketFactory>; } });
   await collector.stop();
   const r = await f.post(); assert.equal(r.status, 202); const j = await r.json(), job = await ready(f, j.jobId); assert.equal(job.state, 'ready'); assert.equal((await fetch(f.base + job.downloadURL, { headers: f.headers })).status, 200);
-  for (const path of ['/send', '/edit', '/delete', '/read', '/presence', '/mcp', '/export', '/ingest']) assert.equal((await fetch(f.base + path, { method: 'POST', headers: f.headers })).status, 404);
+  for (const path of ['/send', '/edit', '/delete', '/read', '/presence', '/export', '/ingest']) assert.equal((await fetch(f.base + path, { method: 'POST', headers: f.headers })).status, 404);
+  assert.equal((await fetch(f.base + '/mcp', { method: 'POST', headers: f.headers })).status, 401);
   assert.equal(forbidden, 0); assert.equal(sockets, 1); assert.equal(f.s.archive.getCoverage().uniqueMessages, 162);
 });
