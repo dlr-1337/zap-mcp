@@ -38,6 +38,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
   mkdirSync(destination, { mode: 0o700 });
   const seed = createService({ dataDir });
   try {
+    if (!fault.endsWith('cleanup')) seed.authDb.prepare('INSERT INTO web_config(key,value) VALUES (?,?)').run('mcp-token-generation', 'synthetic-existing-generation');
     const auth = createAuthState(seed.authDb, { newProfile: true }); auth.saveCreds({ me: { id: 'synthetic@lid', name: 'fixture' }, account: {} as any, signalIdentities: [{}] as any });
     for (let i = 0; i < 130; i++) seed.writeMessage({ reference: 'synthetic-' + i, conversationId: 'fixture@lid', conversationName: 'fixture', text: 'testword', originalTimestamp: new Date(1700000000000 + i * 1000).toISOString() });
     const creds = JSON.parse((seed.authDb.prepare('SELECT creds FROM whatsapp_profile WHERE id=1').get() as any).creds);
@@ -73,7 +74,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
     assert.equal(existsSync(join(dataDir, 'service.lock')), false, 'setup failure retained live service lock');
     assert.ok(databases.every(db => !db.open), 'setup failure retained readonly database');
     const reopened = createService({ dataDir });
-    try { assert.deepEqual(reopened.authDb.prepare('SELECT * FROM web_owner').all(), originalOwner); assert.deepEqual(reopened.authDb.prepare('SELECT * FROM web_config').all(), originalConfig); }
+    try { assert.ok(JSON.stringify(reopened.authDb.prepare('SELECT * FROM web_owner').all()) === JSON.stringify(originalOwner), 'owner changed'); assert.ok(JSON.stringify(reopened.authDb.prepare('SELECT * FROM web_config').all()) === JSON.stringify(originalConfig), 'preexisting config changed before any mutation'); }
     finally { await reopened.close(); }
   } finally {
     await service?.close(); for (const db of databases) if (db.open) db.close(); rmSync(dir, { recursive: true });
