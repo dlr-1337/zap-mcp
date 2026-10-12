@@ -326,10 +326,13 @@ test('abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34', a
   await page.keyboard.press('ArrowRight'); await page.keyboard.press('Enter'); assert.equal(await controls.nth(1).getAttribute('aria-selected'), 'true');
   assert.equal(await page.locator('[role=tabpanel]:visible').count(), 1);
   assert.equal(await page.evaluate(() => { const ids = [...document.querySelectorAll('[id]')].map(e => e.id); return ids.length === new Set(ids).size; }), true, 'IDs DOM únicos');
-  await page.evaluate(() => window.scrollTo(0, 1600)); const scrollB = await page.evaluate(() => scrollY);
-  await controls.nth(0).evaluate((el: any) => el.click()); await page.evaluate(() => window.scrollTo(0, 2200)); const scrollA = await page.evaluate(() => scrollY);
-  await controls.nth(1).evaluate((el: any) => el.click()); assert.ok(Math.abs((await page.evaluate(() => scrollY)) - scrollB) < 2);
-  await controls.nth(0).evaluate((el: any) => el.click()); assert.ok(Math.abs((await page.evaluate(() => scrollY)) - scrollA) < 2);
+  const barPosition = await page.locator('#conversation-tabs').evaluate((el: any) => el.getBoundingClientRect().top + scrollY);
+  await page.evaluate((y: number) => window.scrollTo(0, y), barPosition + 1600); const scrollB = await page.evaluate(() => scrollY);
+  const contentB = await page.locator('#messages').innerHTML();
+  await controls.nth(0).click(); await page.evaluate((y: number) => window.scrollTo(0, y), barPosition + 2200); const scrollA = await page.evaluate(() => scrollY);
+  const contentA = await page.locator('#messages').innerHTML();
+  await controls.nth(1).click(); assert.ok(Math.abs((await page.evaluate(() => scrollY)) - scrollB) < 2, 'clique nativo B restaura posição medida antes do gesto'); assert.equal(await page.locator('#messages').innerHTML(), contentB);
+  await controls.nth(0).click(); assert.ok(Math.abs((await page.evaluate(() => scrollY)) - scrollA) < 2, 'clique nativo A restaura posição medida antes do gesto'); assert.equal(await page.locator('#messages').innerHTML(), contentA);
   const anchor = page.locator('#messages [data-anchor=true]'), top = await anchor.evaluate((el: any) => el.getBoundingClientRect().top);
   await page.locator('#more-messages').evaluate((el: any) => el.click()); await page.waitForFunction(() => document.getElementById('messages')?.children.length === 76);
   assert.ok(Math.abs((await anchor.evaluate((el: any) => el.getBoundingClientRect().top)) - top) < 2, 'prepend conserva âncora');
