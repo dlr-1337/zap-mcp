@@ -82,7 +82,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 **Plans**: 0 (não planejados)
 - [x] 03-01-PLAN.md
-- [ ] 03-02-PLAN.md
+- [x] 03-02-PLAN.md
 - [ ] 03-03-PLAN.md
 - [ ] 03-04-PLAN.md
 
@@ -122,7 +122,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 |-------|----------------|--------|-----------|
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
-| 3. Consulta e arquivos reais no Codex | 1/4 | In Progress | - |
+| 3. Consulta e arquivos reais no Codex | 2/4 | In Progress | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
 
 **Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. Status de todos: Pending. Planos ainda não criados; progresso de execução: 0%.
