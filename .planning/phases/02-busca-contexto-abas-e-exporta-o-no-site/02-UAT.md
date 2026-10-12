@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 02-busca-contexto-abas-e-exporta-o-no-site
-source: [02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md, 02-04-SUMMARY.md, 02-05-SUMMARY.md]
+source: [02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md, 02-04-SUMMARY.md, 02-05-SUMMARY.md, 02-06-SUMMARY.md]
 started: 2026-10-12T09:47:28Z
-updated: 2026-10-12T10:31:25.273Z
+updated: 2026-10-12T11:39:23.919Z
 ---
 
 ## Current Test
@@ -62,6 +62,7 @@ verification_refs: ["test/ui.test.ts#abas usam teclado foco separado fechamento 
 
 reported: "Agent observed: clique nativo entre abas após rolar perde630px; posição45596 torna-se44966. Conteúdo/âncora permanecem, mas a posição de leitura é perdida."
 severity: major
+resolution_evidence: "02-06-SUMMARY.md: RED válido, UI19/19, full144/144 sem skips; CUA nativa real A/B/A56463→56463 e B/A/B45583→45583, teclado/close aprovados; source:autonomous, human_confirmation:false."
 
 ### 7. sessão e tickets impedem mistura de respostas e ressurgimento de conteúdo privado
 expected: "sessão e tickets impedem mistura de respostas e ressurgimento de conteúdo privado"
@@ -163,20 +164,22 @@ blocked: 0
 ## Reconciliation
 
 - Coverage classifier: coverage mode,16 auto-passed,0 present,0 classification errors.
-- Source version unchanged from verified product1a5b7c8; canonical verification remains passed.
+- Source e0d921c corrige G-02-6; verificação canônica deve ser regenerada pelo owner após os gates atualizados.
 - Bounded commit windows:02-01=7,02-02=6,02-03=6,02-04=9,02-05=5; all after hashes remain ancestors.
 - 02-01/02-02 lack top-level commits fields: legacy WARNING; actuals.commits agrees with the bounded measurements. No mismatch or source change.
 - verify:pre api-coverage gate passed: no new external API integration detected.
-- No Playwright/Puppeteer browser MCP available; live_dom_uat false. Existing automated coverage is reused; no new visual inspection claimed.
+- CUA no navegador real da cópia privada: busca/contexto/abas/rolagem física/teclado/close/logout aprovados; revisão de pixels depende do gate visual separado. Provas anteriores de mídia/ZIP continuam rastreáveis; backend não mudou no plano06.
 - Native zoom,physical devices,current authenticated original WhatsApp connection,MCP and VPS remain outside this acceptance evidence.
-- No new full suite or real acceptance run; no owner password/session/collector/archive modification.
+- Full final144/144 em Node24.21.0, source e0d921c, temporários0700 externos; primeira142/144 com duas falhas I/O preservada, causa não confirmada. Snapshot e senha original preservados; cópia/credencial/helper temporários encerrados. Nenhuma alteração do coletor/arquivo original nesta UAT.
 - User explicitly delegated these checks to the agent; autonomous observation replaces the manual checkpoint. No human pass/consent is claimed.
 
 ## Gaps
 
 - gap_id: G-02-6
   truth: "Alternar abas por clique nativo preserva a posição de leitura após rolar a conversa."
-  status: failed
+  status: resolved
+  resolved_by: 02-06-PLAN.md
+  resolved_at: 2026-10-12
   reason: "Agent observed: scroll45596→44966 ao alternarA/B/A; barra de abas estava343px acima do viewport antes do clique."
   severity: major
   test: 6
