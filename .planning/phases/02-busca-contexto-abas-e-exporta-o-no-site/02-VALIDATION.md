@@ -249,3 +249,6 @@ RED de HTTP404, formulário ausente, datasHTTP400 e seletor de contato ausente o
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Post-audit UI regression
+UI findings corrected in f517054/9f55deb; current suite132/132,0fail/skip/todo,43.295s in dist/02-ui-fix-full-tests.log. Original real acceptance covers unchanged backend/data contracts; UI fixes add DOM assertions and align caller selectors. Evidence: 02-UI-FIX.md.
