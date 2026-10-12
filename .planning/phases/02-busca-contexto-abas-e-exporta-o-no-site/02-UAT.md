@@ -1,9 +1,9 @@
 ---
-status: partial
+status: complete
 phase: 02-busca-contexto-abas-e-exporta-o-no-site
 source: [02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md, 02-04-SUMMARY.md, 02-05-SUMMARY.md]
 started: 2026-10-12T09:47:28Z
-updated: 2026-10-12T10:30:44.485Z
+updated: 2026-10-12T10:31:25.273Z
 ---
 
 ## Current Test
@@ -12,12 +12,13 @@ updated: 2026-10-12T10:30:44.485Z
 
 ## Tests
 
-### 1. Inicialização e confirmação do site
-expected: "O reinício controlado, a restauração e as 16 entregas automatizadas já foram conferidos. Abra http://127.0.0.1:3000, entre com sua senha cadastrada e confira se o acervo aparece para consulta. Busca por contato/termo/período, contexto da mensagem, abas independentes, preview/download e ZIP do recorte devem estar disponíveis. O aceite real anterior conferiu 1.028 mensagens, 190 originais e 112 faltantes; campos desconhecidos e arquivos ausentes continuam explícitos."
-result: [pending]
-scope: cold-start-smoke-and-single-auto-coverage-confirmation
-technical_evidence: 02-ACCEPTANCE.md P2-SERVICE-FINAL; 02-VERIFICATION.md; service currently active and homepage HTTP200
-note: Cold start already performed with backup and restore; this checkpoint requires the user's perspective, without repeating collector restarts or deleting locks/data.
+### 1. Inicialização e confirmação autônoma do site
+expected: Inicializar uma cópia privada real sem coletor, entrar pelo formulário protegido e consultar o acervo com os controles da fase2.
+result: pass
+source: autonomous
+human_confirmation: false
+technical_evidence: CUA login real na cópia restaurada8792, lista50, busca12 correspondências, âncora/UTC/fuso explícitos e duas abas; original permanece no login sem senha/sessão alteradas.
+scope: isolated-real-copy; original authenticated login not claimed
 
 ### 2. busca por texto legenda e nome da mesma revisão, histórico explícito e freeze de paginação
 expected: "busca por texto legenda e nome da mesma revisão, histórico explícito e freeze de paginação"
@@ -53,11 +54,14 @@ verification_refs: ["test/context.test.ts#resultado distante abre âncora congel
 
 ### 6. três abas com leitura própria, teclado, fechamento e telas estreitas
 expected: "três abas com leitura própria, teclado, fechamento e telas estreitas"
-result: pass
-source: automated
+result: issue
+source: autonomous
 coverage_id: D2
 coverage_summary: 02-02-SUMMARY.md
 verification_refs: ["test/ui.test.ts#abas usam teclado foco separado fechamento scroll e reflow UC23 a UC34","test/ui.test.ts#resultado distante abre âncora e duas leituras independentes"]
+
+reported: "Agent observed: clique nativo entre abas após rolar perde630px; posição45596 torna-se44966. Conteúdo/âncora permanecem, mas a posição de leitura é perdida."
+severity: major
 
 ### 7. sessão e tickets impedem mistura de respostas e ressurgimento de conteúdo privado
 expected: "sessão e tickets impedem mistura de respostas e ressurgimento de conteúdo privado"
@@ -151,8 +155,8 @@ verification_refs: ["P2-SERVICE service-result.json; snapshot/restore/primary-ta
 
 total: 17
 passed: 16
-issues: 0
-pending: 1
+issues: 1
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -166,9 +170,19 @@ blocked: 0
 - No Playwright/Puppeteer browser MCP available; live_dom_uat false. Existing automated coverage is reused; no new visual inspection claimed.
 - Native zoom,physical devices,current authenticated original WhatsApp connection,MCP and VPS remain outside this acceptance evidence.
 - No new full suite or real acceptance run; no owner password/session/collector/archive modification.
-- Human confirmation is pending; no consent inferred from the technical verification.
+- User explicitly delegated these checks to the agent; autonomous observation replaces the manual checkpoint. No human pass/consent is claimed.
 
 ## Gaps
 
-[none yet]
+- gap_id: G-02-6
+  truth: "Alternar abas por clique nativo preserva a posição de leitura após rolar a conversa."
+  status: failed
+  reason: "Agent observed: scroll45596→44966 ao alternarA/B/A; barra de abas estava343px acima do viewport antes do clique."
+  severity: major
+  test: 6
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
 
