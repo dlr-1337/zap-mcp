@@ -12,7 +12,7 @@ import { Readable } from 'node:stream';
 import { startMediaWorker } from '../src/media.js';
 import { createHash, createHmac } from 'node:crypto';
 import { request, createServer as plainServer } from 'node:http';
-import { createServer } from 'node:https';
+import { createServer, request as tlsRequest } from 'node:https';
 import { spawnSync } from 'node:child_process';
 import { openVerifiedAttachment } from '../src/media.js';
 import { closeSync, readSync } from 'node:fs';
@@ -132,27 +132,29 @@ if (process.env.ZAP_MCP_REAL_MODE) test('tracer real: Codex TLS negociado e dois
   const configPath = join(homedir(), '.codex', 'config.toml'), originalConfig = existsSync(configPath) ? readFileSync(configPath) : null;
   const version = spawnSync('codex', ['--version'], { encoding: 'utf8' }); assert.equal(version.status, 0); assert.match(version.stdout, /^codex-cli /);
   const s = createService({ dataDir: c.dataDir }), observed: { method: string; protocol?: string; client?: string; attachmentId?: string; preference?: string }[] = [];
-  rotateMcpToken(s.authDb, join(c.destination, 'token-' + Date.now()));
-  // Capture token from its private file, never argv, config text, transcript or model prompt.
-  const tokenFile = (await import('node:fs')).readdirSync(c.destination).filter(x => x.startsWith('token-')).sort().at(-1)!;
-  const token = readFileSync(join(c.destination, tokenFile), 'utf8').trim();
-  const originals = [c.smallId, c.largeId].map((id: string) => {
-    const f = openVerifiedAttachment(s.archive, join(c.dataDir, 'media'), id); assert.ok(f, 'Original real verificado obrigatório');
-    try { return { id, size: f.size, sha256: f.sha256 }; } finally { closeSync(f.fd); }
-  });
-  assert.ok(originals[1].size > originals[0].size);
-  const tlsErrors: string[] = [];
-  const server = createServer({ key: readFileSync(c.keyFile), cert: readFileSync(c.certFile) }, (req, res) => {
-    if (req.url === '/mcp' && req.method === 'POST') {
-      let raw = ''; req.on('data', x => { if (raw.length < 65536) raw += x; }); req.on('end', () => {
-        try { const d = JSON.parse(raw); observed.push({ method: d.method, protocol: d.params?.protocolVersion, client: d.params?.clientInfo?.name, attachmentId: d.params?.arguments?.attachmentId, preference: d.params?.arguments?.preference }); } catch { /* no private body logging */ }
-      });
-    }
-    s.app(req, res);
-  });
-  server.on('tlsClientError', error => tlsErrors.push((error as NodeJS.ErrnoException).code ?? error.message));
+  const tokenFile = join(c.destination, 'token-' + Date.now());
+  let server: ReturnType<typeof createServer> | undefined, token = '', priorMcp: { key: string; value: string }[] | undefined;
   try {
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve)); const origin = `https://localhost:${(server.address() as AddressInfo).port}`;
+    priorMcp = s.authDb.prepare("SELECT key,value FROM web_config WHERE key LIKE 'mcp-%' ORDER BY key").all() as { key: string; value: string }[];
+    rotateMcpToken(s.authDb, tokenFile);
+    // Capture token from its private file, never argv, config text, transcript or model prompt.
+    token = readFileSync(tokenFile, 'utf8').trim();
+    const originals = [c.smallId, c.largeId].map((id: string) => {
+      const f = openVerifiedAttachment(s.archive, join(c.dataDir, 'media'), id); assert.ok(f, 'Original real verificado obrigatório');
+      try { return { id, size: f.size, sha256: f.sha256 }; } finally { closeSync(f.fd); }
+    });
+    assert.ok(originals[1].size > originals[0].size);
+    const tlsErrors: string[] = [];
+    server = createServer({ key: readFileSync(c.keyFile), cert: readFileSync(c.certFile) }, (req, res) => {
+      if (req.url === '/mcp' && req.method === 'POST') {
+        let raw = ''; req.on('data', x => { if (raw.length < 65536) raw += x; }); req.on('end', () => {
+          try { const d = JSON.parse(raw); observed.push({ method: d.method, protocol: d.params?.protocolVersion, client: d.params?.clientInfo?.name, attachmentId: d.params?.arguments?.attachmentId, preference: d.params?.arguments?.preference }); } catch { /* no private body logging */ }
+        });
+      }
+      s.app(req, res);
+    });
+    server.on('tlsClientError', error => tlsErrors.push((error as NodeJS.ErrnoException).code ?? error.message));
+    await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve)); const origin = `https://localhost:${(server.address() as AddressInfo).port}`;
     const args = ['exec', '--ephemeral', '--skip-git-repo-check', '--json', '-C', c.destination, '-s', 'danger-full-access', '-c', 'approval_policy="never"', '-c', 'shell_environment_policy.inherit="all"', '-c', `mcp_servers.zap_acceptance.url="${origin}/mcp"`, '-c', 'mcp_servers.zap_acceptance.bearer_token_env_var="ZAP_MCP_TOKEN"', '-c', 'mcp_servers.zap_acceptance.startup_timeout_sec=15'];
     const env: NodeJS.ProcessEnv = { ...process.env, ZAP_MCP_TOKEN: token }; delete env.NODE_TLS_REJECT_UNAUTHORIZED;
     const negativeEnv: NodeJS.ProcessEnv = { ...env }; delete negativeEnv.SSL_CERT_FILE; delete negativeEnv.SSL_CERT_DIR; delete negativeEnv.NODE_EXTRA_CA_CERTS;
@@ -171,10 +173,31 @@ if (process.env.ZAP_MCP_REAL_MODE) test('tracer real: Codex TLS negociado e dois
     const received = originals.map((original, i) => { const dest = join(c.destination, `received-${i}.bin`); assert.ok(existsSync(dest), 'Arquivo deve estar no destino real'); const bytes = readFileSync(dest); const sha256 = createHash('sha256').update(bytes).digest('hex'); assert.ok(bytes.length === original.size, 'Tamanho real igual ao original'); assert.ok(sha256 === original.sha256, 'SHA-256 real igual ao original'); return { bytes: bytes.length, sha256 }; });
     const receipt = { status: 'passed', synthetic: false, codex: version.stdout.trim(), node: process.version, tls: { positive: true, untrustedNegative: true, identity: 'localhost' }, negotiation: observed.filter(x => x.method === 'initialize'), toolCalls: observed.filter(x => x.method === 'tools/call').length, originals: received, inlineLimit: 256 * 1024, delivery: 'Codex tool calls then explicit authenticated GET, two saved original files', environment: 'local HTTPS offline clone; VPS not verified', at: new Date().toISOString() };
     writeFileSync(join(c.destination, 'receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 });
-  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await s.close(); if (originalConfig) assert.deepEqual(readFileSync(configPath), originalConfig, 'Configuração Codex original preservada'); }
+  } finally {
+    let issuedToken = token;
+    try {
+      try {
+        if (!issuedToken && existsSync(tokenFile)) issuedToken = readFileSync(tokenFile, 'utf8').trim();
+      } finally {
+        try { if (priorMcp) s.authDb.transaction(() => { s.authDb.prepare("DELETE FROM web_config WHERE key LIKE 'mcp-%'").run(); for (const row of priorMcp!) s.authDb.prepare('INSERT INTO web_config(key,value) VALUES (@key,@value)').run(row); })(); }
+        finally { if (existsSync(tokenFile)) unlinkSync(tokenFile); }
+      }
+      assert.equal(existsSync(tokenFile), false, 'Credencial temporária removida');
+      if (priorMcp) assert.equal(JSON.stringify(s.authDb.prepare("SELECT key,value FROM web_config WHERE key LIKE 'mcp-%' ORDER BY key").all()) === JSON.stringify(priorMcp), true, 'Configuração MCP anterior preservada');
+      if (issuedToken) assert.equal(createMcpAccess(s.authDb).authenticate('Bearer ' + issuedToken), null, 'Bearer temporário revogado');
+      if (issuedToken && server?.listening) await new Promise<void>((resolve, reject) => {
+        const req = tlsRequest(`https://localhost:${(server!.address() as AddressInfo).port}/mcp`, { ca: readFileSync(c.caFile), headers: { Authorization: 'Bearer ' + issuedToken } }, response => {
+          response.resume(); response.on('end', () => { try { assert.equal(response.statusCode, 401, 'HTTP recusa bearer temporário após cleanup'); resolve(); } catch (error) { reject(error); } }); response.on('error', reject);
+        }); req.on('error', reject); req.end();
+      });
+    } finally {
+      try { if (server) { try { server.closeAllConnections(); } finally { await new Promise<void>(resolve => server!.close(() => resolve())); } } }
+      finally { await s.close(); if (originalConfig) assert.deepEqual(readFileSync(configPath), originalConfig, 'Configuração Codex original preservada'); }
+    }
+  }
 });
 
-for (const fault of ['original inspection', 'TLS setup', 'token publication', 'Codex failure', 'normal return']) test(`tracer cleanup revoga bearer e remove arquivo após ${fault}`, async () => {
+for (const fault of ['original inspection', 'TLS setup', 'token publication', 'token read', 'Codex failure', 'normal return']) test(`tracer cleanup revoga bearer e remove arquivo após ${fault}`, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-tracer-cleanup-')), dataDir = join(dir, 'data'), destination = join(dir, 'proof');
   mkdirSync(destination, { mode: 0o700 }); const seedService = createService({ dataDir });
   if (fault === 'normal return') rotateMcpToken(seedService.authDb, join(dir, 'deliberate-prior-token'));
@@ -190,7 +213,7 @@ for (const fault of ['original inspection', 'TLS setup', 'token publication', 'C
     const begin = body.indexOf('await new Promise(resolve => server.listen'), cleanup = body.indexOf('finally {', begin);
     body = body.slice(0, begin) + "await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); return;\n} " + body.slice(cleanup);
   }
-  const deps: Record<string, unknown> = { assert, process: { ...process, env: { ...process.env, ZAP_MCP_REAL_MODE: 'tracer', ZAP_MCP_REAL_CASE_FILE: caseFile } }, existsSync, readFileSync, statSync, mkdirSync, mkdtempSync, chmodSync, join, homedir: () => dir, readdirSync, unlinkSync,
+  const deps: Record<string, unknown> = { assert, process: { ...process, env: { ...process.env, ZAP_MCP_REAL_MODE: 'tracer', ZAP_MCP_REAL_CASE_FILE: caseFile } }, existsSync, readFileSync: (path: string, options: any) => { if (fault === 'token read' && path === credentialPath) throw Error('controlled setup fault'); return readFileSync(path, options); }, statSync, mkdirSync, mkdtempSync, chmodSync, join, homedir: () => dir, readdirSync, unlinkSync,
     spawnSync: () => ({ status: 0, stdout: 'codex-cli 0.162.1' }), createService: (options: { dataDir: string }) => service = createService(options), createMcpAccess,
     rotateMcpToken: (db: Database.Database, path: string) => { credentialPath = path; rotateMcpToken(db, path); temporaryToken = readFileSync(path, 'utf8').trim(); if (fault === 'token publication') throw Error('controlled setup fault'); },
     openVerifiedAttachment: (_archive: unknown, _media: unknown, id: string) => { if (fault === 'original inspection') throw Error('controlled setup fault'); const file = join(dir, id); const bytes = Buffer.alloc(id === 'small' ? 1 : 2); writeFileSync(file, bytes, { mode: 0o600 }); return { fd: openSync(file, 'r'), size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }; }, closeSync,
