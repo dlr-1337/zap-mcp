@@ -29,14 +29,14 @@ findings:
     title: "WARNING — Localização de contatos falha com maiúsculas acentuadas"
 open: 0
 total: 6
-recorded: 2026-10-12T02:25:20.010Z
+recorded: 2026-10-12T02:27:50.400Z
 ---
 
 # Phase 02: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-04 | critical | fixed | 02-REVIEW-FIX.md |
+| CR-04 | critical | fixed | 02-REVIEW-FIX.md (not in the current review) |
 | CR-03 | critical | fixed | 02-REVIEW-FIX.iter4.md (not in the current review) |
 | WR-02 | warning | fixed | 02-REVIEW-FIX.iter4.md (not in the current review) |
 | CR-01 | critical | fixed | 02-REVIEW-FIX.iter3.md (not in the current review) |
