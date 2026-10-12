@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 9
-total_count: 9
-last_updated: 2026-10-11T23:56:04.558Z
+fixed_count: 11
+total_count: 11
+last_updated: 2026-10-12T15:27:09.720Z
 ---
 
 # Broken Windows Ledger
@@ -24,6 +24,8 @@ last_updated: 2026-10-11T23:56:04.558Z
 | 7 | 02 | deviation | test/http.test.ts |  | Fixture preexistente passou a resolver conversa pela origem conhecida; corrigido e verificado105/105. | fixed |  | 2026-10-11T23:21:43.647Z | 2026-10-11T23:23:05.093Z |
 | 8 | 02 | deviation | src/main.ts |  | 02-04: fechamento ocioso tornou-se assíncrono e atrasou liberação da trava; corrigido preservando contrato síncrono | fixed |  | 2026-10-11T23:55:42.958Z | 2026-10-11T23:56:04.001Z |
 | 9 | 02 | deviation | src/main.ts |  | 02-04: prévia UTC privada /api/exports/period adicionada para compartilhar parsePeriod sem duplicar DST no browser | fixed |  | 2026-10-11T23:56:04.289Z | 2026-10-11T23:56:04.558Z |
+| 10 | 03 | deviation | test/context.test.ts |  | 03-02: fixture de contexto sofreu ECONNRESET após seed síncrono superar keep-alive; A/B7.5s demonstrou yield mínimo antesGET sem mudar produto/timeouts/assertivas. | fixed |  | 2026-10-12T15:20:29.612Z | 2026-10-12T15:20:52.635Z |
+| 11 | 03 | deviation | src/mcp.ts |  | 03-02: campo desconhecido40k ampliava erro de schema além32KiB; gate12KiB somente para argumentos query corrige antesSDK, com RED/GREEN. | fixed |  | 2026-10-12T15:26:28.877Z | 2026-10-12T15:27:09.720Z |
 
 ````json
 [
@@ -142,6 +144,32 @@ last_updated: 2026-10-11T23:56:04.558Z
     "reason": "",
     "recorded_at": "2026-10-11T23:56:04.289Z",
     "resolved_at": "2026-10-11T23:56:04.558Z",
+    "milestone": null
+  },
+  {
+    "id": 10,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "test/context.test.ts",
+    "line": null,
+    "description": "03-02: fixture de contexto sofreu ECONNRESET após seed síncrono superar keep-alive; A/B7.5s demonstrou yield mínimo antesGET sem mudar produto/timeouts/assertivas.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-12T15:20:29.612Z",
+    "resolved_at": "2026-10-12T15:20:52.635Z",
+    "milestone": null
+  },
+  {
+    "id": 11,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "src/mcp.ts",
+    "line": null,
+    "description": "03-02: campo desconhecido40k ampliava erro de schema além32KiB; gate12KiB somente para argumentos query corrige antesSDK, com RED/GREEN.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-12T15:26:28.877Z",
+    "resolved_at": "2026-10-12T15:27:09.720Z",
     "milestone": null
   }
 ]
