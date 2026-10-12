@@ -15,3 +15,16 @@ Regressão independente usa uma cópia dos módulos sob .checkout, dados sintét
 CI mínima: Ubuntu, Node24.21.0, actions oficiais fixadas por SHA, token contents:read e credenciais de checkout não persistidas. npm ci, sintaxe de public/app.js e npm test; sem conta real ou segredos de runtime no runner.
 
 A exportação inicial por snapshot isolado fazia o gate TDD perder os commits originais. A publicação passou a preservar a sequência histórica real por uma réplica sanitizada; nenhum commit RED/GREEN fictício ou relaxamento de TDD foi usado. Os commits originais permanecem privados no checkout de implementação.
+
+
+# Publicação da fase 2 — PR #2
+
+[Fase 2: busca, contexto, abas e exportação privada](https://github.com/dlr-1337/zap-mcp/pull/2), branch codex/phase-2-site-search-export sobre codex/phase-1-private-archive. A fase1 ainda está noPR#1; este PR depende dela e mantém seu diff separado. Criado em2026-10-12. O checkout de implementação e seu coletor não foram trocados nem reiniciados.
+
+Verificação canônica passed45/45, oito requisitos e sete proibições, UAT17passing com G-02-6 resolvido; UI19/19, suíte local144/144 zero failcancelledskiptodo. Revisões atuaisclean/0open e UI24/24; registroplanejadoL1 tem26IDs/0open. Provas reais prévias de mídia/ZIP, CUA física delta0 e limites continuam nos relatórios da fase2. Nenhum aceite humano é presumido.
+
+Ancestralidade confirma origin/codex/phase-1-private-archive como antecessor direto do histórico local. São95commits reais de fase2,233blobs novos auditados contra12campos privados conhecidos e padrões de chaves privadas/tokens, sem correspondências. Árvore final não rastreia bancos, mídia, ZIPs ou credenciais. Conferência delimitada; não é garantia de inexistência de todo segredo possível. Não houve sanitização adicional nem reconstrução de commits. Todos96commits antes da nota de ship carecem de trailersgate-status; a seçãoTDD ruidosa foi suprimida conforme ship.md. RED/GREEN semânticos continuam nas evidências dos planos, sem inventar trailers.
+
+617832f prepara somente CI/README: Playwright1.62.1 e Chrome for Testing151.0.7922.34, versões do bundle local, instalados emRUNNER_TEMP externo ao checkout. Overrides existentes ZAP_BROWSER_MODULE/ZAP_BROWSER_EXECUTABLE conectam o harness ao runner; nenhuma fonte/teste/pin de runtime alterado. O CI tem Node24.21.0, ações oficiais porSHA e tokencontents:read; somente dados sintéticos, sem conta real. Instalação de browser é exclusiva dos testes. Metadata oficialnpm foi conferida antes de configurar a versão.
+
+CI remoto pendente nesta nota; acompanhar PR#2 e registrar resultado após conclusão. Revisão opcional reutiliza as revisões independentes atuais e a conferência do diff por este agente, conforme delegação autônoma do usuário; nenhum colega foi acionado. MCP/VPS/backup externo, conexão autenticada atual do WhatsApp original e zoom nativo/dispositivos físicos continuam fora desta publicação. Provas privadas permanecem protegidas foraGit; histórico/mídias/sessão originais preservados.
