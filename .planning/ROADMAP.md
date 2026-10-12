@@ -8,7 +8,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 - [x] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício. (completed 2026-10-11)
 - [x] **Phase 2: Busca, contexto, abas e exportação no site** - Encontrar evidências, comparar conversas e exportar o recorte completo com seus arquivos. (completed 2026-10-11)
-- [ ] **Phase 3: Consulta e arquivos reais no Codex** - Usar o MCP privado no Codex instalado e comprovar recebimento ou download dos binários.
+- [x] **Phase 3: Consulta e arquivos reais no Codex** - Usar o MCP privado no Codex instalado e comprovar recebimento ou download dos binários. (completed 2026-10-12)
 - [ ] **Phase 4: Operação e restauração na VPS** - Manter o serviço supervisionado, backup privado fora da VPS e o fluxo real verificável após restauração.
 
 ## Phase Details
@@ -122,7 +122,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 |-------|----------------|--------|-----------|
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
-| 3. Consulta e arquivos reais no Codex | 4/4 | In Progress | - |
+| 3. Consulta e arquivos reais no Codex | 4/4 | Complete    | 2026-10-12 |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
 
 **Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. Status de todos: Pending. Planos ainda não criados; progresso de execução: 0%.

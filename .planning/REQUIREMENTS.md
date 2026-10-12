@@ -48,11 +48,11 @@
 
 ### MCP no Codex do usuário
 
-- [ ] **MCP-01**: O Codex instalado do usuário consegue inicializar e usar o MCP remoto por transporte protegido com token privado revogável; token ausente, inválido ou revogado é recusado sem expor o acervo.
-- [ ] **MCP-02**: O Codex pode localizar contatos/conversas e pesquisar mensagens por contato, termo e período, recebendo limites, filtros efetivos e continuação explícitos em respostas com tamanho controlado.
-- [ ] **MCP-03**: O Codex pode recuperar um trecho ou contexto por referência de mensagem, com os mesmos IDs, autoria, datas, citações, alterações e limites de cobertura apresentados pelo site.
-- [ ] **MCP-04**: O Codex do usuário consegue efetivamente recuperar um arquivo disponível ou fazer seu download autorizado, com bytes/hash conferíveis; listar um recurso ou devolver somente uma URL não comprova entrega, e formato/tamanho sem suporte produz limite explícito.
-- [ ] **MCP-05**: As interfaces públicas oferecem apenas consultas ao acervo: não existe caminho de enviar, editar, apagar ou marcar mensagens como lidas no WhatsApp; anotações MCP não substituem o bloqueio efetivo e conteúdo de conversa continua tratado como dado não confiável.
+- [x] **MCP-01**: O Codex instalado do usuário consegue inicializar e usar o MCP remoto por transporte protegido com token privado revogável; token ausente, inválido ou revogado é recusado sem expor o acervo.
+- [x] **MCP-02**: O Codex pode localizar contatos/conversas e pesquisar mensagens por contato, termo e período, recebendo limites, filtros efetivos e continuação explícitos em respostas com tamanho controlado.
+- [x] **MCP-03**: O Codex pode recuperar um trecho ou contexto por referência de mensagem, com os mesmos IDs, autoria, datas, citações, alterações e limites de cobertura apresentados pelo site.
+- [x] **MCP-04**: O Codex do usuário consegue efetivamente recuperar um arquivo disponível ou fazer seu download autorizado, com bytes/hash conferíveis; listar um recurso ou devolver somente uma URL não comprova entrega, e formato/tamanho sem suporte produz limite explícito.
+- [x] **MCP-05**: As interfaces públicas oferecem apenas consultas ao acervo: não existe caminho de enviar, editar, apagar ou marcar mensagens como lidas no WhatsApp; anotações MCP não substituem o bloqueio efetivo e conteúdo de conversa continua tratado como dado não confiável.
 
 ### Operação e aceite
 
@@ -117,11 +117,11 @@ Cada requisito v1 pertence a exatamente uma fase responsável. Requisitos transv
 | EXP-01 | Phase 2 | Complete |
 | EXP-02 | Phase 2 | Complete |
 | EXP-03 | Phase 2 | Complete |
-| MCP-01 | Phase 3 | Pending |
-| MCP-02 | Phase 3 | Pending |
-| MCP-03 | Phase 3 | Pending |
-| MCP-04 | Phase 3 | Pending |
-| MCP-05 | Phase 3 | Pending |
+| MCP-01 | Phase 3 | Complete |
+| MCP-02 | Phase 3 | Complete |
+| MCP-03 | Phase 3 | Complete |
+| MCP-04 | Phase 3 | Complete |
+| MCP-05 | Phase 3 | Complete |
 | OPS-01 | Phase 4 | Pending |
 | OPS-02 | Phase 4 | Pending |
 | OPS-03 | Phase 4 | Pending |
