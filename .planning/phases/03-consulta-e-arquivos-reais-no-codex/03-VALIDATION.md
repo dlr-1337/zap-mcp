@@ -1,15 +1,15 @@
 ---
 phase: "03"
 slug: "consulta-e-arquivos-reais-no-codex"
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-12"
 ---
 
 # Phase 3 — Validation Strategy
 
-Contrato de verificação derivado de 03-RESEARCH.md. Execução encerrada em 2026-10-12, com provas abaixo. Aprovação independente/Nyquist continuam pendentes; documentos e fixtures não concluem os requisitos MCP.
+Contrato de verificação derivado de 03-RESEARCH.md. Execução encerrada em 2026-10-12, com provas abaixo. Auditoria Nyquist do orquestrador concluída; o verificador independente ainda decide o objetivo e os requisitos MCP. Documentos e fixtures isolados não os concluem.
 
 ## Test Infrastructure
 
@@ -20,7 +20,7 @@ Contrato de verificação derivado de 03-RESEARCH.md. Execução encerrada em 20
 | Build | `mise exec node@24.21.0 -- npm run build` |
 | Quick proposto | `mise exec node@24.21.0 -- node --test dist/test/mcp.test.js` após criação/build |
 | Suíte completa | `mise exec node@24.21.0 -- npm test` |
-| Duração | Medir na execução; ainda não comprovada |
+| Duração | Suíte independente final: 177/177 em 88,764s, exit 0; foco e execução real no ledger |
 
 ## Sampling Rate
 
@@ -75,16 +75,16 @@ Agente executa autonomamente os acessos disponíveis. Participação do propriet
 - [x] Wave0 cobre referências inicialmente ausentes; sem watch-mode.
 - [x] Duração dos testes focados registrada.
 - [x] Recibos reais sanitizados e suíte integrada verde.
-- [ ] nyquist_compliant:true somente após auditoria, com evidência.
+- [x] nyquist_compliant:true após auditoria do mapa e testes verdes no checkout final.
 
-**Approval:** pending — execução comprovada abaixo; auditor/verificador independentes ainda decidem aprovação.
+**Approval:** Nyquist validado em 2026-10-12 pelo orquestrador; veredito do objetivo da fase continua pendente do verificador independente.
 
 ## Probes e cobertura do planejamento
 
 - GOAL/REQ/RESEARCH/CONTEXT: auditoria completa em 03-04-PLAN.md; MCP-01 a MCP-05 e D-01 a D-20 atribuídos a tarefas. COVERAGE.md registra o subconjunto somente leitura e opt-outs explícitos.
 - Edge probe: cinco itens preservados. MCP-04 concurrency tem critério explícito de interrupção/restrição/rotação e grants concorrentes; MCP-01/02/03/05 continuam unclassified/unresolved como flagged assumptions para o verificador, sem descarte ou reclassificação inventados.
 - Três proibições específicas foram projetadas por projectProhibitions em 03-04 must_haves.prohibitions, descriptor-less/unresolved, portanto flagged-unverified. Testes de produto planejados não são uma prova executada nem descriptors fabricados.
-- Execução concluiu Wave0 e provas reais. status draft e nyquist_compliant:false permanecem até auditoria independente; wave_0_complete:true registra os artefatos efetivamente criados/testados.
+- Execução concluiu Wave0 e provas reais. status validated e nyquist_compliant:true registram a auditoria do orquestrador sobre o mapa, os casos de teste e a execução independente verde; wave_0_complete:true registra os artefatos efetivamente criados/testados.
 
 ## Ledger de execução — oito tarefas
 
@@ -174,3 +174,15 @@ Cada chamada positiva teve subprocesso instalado atual, request ID/timestamp pri
 Os probes MCP-01/02/03/05 e as3 proibições descriptor-less continuam flagged-unverified, sem criar check_* ou resolver taxonomia por documentação. MCP-04 concurrency tem critério explícito e testes concretos; a classificação independente continua fora deste ledger. Nenhum requisito global foi marcado completo aqui.
 
 Pendência fase 4/WINDOWS13: login do site sob TLS nativo com Origin HTTPS retornou 403; oráculo do site foi HTTP exclusivamente loopback no mesmo clone. Configuração proxy/canal e comportamento de produção não foram comprovados. Endpoint de aceite encerrado, sem registro Codex habilitado apontando para ele. VPS, supervisão, backup externo recorrente e restore operacional final permanecem fora desta execução.
+
+## Conferência Nyquist do orquestrador
+
+Oito tarefas mapeadas, cinco requisitos COVERED e nenhum gap de automação identificado. Os testes existentes executam controles positivos e negativos de autenticação, revogação concorrente, integridade, filtros, cursores, contexto/proveniência, orçamento, somente leitura e recibos novos. O recibo real de 12 chamadas inclui SQL/site/bytes independentes e os casos de citação/edição/instante desconhecido; não foi substituído por fixtures. A suíte completa foi repetida no checkout final pelo orquestrador: `TMPDIR=<diretório privado no home> mise exec node@24.21.0 -- npm test`, exit 0, 177/177, zero fail/cancel/skip/todo, 88763,61252ms. Log privado `suite-root-wave4.log`. Nenhum teste novo que espelhe a implementação foi necessário. A validação Nyquist não antecipa o veredito dos requisitos nem a implantação VPS.
+
+## Validation Audit 2026-10-12
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
