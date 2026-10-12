@@ -167,7 +167,7 @@ Cada chamada positiva teve subprocesso instalado atual, request ID/timestamp pri
 | T-03-10 | Referência/direção/sessão/TTL/ordinal e paridade; src/mcp.ts:174,src/archive.ts:478,test/mcp.test.ts:223/273 e SQL/site real |
 | T-03-11 | Whitelist/diretórios0700/arquivos0600/config/cleanup; scripts/phase3-acceptance.mjs:21/38/101/233/236/241,test/mcp-acceptance.test.ts:47 |
 | T-03-12 | Run atual/calls/canal/destinos/oráculos; scripts/phase3-acceptance.mjs:19/24/107/153/176/224,test/mcp-acceptance.test.ts:25/29/40 |
-| T-03-SC | Ordem prévia de todas transitivas não cumprida em03-01; revalidação corretiva atual1586arquivos/0vulnerabilidades aguarda reauditoria:03-DEPENDENCY-REVALIDATION.md |
+| T-03-SC | Desvio de ordem original preservado; revalidação corretiva reauditoria1586/1586arquivos,0vulnerabilidades/scriptsdesabilitados,grafo6pacotes:03-DEPENDENCY-REVALIDATION.md;13/13ameaças fechadas em03-SECURITY.md |
 
 ## Pendências explícitas
 

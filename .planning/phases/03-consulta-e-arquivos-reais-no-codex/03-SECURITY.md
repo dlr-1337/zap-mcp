@@ -1,8 +1,8 @@
 ---
 phase: "03"
 slug: "consulta-e-arquivos-reais-no-codex"
-status: draft
-threats_open: 1
+status: verified
+threats_open: 0
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
@@ -11,7 +11,7 @@ created: "2026-10-12"
 
 # Fase03 — Segurança
 
-Auditoria independente do registro planejado:12mitigações fechadas, uma ameaça bloqueante T-03-SC aberta. Nenhum risco aceito automaticamente. Revalidação corretiva executada e pendente de reauditoria; este documento não libera avanço.
+Auditoria e reauditoria independentes do registro planejado:13/13mitigações fechadas e zero ameaças abertas. Nenhum risco aceito automaticamente. A correção atual de T-03-SC preserva o desvio histórico da instalação original.
 
 ## Trust Boundaries
 
@@ -33,7 +33,7 @@ Codex→HTTP/MCP; MCP→arquivo/binário; CLI→auth/config; argumentos→snapsh
 | T-03-10 | Tampering | contexto/cursor | medium | mitigate | Referência/direção/sessão/TTL/ordinal e paridade; src/mcp.ts:174,src/archive.ts:478,test/mcp.test.ts:223/273 e SQL/site real | closed |
 | T-03-11 | Information disclosure | recibos/config/diff | high | mitigate | Whitelist/diretórios0700/arquivos0600/config/cleanup; scripts/phase3-acceptance.mjs:21/38/101/233/236/241,test/mcp-acceptance.test.ts:47 | closed |
 | T-03-12 | Repudiation | falso aceite/recibo replay | medium | mitigate | Run atual/calls/canal/destinos/oráculos; scripts/phase3-acceptance.mjs:19/24/107/153/176/224,test/mcp-acceptance.test.ts:25/29/40 | closed |
-| T-03-SC | Tampering | npm installs | high | mitigate | Ordem prévia de todas transitivas não cumprida em03-01; revalidação corretiva atual1586arquivos/0vulnerabilidades aguarda reauditoria:03-DEPENDENCY-REVALIDATION.md | open |
+| T-03-SC | Tampering | npm installs | high | mitigate | Desvio de ordem original preservado; mitigação corretiva reauditoria1586/1586arquivos iguais ao registry/stage/projeto,0vulnerabilidades,controles antes do ciisolado/scriptsdesabilitados:03-DEPENDENCY-REVALIDATION.md | closed |
 
 ## Accepted Risks Log
 
@@ -51,6 +51,18 @@ O auditor inspecionou código/testes, histórico seletivo de instalação, prova
 
 - [x] Todas13ameaças têm disposição mitigate, T-03-SC deduplicada.
 - [x] Nenhum risco aceito automaticamente.
-- [ ] threats_open:0, aguardando reauditoria T-03-SC.
+- [x] threats_open:0 após reauditoria corretiva independente de T-03-SC.
 
-**Approval:** bloqueado por T-03-SC enquanto a correção atual não for reavaliada.
+**Approval:** segurança verificada em2026-10-12;13/13fechadas,zero open/below-threshold. Veredito final do objetivo ainda cabe ao verificador.
+
+## Reauditoria corretiva T-03-SC
+
+O gsd-security-auditor recalculou SHA512 dos6tarballs e comparou1586/1586arquivos regulares com stage e pacotes ativos, todos iguais. Conferiu registry/repositórios/pins/manifestos/grafo e ausência de lifecycle; confirmou a ordem preventiva da nova instalação isolada com scriptsdesabilitados e audit0/smokeexit0. Somente documentos mudaram, portanto as12closures anteriores foram preservadas. T-03-SC fechou pela correção verificável do estado atual, sem alegar conformidade da instalação original nem aceitar risco automaticamente. Futuras atualizações exigem nova conferência preventiva.
+
+## Security Audit 2026-10-12
+
+| Metric | Count |
+|---|---|
+| Threats found | 13 |
+| Closed | 13 |
+| Open | 0 |

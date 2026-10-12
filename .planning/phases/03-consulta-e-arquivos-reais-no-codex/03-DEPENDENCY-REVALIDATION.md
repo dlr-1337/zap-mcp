@@ -23,4 +23,4 @@ Em2026-10-12 foi executada uma revalidação atual com instalação isolada dos 
 | hono | 4.13.13 | 574 | nenhum |
 | zod | 4.6.6 | 840 | nenhum |
 
-Resultado estruturado sanitizado: [03-DEPENDENCY-REVALIDATION.json](03-DEPENDENCY-REVALIDATION.json). Metadados/tarballs/logs e o verificador assert-based ficam no diretório privado de orquestração; todas as assertions passaram. T-03-SC continua aguardando reauditoria independente desta mitigação. Não foi aceito risco automaticamente nem declarado o passado conforme.
+Resultado estruturado sanitizado: [03-DEPENDENCY-REVALIDATION.json](03-DEPENDENCY-REVALIDATION.json). Metadados/tarballs/logs e o verificador assert-based ficam no diretório privado de orquestração; todas as assertions passaram. Reauditoria independente confirmou1586/1586arquivos e a evidência executada; T-03-SC foi fechada pela mitigação corretiva atual em03-SECURITY.md. Não foi aceito risco automaticamente nem declarado o passado conforme.
