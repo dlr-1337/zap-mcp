@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once, EventEmitter } from 'node:events';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { get as httpGet } from 'node:http';
 import { Readable } from 'node:stream';
 import { spawnSync, spawn } from 'node:child_process';
@@ -196,6 +196,34 @@ test('período exportado compartilha DST limites inclusivos desconhecido vazio e
   const frozen = a.freezeExportSelection(f.conversationId, period); assert.deepEqual(frozen.messages.map(m => m.text), ['DST 1', 'DST 2']); assert.equal(period.endMs! - period.startMs!, 23 * 3600_000);
   assert.equal(a.freezeExportSelection(f.conversationId, parsePeriod()).messages.at(-1)!.originalTimestamp, null);
   assert.equal((await f.post({ from: '2099-01-01' })).status, 422); assert.equal((await f.post({ from: '2024-02-30' })).status, 400); assert.equal((await f.post({ from: '2024-01-02', to: '2024-01-01' })).status, 400);
+});
+test('requestId HTTP recupera alias e canônico antes e após reconciliação sem mudar recorte', async t => {
+  for (const mergeBeforeCreation of [true, false]) {
+    const f = await fixture(t), pn = { remoteJid: '2@s.whatsapp.net', id: 'pn', fromMe: false }, lid = { remoteJid: '2@lid', id: 'lid', fromMe: false };
+    f.s.archive.ingestHistory({ messages: [{ key: pn, messageTimestamp: 1700000001, message: { conversation: 'PN' } }, { key: lid, messageTimestamp: 1700000002, message: { conversation: 'LID' } }] });
+    const canonical = f.s.archive.readStoredMessage(pn)!.conversationId, alias = f.s.archive.readStoredMessage(lid)!.conversationId, requestId = randomUUID();
+    const merge = () => f.s.archive.ingestContacts([{ id: lid.remoteJid, lid: lid.remoteJid, phoneNumber: pn.remoteJid }]);
+    if (mergeBeforeCreation) merge();
+    const first = await f.post({ conversationId: alias, requestId }); assert.equal(first.status, 202); const frozen = await first.json();
+    if (!mergeBeforeCreation) merge();
+    for (const conversationId of [alias, canonical]) {
+      const retry = await f.post({ conversationId, requestId }); assert.equal(retry.status, 202, 'mesma identidade efetiva recupera o job'); const recovered = await retry.json();
+      assert.equal(recovered.jobId, frozen.jobId); assert.deepEqual(recovered.effectiveFilters, frozen.effectiveFilters); assert.equal(recovered.snapshotAt, frozen.snapshotAt);
+    }
+    assert.equal((await f.post({ conversationId: alias, requestId, from: '2023-11-14' })).status, 409);
+    assert.equal((await f.post({ conversationId: f.conversationId, requestId })).status, 409);
+    assert.equal((await f.post({ conversationId: alias, requestId, csrfToken: 'invalid' })).status, 403);
+    const challenge = await fetch(f.base + '/api/session'), c = await challenge.json();
+    const login = await fetch(f.base + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: f.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'senha sintética', csrfToken: c.csrfToken }) });
+    const foreignHeaders = { Cookie: login.headers.get('set-cookie')!.split(';')[0], Origin: f.base, 'Content-Type': 'application/json' };
+    const session = await (await fetch(f.base + '/api/session', { headers: foreignHeaders })).json();
+    assert.equal((await fetch(f.base + '/api/exports', { method: 'POST', headers: foreignHeaders, body: JSON.stringify({ conversationId: alias, requestId, csrfToken: session.csrfToken }) })).status, 404);
+    const job = await ready(f, frozen.jobId); assert.equal(job.state, 'ready'); assert.equal(job.counts.messages, mergeBeforeCreation ? 2 : 1);
+    const path = join(f.dir, 'redirect.zip'); writeFileSync(path, Buffer.from(await (await fetch(f.base + job.downloadURL, { headers: f.headers })).arrayBuffer()));
+    const manifest = JSON.parse((await entries(path)).get('manifest.json')!.toString());
+    assert.deepEqual(manifest.effectiveFilters, frozen.effectiveFilters); assert.equal(manifest.messages.length, mergeBeforeCreation ? 2 : 1);
+    assert.equal(manifest.messages.find((m: any) => m.key.id === 'lid').originalTimestamp, '2023-11-14T22:13:22.000Z');
+  }
 });
 test('verificação ZIP rejeita CRC SHA conjunto duplicata traversal e absoluto', async t => {
   const f = await fixture(t), data = Buffer.from('expected'), expected = new Map([['mensagens.txt', { size: data.length, sha256: createHash('sha256').update(data).digest('hex') }]]);

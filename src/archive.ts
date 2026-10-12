@@ -519,7 +519,7 @@ export function openArchive(dataDir: string) {
   return {
     db,
     onChange(listener: () => void) { changeListeners.add(listener); return () => { changeListeners.delete(listener); }; },
-    searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence, isRestricted,
+    searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence, isRestricted, resolveConversation,
     dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
       db.transaction(() => { for (const m of batch.lidPnMappings ?? []) ingestIdentity(m); for (const c of batch.contacts ?? []) ingestIdentity(c); for (const c of batch.chats ?? []) ingestIdentity(c, true); })();

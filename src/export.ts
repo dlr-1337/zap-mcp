@@ -127,7 +127,7 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
     const id = typeof requestId === 'string' ? requestId : randomUUID(), period = parsePeriod(from, to);
     if (db.prepare('SELECT id FROM jobs WHERE id=?').get(id)) {
       const job = get(id, session), filters = job.effectiveFilters;
-      if (filters.conversationId !== conversationId || filters.from !== period.from || filters.to !== period.to) throw error(409, 'Solicitação já usada para outro recorte.');
+      if (archive.resolveConversation(filters.conversationId) !== archive.resolveConversation(conversationId) || filters.from !== period.from || filters.to !== period.to) throw error(409, 'Solicitação já usada para outro recorte.');
       return job;
     }
     if (active || db.prepare("SELECT id FROM jobs WHERE state='preparing'").get()) throw error(409, 'Já há uma exportação em preparação. Aguarde.');
