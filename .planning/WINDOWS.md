@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 1
 waived_count: 0
-fixed_count: 9
-total_count: 9
-last_updated: 2026-10-11T23:56:04.558Z
+fixed_count: 12
+total_count: 13
+last_updated: 2026-10-12T17:17:47.705Z
 ---
 
 # Broken Windows Ledger
@@ -24,6 +24,10 @@ last_updated: 2026-10-11T23:56:04.558Z
 | 7 | 02 | deviation | test/http.test.ts |  | Fixture preexistente passou a resolver conversa pela origem conhecida; corrigido e verificado105/105. | fixed |  | 2026-10-11T23:21:43.647Z | 2026-10-11T23:23:05.093Z |
 | 8 | 02 | deviation | src/main.ts |  | 02-04: fechamento ocioso tornou-se assíncrono e atrasou liberação da trava; corrigido preservando contrato síncrono | fixed |  | 2026-10-11T23:55:42.958Z | 2026-10-11T23:56:04.001Z |
 | 9 | 02 | deviation | src/main.ts |  | 02-04: prévia UTC privada /api/exports/period adicionada para compartilhar parsePeriod sem duplicar DST no browser | fixed |  | 2026-10-11T23:56:04.289Z | 2026-10-11T23:56:04.558Z |
+| 10 | 03 | deviation | test/context.test.ts |  | 03-02: fixture de contexto sofreu ECONNRESET após seed síncrono superar keep-alive; A/B7.5s demonstrou yield mínimo antesGET sem mudar produto/timeouts/assertivas. | fixed |  | 2026-10-12T15:20:29.612Z | 2026-10-12T15:20:52.635Z |
+| 11 | 03 | deviation | src/mcp.ts |  | 03-02: campo desconhecido40k ampliava erro de schema além32KiB; gate12KiB somente para argumentos query corrige antesSDK, com RED/GREEN. | fixed |  | 2026-10-12T15:26:28.877Z | 2026-10-12T15:27:09.720Z |
+| 12 | 03 | deviation | src/mcp.ts |  | 03-04: ledger completo de lotes bloqueava resultado mínimo real de232809bytes; resumo explícito preserva contagens/intervalos/estados, com RED600lotes e SQL/site independentes. | fixed |  | 2026-10-12T17:16:59.633Z | 2026-10-12T17:17:47.629Z |
+| 13 | 04 | deviation | src/auth.ts |  | Login do site em TLS nativo com Origin HTTPS retornou403 no aceite03-04; revisar canal/Origin/proxy na fase4, sem inferir comportamento de produção. | open |  | 2026-10-12T17:17:47.705Z |  |
 
 ````json
 [
@@ -142,6 +146,58 @@ last_updated: 2026-10-11T23:56:04.558Z
     "reason": "",
     "recorded_at": "2026-10-11T23:56:04.289Z",
     "resolved_at": "2026-10-11T23:56:04.558Z",
+    "milestone": null
+  },
+  {
+    "id": 10,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "test/context.test.ts",
+    "line": null,
+    "description": "03-02: fixture de contexto sofreu ECONNRESET após seed síncrono superar keep-alive; A/B7.5s demonstrou yield mínimo antesGET sem mudar produto/timeouts/assertivas.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-12T15:20:29.612Z",
+    "resolved_at": "2026-10-12T15:20:52.635Z",
+    "milestone": null
+  },
+  {
+    "id": 11,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "src/mcp.ts",
+    "line": null,
+    "description": "03-02: campo desconhecido40k ampliava erro de schema além32KiB; gate12KiB somente para argumentos query corrige antesSDK, com RED/GREEN.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-12T15:26:28.877Z",
+    "resolved_at": "2026-10-12T15:27:09.720Z",
+    "milestone": null
+  },
+  {
+    "id": 12,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "src/mcp.ts",
+    "line": null,
+    "description": "03-04: ledger completo de lotes bloqueava resultado mínimo real de232809bytes; resumo explícito preserva contagens/intervalos/estados, com RED600lotes e SQL/site independentes.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-12T17:16:59.633Z",
+    "resolved_at": "2026-10-12T17:17:47.629Z",
+    "milestone": null
+  },
+  {
+    "id": 13,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "src/auth.ts",
+    "line": null,
+    "description": "Login do site em TLS nativo com Origin HTTPS retornou403 no aceite03-04; revisar canal/Origin/proxy na fase4, sem inferir comportamento de produção.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-12T17:17:47.705Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]

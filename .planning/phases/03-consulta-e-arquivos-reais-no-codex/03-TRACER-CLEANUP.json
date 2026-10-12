@@ -1,0 +1,33 @@
+{
+  "oldCleanup": {
+    "synthetic": false,
+    "at": "2026-10-12T19:46:36.692Z",
+    "keysBefore": 3,
+    "matchingTemporaryBearersBefore": 1,
+    "removedTemporaryFiles": 6,
+    "activeKeysAfter": 0,
+    "oldBearerHttpStatus": 401
+  },
+  "newTracer": {
+    "at": "2026-10-12T19:51:23.244Z",
+    "codex": "codex-cli 0.162.1",
+    "bytes": [
+      4200,
+      271485
+    ],
+    "activeKeys": 0,
+    "temporaryTokenFiles": 0,
+    "unchanged": {
+      "archive": true,
+      "whatsapp": true,
+      "web": true,
+      "codex": true
+    }
+  },
+  "recoveryCheck": {
+    "at": "2026-10-12T20:03:41.692397+00:00",
+    "additionalInactiveFilesRemoved": 2,
+    "activeMcpKeys": 0,
+    "temporaryTokenFiles": 0
+  }
+}

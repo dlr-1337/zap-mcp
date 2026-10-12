@@ -1,20 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 3
-current_phase_name: Consulta e arquivos reais no Codex
+current_phase: 4
+current_phase_name: Operação e restauração na VPS
 current_plan: Not started
 status: planning
-stopped_at: "PRs #1 and #2 merged into main; local checkout synchronized with GitHub; Phase 3 ready to discuss/plan"
-last_updated: "2026-10-12T12:32:38.177Z"
+stopped_at: "Fase 3 publicada no PR #3, CI190/190 aprovado; fase4 pronta para discussão"
+last_updated: "2026-10-12T22:07:36.415Z"
 last_activity: 2026-10-12
-last_activity_desc: "PRs #1 and #2 merged into main; synchronized with GitHub"
-state_head: 5a9512378710e73283df40614a5a54ba00c36aeb
+state_head: 89d94ec4bc069abc69cc9a77e94228575b42d2aa
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 13
-  completed_plans: 13
-  percent: 50
+  completed_phases: 3
+  total_plans: 17
+  completed_plans: 17
+  percent: 75
 ---
 
 # Project State
@@ -24,24 +23,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-12)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase 3 ready to discuss/plan — Phase 2 local verified: 45/45 criteria, 8/8 requirements; autonomous UAT 17 passing, G-02-6 resolved; Phase 1 local complete
+**Current focus:** Phase 4 — Operação e restauração na VPS
 
 **Publicação da Phase1:** [PR #1](https://github.com/dlr-1337/zap-mcp/pull/1), branch codex/phase-1-private-archive; fase local verificada, sem implantação na VPS.
 
 ## Current Position
 
-Phase: 3 — Consulta e arquivos reais no Codex
+Phase: 4 — Operação e restauração na VPS
 Current Plan: Not started
 Total Plans in Phase: 0
 Status: Ready to plan
-Last activity: 2026-10-12 — PRs #1 and #2 merged into main; synchronized with GitHub
+Last activity: 2026-10-12
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75% — 3/4 fases; 17/17 planos definidos concluídos
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
+- Total plans completed: 17
 - Average duration: Não consolidada; plano07 teve piloto continuado
 - Total execution time:71min registrados nos planos01–06, além do piloto continuado01–07
 
@@ -51,7 +50,7 @@ Progress: [█████░░░░░] 50%
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
 | 2 | 6 | - | - |
-| 3 | 0 | 0 | - |
+| 03 | 4 | - | - |
 | 4 | 0 | 0 | - |
 
 **Recent Trend:**
@@ -74,6 +73,10 @@ Progress: [█████░░░░░] 50%
 | Phase 02 P04 | 17min | 3 tasks | 9 files |
 | Phase 02 P05 | 18min | 3 tasks | 4 files |
 | Phase 02 P06 | 26min30s | 3 tasks | 3 files |
+| Phase 03 P01 | 27min | 2 tasks | 10 files |
+| Phase 03 P02 | 36min | 2 tasks | 8 files |
+| Phase 03 P03 | 10min | 2 tasks | 5 files |
+| Phase 03 P04 | 72min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -102,6 +105,19 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 02]: Aceite real offline/browser conferiu 1.028 mensagens,190originais e112faltantes por SQL/bytes independentes; fonte local atualizada preservando 8.771mensagens/853originais e credenciais, sem confirmar conexão original atual.
 - [Phase 02]: Phase2 local:40/40criteria,8/8requirements,7/7prohibitions;143tests and real1028-message ZIP accepted; next Phase3 MCP.
 - [Phase 02]: G-02-6: abas sticky e foco da âncora pelo início, sem novo estado de leitura; UAT autônoma física delta0. — Alcançar controles não pode substituir a posição salva; fonte200 e mensagens altas exigem início alcançável; provas reais sanitizadas.
+- [Phase 03]: Codex0.162.1 negociou2025-06-18 e salvou dois originais reais por GET privado TLS com tamanhos/SHA iguais; CA somente no subprocesso e config preservada.
+- [Phase 03]: MCP independente do site: digest e geracao atomicos, gates de consumo write/end e rotacao local sem segundo coletor;154/154 testes passam em TMPDIR privado/home.
+- [Phase 03]: MCP consultas usam Archive/snapshots e candidatos Map privado;32KiB é orçamento do servidor,32671bytes medidos,no máximo cliente;164/164tests,tracer1/1.
+- [Phase 03]: Contexto MCP reusa Archive, origem searchCursor autenticada e ancora obrigatoria no budget;172/172 testes e tracerCodex1/1.
+- [Phase 03]: Cobertura MCP agrega explicitamente lotes em batchSummary preservando contagens/intervalos/estados; envelope32KiB e DTOs inalterados, conferidos porSQL/site.
+- [Phase 03]: Aceite Codex0.162.1/protocolo2025-06-18 completou12calls atuais e dois originais4200/271485bytes SHAiguais; gate emWeakSet impede JSONreplay.
+- [Phase 03]: Oraculo siteHTTP apenasloopback no clone; MCP/originaisHTTPSverificado. Login siteTLS OriginHTTPS403 pendente emfase4/WINDOWS13.
+- [Phase 03]: Fase 3 local concluída: verificador passed21/21, MCP-01 a MCP-05 satisfeitos, 190/190 testes; 12 chamadas no Codex0.162.1 e dois originais com tamanho/SHA iguais.
+- [Phase 03]: Endpoint MCP de aceite transitório: HTTPS verificado, CA e configuração somente no subprocesso; zero chaves MCP/tokens residuais e acervo, sessão, autenticação web e TOML preservados.
+- [Phase 03]: Próxima ação é discutir a fase 4; VPS permanente, HTTPS/login web Origin403, backup externo e restauração operacional seguem pendentes. Ponteiros antigos para tarefas das fases 1/2 são históricos, já concluídos.
+- [Phase 03]: UAT autônoma da fase 3 passou 12/12 cenários, zero issues/bloqueadores; dez entregas auto-covered e prova nova Codex/TLS/dois originais/cleanup1/1. Predicate uat-passed exige e confirma verification passed; confirmação humana não presumida.
+- [Phase 03]: Fase 3 publicada no PR #3: https://github.com/dlr-1337/zap-mcp/pull/3; branch codex/phase-3-codex-mcp sobre main. Réplica sanitizada preserva67commits reais e fonte/testes/pins; CI remoto em acompanhamento, sem implantação na VPS.
+- [Phase 03]: CI do PR #3 e do push89d94ec concluído190/190 no Ubuntu/Node24.21.0, zero fail/cancelled/skipped/todo. Correção test-only do preflight de cleanup isolou Codex pessoal; produto/driver/pins/workflow não mudaram. Fase4 continua não iniciada.
 
 ### Pending Todos
 
@@ -112,13 +128,14 @@ Nenhum todo avulso registrado. Próxima ação: executar02-02;02-01 concluído c
 Nenhum impedimento para iniciar o planejamento.
 
 - Phase1 concluída: Baileys/chaves/identidades/eventos, QR, comparaçãoWeb e restore/restart verificados; histórico permanece limitado ao recebido. Crash do auxiliar sem causa exata determinada; download Chrome normal passou.
-- Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
+- Phase 4: resolver HTTPS/proxy/login web (Origin403/WINDOWS13) e revalidar consulta/download no endpoint permanente; piloto MCP local temporário encerrado.
 
 ### Roadmap Evolution
 
 - Phase 2 edited: Normalized only Goal to the already-derived MVP user story; scope and criteria identical.
+- Phase 3 edited: edited fields: goal (normalização MVP; mesma história de usuário dos PLANs)
 
 ## Deferred Items
 
@@ -129,8 +146,8 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T12:32:38.136Z
-Stopped at: PRs #1 and #2 merged into main; local checkout synchronized with GitHub; Phase 3 ready to discuss/plan
+Last session: 2026-10-12T22:07:36.367Z
+Stopped at: Fase 3 publicada no PR #3, CI190/190 aprovado; fase4 pronta para discussão
 Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.

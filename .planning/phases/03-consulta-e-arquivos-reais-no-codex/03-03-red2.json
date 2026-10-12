@@ -1,0 +1,10 @@
+{
+  "command": "TMPDIR=<diretorio-privado-de-verificacao> mise exec node@24.21.0 -- node --test --test-reporter=tap --test-name-pattern='MCP instruções fixas' dist/test/mcp.test.js",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: MCP instruções fixas não promovem mensagem adversarial a ferramenta ou segredo\nnot ok 1 - MCP instruções fixas não promovem mensagem adversarial a ferramenta ou segredo\n  ---\n  duration_ms: 91.999367\n  type: 'test'\n  location: '<checkout>/dist/test/mcp.test.js:387:1'\n  failureType: 'testCodeFailure'\n  error: 'Instruções do servidor devem separar explicitamente dados recebidos'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected:\n  actual: ''\n  operator: 'match'\n  stack: |-\n    TestContext.<anonymous> (file:///home/otavio/Documents/ChatGPT/zap-mcp%202/dist/test/mcp.test.js:395:12)\n    process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 418.109706\n",
+  "targetTest": "MCP instruções fixas não promovem mensagem adversarial a ferramenta ou segredo",
+  "targetFile": "test/mcp.test.ts",
+  "expected": "Initialize carries fixed instructions declaring archive contents untrusted data",
+  "actual": "Initialize instructions absent, assertion failed",
+  "semanticAssessment": "Target seeded adversarial archive and executed initialize; ERR_ASSERTION occurs because fixed policy instructions are absent, without fixture/import failure."
+}

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { setImmediate } from 'node:timers/promises';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 import { openArchive } from '../src/archive.js';
@@ -20,7 +21,11 @@ async function contextFixture(t: TestContext) {
     assert.equal(logged.status, 200); return { Cookie: logged.headers.get('set-cookie')!.split(';')[0] };
   };
   const headers = await login();
-  const read = async (reference: string, query = '') => { const r = await fetch(base + '/api/context/' + reference + query, { headers }); assert.equal(r.status, 200); return r.json(); };
+  const read = async (reference: string, query = '') => {
+    // Synchronous seeds can outlive keep-alive; let expired socket timers run before reusing the pool.
+    await setImmediate();
+    const r = await fetch(base + '/api/context/' + reference + query, { headers }); assert.equal(r.status, 200); return r.json();
+  };
   return { s, base, headers, login, read };
 }
 const key = { remoteJid: '1@lid', id: 'm0', fromMe: false };

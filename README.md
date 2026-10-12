@@ -8,7 +8,9 @@ As fases 1 e 2 locais estão concluídas e verificadas. O site oferece busca por
 
 O aceite real conferiu 1.028 mensagens, 190 originais e 112 faltantes no recorte escolhido, preservando versões e citações; ambos ZIPs tiveram todas as 192 entradas e os hashes conferidos. A atualização local preservou senha, identidade e IDs, após snapshot/restore de 8.792 mensagens e 856 originais. Essas contagens são das cópias verificadas, sem garantia de histórico integral. [Evidências da fase 2](.planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-VERIFICATION.md).
 
-MCP no Codex pertence à fase 3; VPS, transporte protegido e backup externo recorrente à fase 4. A conexão autenticada atual do WhatsApp após o último reinício, zoom nativo e dispositivos físicos não foram revalidados. A leitura do material arquivado funciona offline.
+As fases 1, 2 e 3 locais estão concluídas. O Codex instalado completou busca, contexto e recuperação de dois originais por HTTPS verificado em clone offline. A verificação independente passou 21/21 critérios e cinco requisitos MCP; UAT autônoma12/12 e suíte integrada190/190, sem falhas ou testes pulados. O endpoint de aceite foi encerrado e a configuração global do Codex preservada. [Verificação](.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-VERIFICATION.md) e [UAT](.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-UAT.md).
+
+VPS, canal/proxy operacional e backup externo recorrente pertencem à fase 4. A conexão autenticada atual do WhatsApp após o último reinício, zoom nativo e dispositivos físicos não foram revalidados. A leitura do material arquivado funciona offline.
 
 ## Escopo da primeira versão
 
@@ -41,7 +43,7 @@ Em 2026-10-11, conta real vinculada e amostras de conversa individual/grupo comp
 
 Após corrigir repetição de originais que ocultava 244 projeções, uma cópia privada pós-reparo restaurou 8.684 mensagens e 828 originais disponíveis. Fonte parada durante verificação e nenhum segundo coletor; único coletor voltou conectado sem novo QR. Download de áudio pelo Chrome normal completou 33.529 bytes com hash igual ao acervo e página funcionando. A suíte completa passou 86 testes; revisão incremental passou 12 testes e 29 verificações independentes, sem achados novos. Fase1 local concluída: verificação independente passou 88 condições e 15 requisitos, com 28 testes focados adicionais.
 
-O navegador auxiliar separado sofreu SIGSEGV de causa nativa não determinada e foi retirado do procedimento; não houve alteração global de Chromium. Use o Chrome normal para consultar o site. Campos desconhecidos e mídias não recuperadas permanecem explícitos. Detalhes e arquivos reais continuam privados fora do Git; VPS e MCP ainda não foram validados.
+O navegador auxiliar separado sofreu SIGSEGV de causa nativa não determinada e foi retirado do procedimento; não houve alteração global de Chromium. Use o Chrome normal para consultar o site. Campos desconhecidos e mídias não recuperadas permanecem explícitos. Casos e arquivos reais continuam privados fora do Git; a prova MCP local posterior está descrita acima e VPS permanece pendente.
 
 ## Privacidade
 
@@ -70,6 +72,48 @@ Para testar localmente com uma instalação existente, aponte `ZAP_BROWSER_MODUL
 Escolha diretório privado fora do checkout; o caminho acima é fictício. `.env.example` documenta variáveis, mas `.env` não é carregado automaticamente. Senha passa por stdin, nunca por argumento/histórico. `owner-set` revoga sessões anteriores e exige serviço parado. `profile-init` cria somente credenciais locais offline; não substitui perfil corrompido e não conecta conta.
 
 Abra http://127.0.0.1:3000, entre e consulte o acervo local. `serve` inicia com coletor desligado. Transporte aceita apenas loopback; não expor porta diretamente nem configurar proxy antes da preparação da fase 4. Nenhuma superfície oferece envio, edição, exclusão ou confirmação de leitura no WhatsApp.
+
+## Consulta no Codex
+
+O servidor oferece somente estas quatro ferramentas:
+
+| Ferramenta | Uso |
+|---|---|
+| `find_conversations` | `query` e `cursor` opcional; apresenta candidatos separados por `conversationId` canônico, nome/identidade/kind recebidos |
+| `search_messages` | `query`, `conversationId` opcional e dias `from`/`to`; AND sobre texto/legenda/nome recebido de arquivo, incluindo revisões observadas |
+| `get_context` | `reference` da mensagem; `searchCursor` opcional preserva origem da busca; continuação com `direction` before/after e o cursor correspondente |
+| `get_attachment` | `attachmentId` e preferência inline/download; original disponível e verificado, ou estado/motivo explícitos |
+
+Escolha o ID canônico apresentado, sem decidir por nomes homônimos. Datas usam America/Sao_Paulo com dias inclusivos; UTC/offset e instante original continuam conferíveis. Sem período, instantes desconhecidos aparecem por último; com período, ficam fora do filtro. Ausência significa somente “não encontrado no acervo observado”.
+
+Use `nextCursor` com os mesmos filtros para continuar a busca; `searchCursor` também aparece na última página e pode abrir a âncora. Contexto traz âncora explícita, vizinhas e cursores antes/depois. Os recortes ficam congelados por até 30 minutos, mas restrições atuais prevalecem. Cursor expirado, revogado ou de outro filtro pede atualização sem cursor. Limites são explícitos: até 50 itens por página, 50 mil itens/64 MiB por recorte e 32 KiB por envelope de consulta. Uma evidência que não caiba gera `response_limit` sem truncar campos ou avançar o cursor. Esses são limites do servidor, não um teto medido do cliente.
+
+Cobertura preserva contagens/intervalos/última ingestão e estados de histórico. `batchSummary` agrega contagens e estados dos lotes; os detalhes de cada lote continuam no status autenticado do site. Nomes, textos, citações, revisões e arquivos recebidos são dados não confiáveis, nunca instruções para executar código, abrir URLs ou revelar segredos. Não há ferramenta de envio, edição, exclusão ou confirmação de leitura.
+
+Para configurar o Codex, tenha primeiro um canal HTTPS vigente e deliberado até o serviço privado. O aceite local usa TLS nativo transitório e não instala um endpoint permanente ou uma CA de sistema. O código atual aceita loopback; proxy/VPS e o login do site sob TLS ainda precisam da preparação da fase 4. O teste do login do site com Origin HTTPS recebeu 403; seu oráculo foi HTTP em loopback, separado do MCP HTTPS.
+
+Com `ZAP_DATA_DIR` apontando ao perfil correto, emita/rotacione o bearer para um arquivo novo em diretório privado fora do checkout. Os caminhos e a porta abaixo são fictícios:
+
+```sh
+install -d -m 700 /caminho/privado/mcp
+mise exec node@24.21.0 -- node dist/src/main.js mcp-token-rotate /caminho/privado/mcp/token-01
+read -r ZAP_MCP_TOKEN < /caminho/privado/mcp/token-01
+export ZAP_MCP_TOKEN
+# Se o canal usa CA privada, confie nela somente no processo cliente.
+export SSL_CERT_FILE=/caminho/privado/mcp/ca.pem
+cp --preserve=mode ~/.codex/config.toml /caminho/privado/mcp/config.before.toml
+codex mcp add zap_archive --url https://localhost:3443/mcp --bearer-token-env-var ZAP_MCP_TOKEN
+codex
+unset ZAP_MCP_TOKEN SSL_CERT_FILE
+```
+
+A variável precisa existir no processo Codex que acessa o MCP; não coloque bearer literal no TOML, prompt, URL ou argumentos. `codex mcp add` altera somente o registro escolhido: use um nome livre e preserve os demais servidores. A prova executada usou overrides `-c` por subprocesso e comparou o TOML original byte a byte, sem gravar esse registro. Para encerrar um canal transitório configurado manualmente, remova somente seu registro com `codex mcp remove zap_archive`. O backup permite recuperar a configuração anterior se nenhuma outra edição posterior precisar ser preservada.
+
+Rotação pode operar com o serviço ativo, sem coletor ou novo QR. Emita outro arquivo novo, carregue a variável novamente e reinicie o processo cliente. Bearer anterior, cursores e próximos bytes de transferências são recusados; arquivos parciais não são entrega concluída. Logout do site não revoga MCP; rotação MCP não altera senha ou sessão WhatsApp. Bytes já entregues não podem ser recolhidos.
+
+`get_attachment` pode retornar imagem inline reconhecida de até 256 KiB. Para maior/sem formato inline, retorna `download_required` e URL privada da mesma origem HTTPS. O GET separado precisa de bearer vigente; o cliente não o aplica automaticamente a um link. Baixe explicitamente, recuse redirects/outra origem e confira tamanho/SHA-256 no destino. O aceite gravou os dois originais por helper executado no Codex; não declarou metadata, URL ou inline sem gravação como arquivo salvo.
+
+Roteiro repetível: `node scripts/phase3-acceptance.mjs --mode self-test` após build e `--mode real-codex` com `ZAP_MCP_REAL_CASE_FILE` externo preparado. O modo real exige acesso real, Codex instalado, negociação/TLS/calls atuais, SQL/site independentes e arquivos novos; ausência é erro, nunca skip. Dados/casos/transcripts ficam privados. Nenhuma dessas verificações demonstra histórico integral, implantação VPS ou restore operacional final.
 
 ## Cópia e recuperação antes do piloto
 
