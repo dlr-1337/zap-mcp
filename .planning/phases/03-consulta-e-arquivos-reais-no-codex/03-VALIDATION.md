@@ -20,7 +20,7 @@ Contrato de verificação derivado de 03-RESEARCH.md. Execução encerrada em 20
 | Build | `mise exec node@24.21.0 -- npm run build` |
 | Quick proposto | `mise exec node@24.21.0 -- node --test dist/test/mcp.test.js` após criação/build |
 | Suíte completa | `mise exec node@24.21.0 -- npm test` |
-| Duração | Suíte independente atual: 184/184 em87,737s,exit0; foco e execução real no ledger |
+| Duração | Suíte independente atual:190/190em96,806s,exit0; foco46/46e tracer1/1 |
 
 ## Sampling Rate
 
@@ -200,3 +200,9 @@ REVIEW clean,zeroachados; disposição canônica2/2fixed,zeroopen. A segunda ite
 ## Conferência imediatamente anterior ao verificador
 
 Após convergência da revisão e última mudança de código, o orquestrador executou novamente o comando completo one-shot com limite600s e TMPDIR privado no home. Exit0 normal,184/184,zero fail/cancel/skip/todo,87736,763314ms; log privado suite-root-phase3-current.log. O checkout permaneceu sem alterações de código durante/depois da execução. Esta é a evidência atual do gate regressivo; as execuções177/184 anteriores continuam históricas. Nenhum requisito foi marcado por estes resultados isolados.
+
+## Regularização final e cleanup do tracer
+
+A GoalMVP foi normalizada pela operação proprietária gsd-phase --edit3--force, preservando número/status/requisitos/critérios/dependências e o mesmo escopo de milestone; owneruser-story.validatetrue. As3proibições de03-04 agora são test/resolved com enforcementEvidence dos testes nomeados executados independentemente1/1; histórico flagged anterior preservado emhistory/03-VERIFICATION.iter1.md. Isso não inventa classificação dos probes unclassified, nem aprovação humana.
+
+O tracer posterior deixara credencial no clone offline; correção RED99988d5→GREENe6040da e controles6/6,cliente real1/1/TLS/originais e cleanupauthnull/HTTP401/0chaves/0arquivos constam de03-TRACER-CLEANUP.md/.json. Suiteindependenteatual190/190,exit0normal,zero fail/cancel/skip/todo. O recibo integrado12calls permanece preservado. Essas evidências substituem afirmações anteriores de cleanup aplicadas incorretamente ao estado do último tracer; a pendência real foi corrigida sem apagar seu histórico. VPS/HTTPSsite/operaçãofase4 continuam pendentes.

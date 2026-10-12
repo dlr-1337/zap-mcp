@@ -70,3 +70,9 @@ O gsd-security-auditor recalculou SHA512 dos6tarballs e comparou1586/1586arquivo
 ## Seguimento da revisão de código
 
 WR-01/WR-02 corrigem a recuperação do roteiro: subprocesso aguarda close e grupoLinux TERM→KILL, setup/cleanup cobre todos recursos e restaura somente após primeira mutação. Adapter/Archive/auth/mídia/dependências ativos não foram alterados. Os controles e a prova integrada já auditados permanecem válidos; regressão e tracer atualizado passaram. T-03-11/T-03-12 ganham as regressões documentadas em03-REVIEW-FIX.md, sem nova aceitação de risco ou reescrita do histórico.
+
+## Regularização final e cleanup do tracer
+
+A GoalMVP foi normalizada pela operação proprietária gsd-phase --edit3--force, preservando número/status/requisitos/critérios/dependências e o mesmo escopo de milestone; owneruser-story.validatetrue. As3proibições de03-04 agora são test/resolved com enforcementEvidence dos testes nomeados executados independentemente1/1; histórico flagged anterior preservado emhistory/03-VERIFICATION.iter1.md. Isso não inventa classificação dos probes unclassified, nem aprovação humana.
+
+O tracer posterior deixara credencial no clone offline; correção RED99988d5→GREENe6040da e controles6/6,cliente real1/1/TLS/originais e cleanupauthnull/HTTP401/0chaves/0arquivos constam de03-TRACER-CLEANUP.md/.json. Suiteindependenteatual190/190,exit0normal,zero fail/cancel/skip/todo. O recibo integrado12calls permanece preservado. Essas evidências substituem afirmações anteriores de cleanup aplicadas incorretamente ao estado do último tracer; a pendência real foi corrigida sem apagar seu histórico. VPS/HTTPSsite/operaçãofase4 continuam pendentes.

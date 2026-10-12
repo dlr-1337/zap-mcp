@@ -59,3 +59,9 @@ O recibo público usa whitelist de versões, protocolo, booleans, contagens, lim
 As três proibições descriptor-less de03-04 e os probes MCP-01/02/03/05 continuam **flagged-unverified** para revisão. Testes de produto são evidência, não descriptors inventados ou veredito final.
 
 Histórico preservado em [03-01-SUMMARY.md](03-01-SUMMARY.md): tracer inicial, auditoria de pins/transitivas, controles de consumo e regressão154/154. O ajuste de fixture `c772a24` manteve as assertions e processou timers expirados com uma volta de setImmediate após seed síncrono; nenhum retry/timeout de teste foi introduzido. A rodada integrada acima é evidência posterior sobre a implementação completa.
+
+## Regularização final e cleanup do tracer
+
+A GoalMVP foi normalizada pela operação proprietária gsd-phase --edit3--force, preservando número/status/requisitos/critérios/dependências e o mesmo escopo de milestone; owneruser-story.validatetrue. As3proibições de03-04 agora são test/resolved com enforcementEvidence dos testes nomeados executados independentemente1/1; histórico flagged anterior preservado emhistory/03-VERIFICATION.iter1.md. Isso não inventa classificação dos probes unclassified, nem aprovação humana.
+
+O tracer posterior deixara credencial no clone offline; correção RED99988d5→GREENe6040da e controles6/6,cliente real1/1/TLS/originais e cleanupauthnull/HTTP401/0chaves/0arquivos constam de03-TRACER-CLEANUP.md/.json. Suiteindependenteatual190/190,exit0normal,zero fail/cancel/skip/todo. O recibo integrado12calls permanece preservado. Essas evidências substituem afirmações anteriores de cleanup aplicadas incorretamente ao estado do último tracer; a pendência real foi corrigida sem apagar seu histórico. VPS/HTTPSsite/operaçãofase4 continuam pendentes.
