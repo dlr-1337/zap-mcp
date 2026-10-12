@@ -4,12 +4,12 @@ status: verified
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-threats_total: 23
-threat_occurrences: 27
-threats_closed: 23
+threats_total: 26
+threat_occurrences: 31
+threats_closed: 26
 threats_open: 0
 unregistered_flag: 0
-audited: "2026-10-11"
+audited: "2026-10-12"
 ---
 # Phase 2 — Security Verification
 
@@ -50,6 +50,10 @@ Auditoria independente `gsd-security-auditor` dos registros planejados; 23 IDs �
 | T-02-22 | Repudiation | coverage/acceptance | medium | mitigate | scripts/phase2-acceptance.mjs:164; test/acceptance.test.ts:15 | closed |
 | T-02-SC | Tampering | pinned npm supply chain | high | mitigate | package.json; package-lock.json; 02-DEPENDENCY-VERIFICATION.json | closed |
 
+| T-02-23 | Denial of Service | sticky tabs/long text | medium | mitigate | public/style.css:48–51; test/ui.test.ts:352–404; UI19/19, full144/144; altura/Fechar/rolagem local/âncora | closed |
+| T-02-24 | Tampering | native scroll oracle | medium | mitigate | test/ui.test.ts:329–335 e352–404; RED5aa736f/GREENcbbac69; CUA físicaA/Bdelta0 no02-06-SUMMARY | closed |
+| T-02-25 | Information Disclosure | private CUA/report | high | mitigate | 02-06-SUMMARY/02-UAT só agregados; prova0600foraGit, logout limpo, helper fechado com snapshot/senha preservados | closed |
+
 ## Accepted Risks Log
 Nenhuma disposição accept ou transfer foi usada para fechar os registros.
 
@@ -86,3 +90,17 @@ A aprovação acima é histórica. Auditoria independente do delta confirmou CR-
 Delta também confirmou guarda de ZIP aberto (`src/export.ts:155`, `test/export.test.ts:103 e138`), requestId restrito à sessão/recorte/CSRF (`src/main.ts`, `test/security.test.ts:74`) e resolução de aliases sem mudar a seleção congelada (`test/export.test.ts:200`). Retomada de página é exercitada em `test/ui.test.ts:42`; texto/DTOs e evidências restritas têm gate compartilhado em `src/archive.ts:361`. Os controles das sete proibições continuam presentes; a disposição canônica pertence ao verificador.
 
 Suíte final integrada em Node24.21.0:143/143,0fail/cancelled/skip/todo,38.366,233ms. Log ignorado `dist/02-final-tests.log`, SHA256 `e44473cc9da55c2abc3bc2d69b5fe0a11f3b3fff7ba1bae8562ba2f134ae6f7d`. A suíte inclui os testes da Phase1; o diagnóstico e a correção da simulação de fd e do encerramento dos navegadores estão preservados nos relatórios de correção. A auditoria delta não executou novamente a suíte inteira nem o aceite real. Nenhuma certificação, implantação ou ampliação de escopo foi feita.
+
+## Classificação incremental L1 do plano02-06 — 2026-10-12
+
+Orquestrador conferiu os três novos IDs e a repetiçãoT-02-SC contra fonte, assertions, log144/144 e provaCUA/closed.json sanitizada:26IDs únicos/31ocorrências,20high/6medium, todosmitigate/CLOSED,0abertos. ASVSlevel1 confirmado por config; registro escrito noPLAN; short-circuit seguro do Step3secure-phase aplicado após classificação, sem nova auditoria independente ou certificação. Auditorias independentes anteriores permanecem históricas. Nenhuma dependência instalada, nova rota/schema/auth/estado persistido, arquivo primário ou coletor original alterado. Maior altura de mensagem exige alinhamento explícito block:start; guards/tickets e ausência de âncora preservados.
+
+O deslocamento287px do caminho locator daCUA foi preservado como controle de ferramenta; clique físico visível restaurou0px nas duas direções. Causa interna da ferramenta e duas falhas I/O iniciais não confirmadas. Captura de encerramento contém somente login com senha vazia; nenhuma captura privada ou conteúdo/ID/cookie entrou noGit.
+
+## Security Audit 2026-10-12
+
+| Metric | Count |
+|---|---|
+| Threats found | 26 |
+| Closed | 26 |
+| Open | 0 |

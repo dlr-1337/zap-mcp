@@ -8,7 +8,7 @@ created: "2026-10-11"
 ---
 # Phase 2 — Validation Strategy
 
-Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais, agora com evidência executada abaixo. Os requisitos globais e a conclusão da fase aguardam revisões/verificador independentes. Todo verify falha por exit não zero, zero testes, alvo obrigatório skipped ou assertion failing; RED exige falha semântica do alvo e classificador TDD.
+Contrato alinhado aos seis planos,18 tarefas e seis ondas sequenciais, com evidência executada abaixo. Os requisitos globais e a conclusão da fase aguardam revisões/verificador independentes. Todo verify falha por exit não zero, zero testes, alvo obrigatório skipped ou assertion failing; RED exige falha semântica do alvo e classificador TDD.
 
 ## Test Infrastructure
 - Framework: node:test/TypeScript existentes, Node24.21.0 via mise.
@@ -40,6 +40,10 @@ Contrato alinhado aos cinco planos,15 tarefas e cinco ondas sequenciais, agora c
 | 02-05-01 | 5 | tracer | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-offline` | passed —2/2initial;tracerreal repetido;1.028mensagens/190originais/112faltantes;P2-OFFLINE |
 | 02-05-02 | 5 | auto | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/acceptance.test.js dist/test/ui.test.js && mise exec node@24.21.0 -- node scripts/phase2-acceptance.mjs --mode real-browser` | passed —3/3selfcheck;16/16focados;browserreal repetido,A/B/4originais/ZIP;P2-BROWSER |
 | 02-05-03 | 5 | auto | `mise exec node@24.21.0 -- npm test` | passed —130/130,0skip/fail/todo,39,740s;02-ACCEPTANCE sanitizado |
+
+| 02-06-01 | 6 | tracer/tdd | alvo UC23 a UC34 em test/ui.test.ts; RED/GREEN semânticos | passed — alvo1/1; 5aa736f→cbbac69 |
+| 02-06-02 | 6 | auto | UI19/19; G-02-6 com seis combinações320/768/1280×100/200%, altura480 | passed — fontee0d921c, âncora/controlabilidade/teclado/close |
+| 02-06-03 | 6 | auto | npm test com Node24.21.0; CUA real pelo parent | passed —144/144,0fail/cancelled/skip/todo,75.610s; deltasA/B0px |
 
 ## Wave 0 Requirements
 - Criar testes novos das capacidades junto às tarefas elegíveis de TDD; antes de lógica não trivial, RED observado.
@@ -278,3 +282,11 @@ Fechamento dos controles informado pelo orquestrador: suíte final delimitada 14
 ## Compatibilidade documental do encerramento
 
 O checker verify-summary trata o texto desde o primeiro heading inglês Verification como Self-Check e identifica a palavra fail mesmo em uma contagem de zero falhas. Os headings narrativos foram normalizados para português, mantendo todos os resultados históricos e o bloco explícito Self-Check: PASSED. As abreviações de três capturas foram expandidas para arquivos existentes; descrições de caminhos privados/entradas ZIP não são artefatos do checkout. Nenhum resultado, teste, produto ou dado privado mudou para satisfazer o parser.
+
+## Validação incremental do gap G-02-6 — 2026-10-12
+
+Estado A, cobertura classificada pelo orquestrador: oito requisitos continuam COVERED; três tarefas02-06 têm comandos e assertions comportamentais em test/ui.test.ts:329–404. O novo alvo mede posição antes do gesto, preserva DOM/referências, testa foco sem ativação, Enter/Espaço, fechamento, nomes Unicode/RTL, seis combinações e âncora alta. Nenhuma lacuna automatizável adicional encontrada; skip do spawn Nyquist por zero gaps conforme validate-phase Step3. Sequência RED/GREEN rastreada no SUMMARY; o gate tdd.review-checkpoint reconheceu0type:tdd plans e não auditou tarefas.
+
+Suíte atual144/144,0falhas/cancelamentos/skips/todo,exit0,sourcee0d921c,Node24.21.0 e Chrome for Testing151, TMPDIR0700 externo, dist/02-06-full-tests.log. Inclui os12arquivos daPhase1; nenhuma execução repetida neste gate. Primeira full142/144 com duas falhas I/O não reproduzidas isoladamente permanece registrada; causa não comprovada. TentativaTMPDIR dentrocheckout foi inválida pelo guard, preservado.
+
+CUA autônoma da cópia real8792/856 sem coletor: A/B/A56463→56463 e B/A/B45583→45583 por clique físico, teclado/close/logout aprovados; source:autonomous,human_confirmation:false. Snapshot e senha original preservados no fechamento do helper próprio. As provas reais prévias de mídia/ZIP continuam válidas para backend inalterado, sem alegar reexecução. Zoomnativo/dispositivo físico/conexão autenticada original/MCP/VPS continuam sem prova.
