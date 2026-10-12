@@ -5,10 +5,10 @@ current_phase_name: Busca, contexto, abas e exportação no site
 current_plan: 5
 status: Phase 2 in progress — 02-02 complete; next 02-03
 stopped_at: Completed 02-05-PLAN.md; awaiting independent Phase2 reviews/verifier
-last_updated: "2026-10-12T00:24:22.933Z"
+last_updated: "2026-10-12T00:49:43.111Z"
 last_activity: 2026-10-11
 last_activity_desc: "02-02 verified: 105 tests passed"
-state_head: e14b0af9778ca753ed9be2f44d8a825da85530be
+state_head: ef4954fddb0ff94fc17fbf29b57a72fde041f823
 progress:
   total_phases: 4
   completed_phases: 1
@@ -112,6 +112,10 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 3: Comprovar autenticação, protocolo negociado e recebimento/download binário no Codex instalado; URL/listagem não demonstra entrega.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
+
+### Roadmap Evolution
+
+- Phase 2 edited: Normalized only Goal to the already-derived MVP user story; scope and criteria identical.
 
 ## Deferred Items
 

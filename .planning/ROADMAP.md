@@ -42,7 +42,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ### Phase 2: Busca, contexto, abas e exportação no site
 
-**Goal:** O proprietário encontra mensagens e anexos no site com contexto verificável, compara conversas em abas e exporta todo o recorte escolhido.
+**Goal:** As a proprietário do acervo privado, I want to encontrar mensagens e anexos com contexto verificável, comparar conversas em abas e exportar todo o recorte escolhido, so that eu possa recuperar e conferir minhas conversas e arquivos arquivados.
 **Mode:** mvp
 **Depends on**: Phase 1
 **Requirements**: EVID-02, WEB-02, WEB-03, WEB-04, WEB-05, EXP-01, EXP-02, EXP-03
