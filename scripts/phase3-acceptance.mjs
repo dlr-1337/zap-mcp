@@ -56,7 +56,7 @@ export function runCodex(executable, args, env, cwd, transcript, prompt) {
     }, 240000);
     child.on('error', e => { failure ??= e; }); child.stdin.on('error', e => { if (e.code !== 'EPIPE') failure ??= e; });
     child.stdout.on('data', b => { output += b; appendFileSync(transcript, b); }); child.stderr.on('data', b => stderr += b);
-    child.on('close', code => { clearTimeout(timer); clearTimeout(killTimer); appendFileSync(transcript, '\n' + stderr);
+    child.on('close', code => { if (killTimer) signal('SIGKILL'); clearTimeout(timer); clearTimeout(killTimer); appendFileSync(transcript, '\n' + stderr);
       if (failure) { reject(failure); return; }
       const events = output.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
       accept({ pid: child.pid, code, output: output + stderr, events }); }); child.stdin.end(prompt);
