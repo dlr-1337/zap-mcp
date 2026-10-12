@@ -75,6 +75,30 @@ test('ZIP HTTP inclui todas as páginas e um original congelado', async t => {
   const a = manifest.messages.flatMap((m: any) => m.attachments)[0]; assert.deepEqual(zip.get(a.path), f.bytes); assert.equal(a.sha256, createHash('sha256').update(f.bytes).digest('hex'));
   assert.equal(spawnSync('unzip', ['-t', path]).status, 0);
 });
+test('restrição posterior revoga ZIP pronto e falha preparação congelada sem apagar acervo', async t => {
+  const f = await fixture(t), initial = await (await f.post()).json();
+  assert.equal((await ready(f, initial.jobId)).state, 'ready');
+  f.s.archive.ingestHistory({ messages: [{ key: { ...f.key, isViewOnce: true }, messageTimestamp: 1700000001, message: { conversation: 'restrita' } }] });
+  const job = await (await fetch(f.base + '/api/exports/' + initial.jobId, { headers: f.headers })).json();
+  assert.equal(job.state, 'failed'); assert.match(job.reason, /restrit/);
+  for (const method of ['GET', 'HEAD']) assert.equal((await fetch(f.base + '/api/exports/' + initial.jobId + '/download', { method, headers: f.headers })).status, 409);
+  assert.equal(existsSync(join(f.dir, 'exports', initial.jobId + '.zip')), false);
+  const stored = f.s.archiveDb.prepare('SELECT id FROM attachments').get() as { id: string };
+  assert.deepEqual(readFileSync(join(f.dir, 'media', stored.id + '.bin')), f.bytes);
+
+  const second = await fixture(t); let release!: () => void, began!: () => void;
+  const held = new Promise<void>(r => release = r), started = new Promise<void>(r => began = r);
+  const manager = createExportManager({ archive: second.s.archive, dataDir: second.dir, mediaDir: join(second.dir, 'media'), fault: async point => { if (point === 'stream') { began(); await held; } } });
+  const pending = manager.createExportJob('private-session', second.conversationId, '', '');
+  await started;
+  second.s.archive.ingestHistory({ messages: [{ key: { ...second.key, isViewOnce: true }, message: { conversation: 'restrita' } }] });
+  release(); await manager.close();
+  const db = new Database(join(second.dir, 'exports', 'jobs.sqlite'));
+  const row = db.prepare('SELECT state FROM jobs WHERE id=?').get(pending.jobId) as { state: string }; db.close();
+  assert.equal(row.state, 'failed', 'descritor já aberto não autoriza publicação após restrição');
+  assert.equal(existsSync(join(second.dir, 'exports', pending.jobId + '.zip')), false);
+  assert.equal(existsSync(join(second.dir, 'exports', pending.jobId + '.part')), false);
+});
 test('expiração elimina DTOs privados derivados e mantém tombstone seguro', async t => {
   const f = await fixture(t), r = await f.post(), j = await r.json(); assert.equal((await ready(f, j.jobId)).state, 'ready');
   const db = new Database(join(f.dir, 'exports', 'jobs.sqlite')); db.prepare('UPDATE jobs SET expires=0').run();

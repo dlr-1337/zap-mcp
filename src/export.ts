@@ -9,13 +9,16 @@ import { crc32 } from 'node:zlib';
 import yazl from 'yazl';
 import yauzl from 'yauzl';
 import { parsePeriod, type Archive } from './archive.js';
-import { openVerifiedAttachment } from './media.js';
+import { openVerifiedAttachment, streamVerifiedAttachment } from './media.js';
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BUDGET = 2 * 1024 ** 3, TTL = 30 * 60_000;
 const error = (status: number, text: string) => Object.assign(Error(text), { status });
 type Expected = Map<string, { size: number; sha256: string }>;
 type Selection = ReturnType<Archive['freezeExportSelection']>;
+function newlyRestricted(archive: Archive, selection: Selection) {
+  return selection.messages.some(m => !m.restricted && archive.isRestricted(m.reference));
+}
 type Fault = (point: string, path: string) => void | Promise<void>;
 const digest = (b: Buffer) => ({ size: b.length, sha256: createHash('sha256').update(b).digest('hex') });
 function syncDirectory(directory: string) { const fd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); try { fsyncSync(fd); } finally { closeSync(fd); } }
@@ -54,6 +57,7 @@ export async function buildZip(archive: Archive, mediaDir: string, path: string,
   zip.on('error', e => source.destroy(e));
   const writing = pipeline(source, bounded, output); void writing.catch(() => { for (const stream of streams) stream.destroy(); });
   try {
+    if (newlyRestricted(archive, selection)) throw Error('Conteúdo restrito indisponível');
     const messages = structuredClone(selection.messages).map(m => ({ ...m, originalUtc: m.originalTimestamp, originalLocal: m.originalTimestamp ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'long' }).format(new Date(m.originalTimestamp)) : null, attachments: m.attachments.map(a => ({ ...a, capturedState: a.state, packagingState: 'missing', reason: (a.reason ?? 'Original não disponível no instante do recorte') as string | null, path: null as string | null })) }));
     let files = 0, missing = 0;
     for (const m of messages) for (const a of m.attachments) {
@@ -65,7 +69,7 @@ export async function buildZip(archive: Archive, mediaDir: string, path: string,
       if (expected.has(name)) { closeSync(file.fd); throw Error('Anexo duplicado'); }
       a.path = name; a.packagingState = 'included'; a.reason = null;
       expected.set(name, { size: file.size, sha256: file.sha256 }); files++;
-      const stream = createReadStream('', { fd: file.fd, autoClose: true, start: 0 }); streams.add(stream);
+      const stream = streamVerifiedAttachment(archive, file); streams.add(stream);
       stream.on('error', e => source.destroy(e));
       await fault?.('stream', path);
       zip.addReadStreamLazy(name, { size: file.size, mode: 0o100600 }, callback => callback(null, stream));
@@ -78,7 +82,9 @@ export async function buildZip(archive: Archive, mediaDir: string, path: string,
     zip.end(); await writing; await fault?.('written', path);
     await verifyZip(path, expected); await fault?.('verified', path);
     const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW); try { fsyncSync(fd); } finally { closeSync(fd); }
-    await fault?.('synced', path); return counts;
+    await fault?.('synced', path);
+    if (newlyRestricted(archive, selection)) throw Error('Conteúdo restrito indisponível');
+    return counts;
   } catch (e) { for (const stream of streams) stream.destroy(); source.destroy(e as Error); output.destroy(); await writing.catch(() => {}); throw e; }
 }
 
@@ -105,6 +111,11 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
     if (!row) throw error(404, 'Exportação não encontrada');
     if (row.expires <= Date.now()) { expire(id); throw error(410, 'Esta exportação expirou. Gere novamente.'); }
     const selection: Selection = JSON.parse(row.selection);
+    if (newlyRestricted(archive, selection)) {
+      remove(id);
+      db.prepare("UPDATE jobs SET state='failed',selection=?,counts=NULL,reason=? WHERE id=?").run(JSON.stringify({ ...selection, messages: [] }), 'O recorte contém conteúdo marcado como restrito. Gere novamente.', id);
+      return { jobId: id, state: 'failed', effectiveFilters: selection.effectiveFilters, conversation: selection.conversation, snapshotAt: selection.snapshotAt, expiresAt: new Date(row.expires).toISOString(), counts: { messages: 0, files: null, missing: null }, reason: 'O recorte contém conteúdo marcado como restrito. Gere novamente.' };
+    }
     return { jobId: id, state: row.state, effectiveFilters: selection.effectiveFilters, conversation: selection.conversation, snapshotAt: selection.snapshotAt, expiresAt: new Date(row.expires).toISOString(), counts: row.counts ? JSON.parse(row.counts) : { messages: selection.messages.length, files: null, missing: null }, reason: row.reason, ...(row.state === 'ready' ? { downloadURL: '/api/exports/' + id + '/download' } : {}) };
   };
   const create = (session: string, conversationId: unknown, from: unknown, to: unknown) => {
@@ -123,6 +134,7 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
     active = new Promise<void>(resolve => setImmediate(resolve)).then(async () => {
       try {
         await fault?.('claimed', part); const counts = await buildZip(archive, mediaDir, part, selection, fault);
+        if (newlyRestricted(archive, selection)) throw Error('Conteúdo restrito indisponível');
         if (!db.prepare("SELECT id FROM jobs WHERE id=? AND state='preparing' AND expires>?").get(id, Date.now())) throw Error('Revogado');
         linkSync(part, final); unlinkSync(part); syncDirectory(directory); await fault?.('published', final);
         const changed = db.prepare("UPDATE jobs SET state='ready',counts=? WHERE id=? AND state='preparing' AND expires>?").run(JSON.stringify(counts), id, Date.now());

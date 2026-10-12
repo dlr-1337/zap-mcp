@@ -8,7 +8,7 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
-import { startMediaWorker, openVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
+import { startMediaWorker, openVerifiedAttachment, streamVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
 import { createExportManager } from './export.js';
 
@@ -86,7 +86,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     const encoded = encodeURIComponent(Buffer.from(name).toString('utf8')).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
     res.set({ 'Content-Type': mime, 'Content-Disposition': `${preview ? 'inline' : 'attachment'}; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
     if (req.method === 'HEAD' || file.size === 0) { closeSync(file.fd); res.end(); return; }
-    const stream = createReadStream('', { fd: file.fd, autoClose: true, start, end });
+    const stream = streamVerifiedAttachment(archive, file, start, end);
     res.on('close', () => stream.destroy()); stream.on('error', error => { if (res.headersSent) res.destroy(); else next(error); }); stream.pipe(res);
   });
   app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });

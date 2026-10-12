@@ -1,4 +1,4 @@
-import { constants, mkdirSync, realpathSync, lstatSync, chmodSync, openSync, readSync, fstatSync, closeSync, fsyncSync, linkSync, unlinkSync, writeFileSync, existsSync, createWriteStream, statfsSync, renameSync } from 'node:fs';
+import { constants, mkdirSync, realpathSync, lstatSync, chmodSync, openSync, readSync, fstatSync, closeSync, fsyncSync, linkSync, unlinkSync, writeFileSync, existsSync, createWriteStream, createReadStream, statfsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { deserialize } from 'node:v8';
@@ -65,13 +65,24 @@ function failure(archive: Archive, id: string, reason: string, generation?: stri
 export function openVerifiedAttachment(archive: Archive, mediaDir: string, id: string) {
   if (!internalId.test(id)) return null;
   const attachment = archive.getAttachment(id);
-  if (!attachment || attachment.state !== 'available') return null;
+  if (!attachment || attachment.state !== 'available' || archive.isRestricted(attachment.reference)) return null;
   let file: ReturnType<typeof hashFile> | undefined;
   try {
     file = hashFile(join(mediaDirectory(archive, mediaDir), id + '.bin'));
     if (file.size !== attachment.size || file.sha256 !== attachment.sha256) throw Error('Final divergente');
     return { ...file, attachment };
   } catch { if (file) closeSync(file.fd); failure(archive, id, 'Arquivo local ausente ou divergente'); return null; }
+}
+
+export function streamVerifiedAttachment(archive: Archive, file: NonNullable<ReturnType<typeof openVerifiedAttachment>>, start = 0, end?: number) {
+  const source = createReadStream('', { fd: file.fd, autoClose: true, start, end });
+  const stream = Readable.from((async function* () {
+    for await (const chunk of source) {
+      if (archive.isRestricted(file.attachment.reference)) throw Error('Conteúdo restrito indisponível');
+      yield chunk;
+    }
+  })(), { objectMode: false });
+  stream.on('close', () => source.destroy()); return stream;
 }
 
 export function classifyPreview(file: NonNullable<ReturnType<typeof openVerifiedAttachment>>) {

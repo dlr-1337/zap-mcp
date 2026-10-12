@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, unlinkSync, renameSync, symlinkSync, closeSync, readSync, fstatSync, readdirSync, readlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, unlinkSync, renameSync, symlinkSync, closeSync, readSync, fstatSync, readdirSync, readlinkSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -10,8 +10,48 @@ import { get } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 import { startMediaWorker, openVerifiedAttachment, classifyPreview } from '../src/media.js';
+import { parsePeriod } from '../src/archive.js';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1kAAAAASUVORK5CYII=', 'base64');
+test('restrição posterior bloqueia leitores snapshots redirects e bytes sem apagar originais', async t => {
+  for (const redirect of [false, true]) {
+    const { s, dir, base, headers, attachment } = await fixture(t);
+    const key = { remoteJid: '1@lid', id: 'image', fromMe: false }, old = s.archive.readStoredMessage(key)!;
+    const filters = { query: 'imagem' }, session = 'restriction-test';
+    const search = s.archive.searchMessages({ terms: ['imagem'], conversationId: null, session, filters });
+    const context = s.archive.openContext(old.reference, session, search.snapshotId);
+    assert.equal(context.matchedEvidence[0].text, 'imagem preservada');
+    if (redirect) {
+      s.archive.ingestHistory({ messages: [{ key: { ...key, remoteJid: '1@s.whatsapp.net' }, messageTimestamp: 123, message: { conversation: 'cópia recebida' } }] });
+      s.archive.ingestContacts({ lid: '1@lid', pn: '1@s.whatsapp.net' });
+    }
+    s.archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, messageTimestamp: 123, message: { imageMessage: { caption: 'RESTRICTED_SENTINEL' } } }] });
+    const safe = (value: any) => {
+      assert.doesNotMatch(JSON.stringify(value), /imagem preservada|cópia recebida|RESTRICTED_SENTINEL|nome.*שלום|image\/png/);
+      for (const m of value.messages ?? [value]) if (m.reference === s.archive.readStoredMessage(key)!.reference || m.reference === old.reference) {
+        assert.equal(m.restricted, true); assert.equal(m.text, null); assert.deepEqual(m.attachments, []);
+        assert.ok(m.revisions.every((r: any) => r.text === null && r.quote === null && r.restricted));
+      }
+    };
+    safe(s.archive.readStoredMessage(old.reference));
+    safe(s.archive.readConversation(old.conversationId));
+    safe(s.archive.searchMessages({ terms: ['imagem'], conversationId: null, session, filters, snapshotId: search.snapshotId }));
+    safe(s.archive.readContextPage({ reference: old.reference, session, snapshotId: context.snapshotId, ordinal: 0 }));
+    const fresh = s.archive.openContext(old.reference, session, search.snapshotId); safe(fresh); assert.deepEqual(fresh.matchedEvidence, []);
+    safe(s.archive.freezeExportSelection(old.conversationId, parsePeriod()));
+    for (const path of ['/api/context/' + old.reference, '/api/conversations/' + old.conversationId + '/messages']) {
+      const r = await fetch(base + path, { headers }); assert.equal(r.status, 200); safe(await r.json());
+    }
+    assert.equal(openVerifiedAttachment(s.archive, join(dir, 'media'), attachment.id), null);
+    for (const suffix of ['', '/preview']) for (const method of ['GET', 'HEAD']) for (const range of [undefined, 'bytes=0-0']) {
+      const r = await fetch(base + '/api/attachments/' + attachment.id + suffix, { method, headers: { ...headers, ...(range ? { Range: range } : {}) } });
+      assert.equal(r.status, 404); assert.doesNotMatch(await r.text(), /imagem preservada|RESTRICTED_SENTINEL/);
+    }
+    assert.equal(s.archive.getAttachment(attachment.id)!.state, 'available', 'restrição de acesso não reclassifica o original armazenado');
+    assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), png);
+    assert.match((s.archiveDb.prepare('SELECT evidence FROM revisions WHERE id=?').get(attachment.revisionId) as any).evidence, /imagem preservada/);
+  }
+});
 async function fixture(t: any, bytes: Buffer = png, mime: string | null = 'image/png') {
   const dir = mkdtempSync(join(tmpdir(), 'zap-preview-')), s = createService({ dataDir: dir });
   const key = { remoteJid: '1@lid', id: 'image', fromMe: false };

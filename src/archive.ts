@@ -354,6 +354,14 @@ export function openArchive(dataDir: string) {
     db.prepare('UPDATE batches SET completed_at=? WHERE id=?').run(now(), id);
   }
   function resolveConversation(id: string) { return (db.prepare('SELECT target_id FROM conversation_redirects WHERE old_id=?').get(id) as { target_id: string } | undefined)?.target_id ?? id; }
+  function isRestricted(reference: string): boolean {
+    const resolved = (db.prepare('SELECT target_reference FROM message_redirects WHERE old_reference=?').get(reference) as { target_reference: string } | undefined)?.target_reference ?? reference;
+    return Boolean((db.prepare('SELECT restricted FROM messages WHERE reference=?').get(resolved) as { restricted: number } | undefined)?.restricted);
+  }
+  // A privacy restriction overrides frozen content, while order and ordinary history stay frozen.
+  function permittedMessage<T extends { reference: string; revisions: { text: string | null }[] }>(message: T): T {
+    return isRestricted(message.reference) ? { ...message, type: 'viewOnce', restricted: true, text: null, quote: null, attachments: [], matchingRevisions: [], revisions: message.revisions.map(r => ({ ...r, text: null, quote: null, restricted: true })) } : message;
+  }
   function dto(reference: string) {
     const redirected = (db.prepare('SELECT target_reference FROM message_redirects WHERE old_reference=?').get(reference) as { target_reference: string } | undefined)?.target_reference ?? reference;
     const row = db.prepare('SELECT * FROM messages WHERE reference=?').get(redirected) as MessageRow | undefined;
@@ -364,7 +372,7 @@ export function openArchive(dataDir: string) {
     const identities = new Set(origins.flatMap(k => [k.remoteJid, k.participant, k.remoteJidAlt, k.participantAlt]).filter(k => k !== null));
     const identityMappings = (db.prepare('SELECT jid,alternate FROM identity_evidence').all() as { jid: string; alternate: string }[]).filter(m => identities.has(m.jid) || identities.has(m.alternate));
     const attachments = (db.prepare('SELECT id,revision_id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string; revision_id: number }[]).map(a => ({ ...getAttachment(a.id)!, revisionId: a.revision_id }));
-    return { ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments };
+    return permittedMessage({ ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments });
   }
   function locate(input: unknown) {
     if (typeof input === 'string') return input;
@@ -425,8 +433,7 @@ export function openArchive(dataDir: string) {
           const edits = message.revisions.filter(r => r.kind === 'edit');
           const current = (edits.length ? edits : message.revisions.filter(r => r.kind === 'original')).filter(r => r.sourceTimestamp !== null).sort((a, b) => Date.parse(b.sourceTimestamp!) - Date.parse(a.sourceTimestamp!))[0];
           const matchingRevisions = message.restricted ? [] : message.revisions.filter(r => matched.has(r.revisionId)).map(r => ({ ...r, historical: message.revoked || message.orderUncertain || (current ? r.revisionId !== current.revisionId : r.text !== message.text) }));
-          const safe = message.restricted ? { ...message, text: null, quote: null, attachments: [], revisions: message.revisions.map(r => ({ ...r, text: null, quote: null, restricted: true })) } : message;
-          const json = JSON.stringify({ ...safe, conversation: conversationEvidence(message.conversationId), matchingRevisions });
+          const json = JSON.stringify({ ...message, conversation: conversationEvidence(message.conversationId), matchingRevisions });
           bytes += Buffer.byteLength(json); if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja os filtros.'), { status: 413 });
           items.push(json);
         }
@@ -434,7 +441,7 @@ export function openArchive(dataDir: string) {
         db.prepare('INSERT INTO query_snapshots(id,session,filters,expires_at,count) VALUES(?,?,?,?,?)').run(snapshot.id, session, snapshot.filters, snapshot.expires_at, snapshot.count);
         const insert = db.prepare('INSERT INTO query_items(snapshot_id,ordinal,dto) VALUES(?,?,?)'); items.forEach((json, i) => insert.run(snapshot!.id, i, json));
       }
-      const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? ORDER BY ordinal LIMIT ?').all(snapshot.id, ordinal, limit) as { dto: string }[]).map(r => JSON.parse(r.dto));
+      const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? ORDER BY ordinal LIMIT ?').all(snapshot.id, ordinal, limit) as { dto: string }[]).map(r => permittedMessage(JSON.parse(r.dto)));
       return { messages, effectiveFilters: JSON.parse(snapshot.filters), snapshotId: snapshot.id, expiresAt: new Date(snapshot.expires_at).toISOString(), nextOrdinal: ordinal + messages.length < snapshot.count ? ordinal + messages.length : null };
     })();
   }
@@ -450,7 +457,7 @@ export function openArchive(dataDir: string) {
         if (JSON.parse(source.filters).kind) throw Object.assign(Error('Recorte de origem inválido'), { status: 400 });
         const item = db.prepare("SELECT dto FROM query_items WHERE snapshot_id=? AND json_extract(dto,'$.reference')=?").get(sourceSnapshotId, reference) as { dto: string } | undefined;
         if (!item) throw Object.assign(Error('Referência fora do recorte de origem'), { status: 400 });
-        matchedEvidence = (JSON.parse(item.dto).matchingRevisions as Obj[]).map(r => ({ ...r, historical: Boolean(r.historical) || !anchor.revisions.some(current => current.fingerprint === r.fingerprint && current.text === anchor.text) }));
+        matchedEvidence = anchor.restricted ? [] : (JSON.parse(item.dto).matchingRevisions as Obj[]).map(r => ({ ...r, historical: Boolean(r.historical) || !anchor.revisions.some(current => current.fingerprint === r.fingerprint && current.text === anchor.text) }));
       }
       if ((db.prepare('SELECT count(*) AS n FROM query_snapshots WHERE session=?').get(session) as { n: number }).n >= 20) throw Object.assign(Error('Limite de 20 recortes ativos. Aguarde a expiração para atualizar.'), { status: 429 });
       const rows = db.prepare('SELECT reference FROM messages WHERE conversation_id=? ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp),reference COLLATE BINARY LIMIT 50001').all(anchor.conversationId) as { reference: string }[];
@@ -471,9 +478,9 @@ export function openArchive(dataDir: string) {
     const metadata = JSON.parse(snapshot.filters);
     if (metadata.kind !== 'context' || metadata.requestedReference !== reference || ordinal > snapshot.count) throw Object.assign(Error('Continuação inválida'), { status: 400 });
     const start = direction === 'before' ? Math.max(0, ordinal - limit) : ordinal, end = direction === 'before' ? ordinal : Math.min(snapshot.count, ordinal + limit);
-    const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? AND ordinal<? ORDER BY ordinal').all(snapshotId, start, end) as { dto: string }[]).map(r => JSON.parse(r.dto));
+    const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? AND ordinal<? ORDER BY ordinal').all(snapshotId, start, end) as { dto: string }[]).map(r => permittedMessage(JSON.parse(r.dto)));
     const { kind: _kind, anchorOrdinal: _anchorOrdinal, ...safe } = metadata;
-    return { ...safe, messages, snapshotId, expiresAt: new Date(snapshot.expires_at).toISOString(), previousOrdinal: start > 0 ? start : null, nextOrdinal: end < snapshot.count ? end : null };
+    return { ...safe, matchedEvidence: isRestricted(metadata.anchorReference) ? [] : metadata.matchedEvidence, messages, snapshotId, expiresAt: new Date(snapshot.expires_at).toISOString(), previousOrdinal: start > 0 ? start : null, nextOrdinal: end < snapshot.count ? end : null };
   }
   function freezeExportSelection(conversationId: string, period: EffectivePeriod) {
     return db.transaction(() => {
@@ -485,10 +492,9 @@ export function openArchive(dataDir: string) {
       let bytes = 0;
       const messages = rows.map(row => {
         const message = dto(row.reference)!;
-        const safe = message.restricted ? { ...message, text: null, quote: null, attachments: [], revisions: message.revisions.map(r => ({ ...r, text: null, quote: null, restricted: true })) } : message;
-        bytes += Buffer.byteLength(JSON.stringify(safe));
+        bytes += Buffer.byteLength(JSON.stringify(message));
         if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja o período.'), { status: 413 });
-        return safe;
+        return message;
       });
       return { snapshotAt: now(), effectiveFilters: { conversationId: id, ...period }, conversation, coverage: getCoverage(), messages };
     })();
@@ -508,7 +514,7 @@ export function openArchive(dataDir: string) {
   }
   return {
     db,
-    searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence,
+    searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence, isRestricted,
     dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
       db.transaction(() => { for (const m of batch.lidPnMappings ?? []) ingestIdentity(m); for (const c of batch.contacts ?? []) ingestIdentity(c); for (const c of batch.chats ?? []) ingestIdentity(c, true); })();
