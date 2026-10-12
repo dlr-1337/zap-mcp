@@ -233,7 +233,7 @@ async function runBrowser({ base, password, c, directory, oracle, period, snapsh
     const panel = page.locator('#panel-' + c.conversationId), dates = panel.locator('.export-form input'); await dates.nth(0).fill(c.from); await dates.nth(1).fill(c.to);
     await page.waitForFunction(start => document.querySelector('[role=tabpanel]:not([hidden]) .export-period')?.textContent?.includes(start), new Date(period.start).toISOString());
     check(await page.locator('#messages li').count() < rowsFor(oracle, c, period).length, 'ZIP exceeds visible page');
-    await panel.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
+    await panel.getByRole('button', { name: 'Gerar ZIP', exact: true }).click();
     await panel.getByRole('link', { name: 'Baixar ZIP', exact: true }).waitFor({ timeout: 120000 }); const zip = await download(panel.getByRole('link', { name: 'Baixar ZIP', exact: true }), 'browser.zip');
     const checked = zipOracle(zip, oracle, c, period, snapshotDir); proof.zipVerified = auditEvidence(checked.proof).accepted;
     for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'real reflow'); const path = join(directory, 'browser-' + width + '.png'); await page.screenshot({ path }); chmodSync(path, 0o600); }

@@ -18,22 +18,28 @@ test('erro de datas de exportação acompanha campo focado por descrição únic
   const { s, page, login } = await uiFixture(t); s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'aria@lid', id: 'm', fromMe: false }, messageTimestamp: 123, message: { conversation: 'leitura preservada' } }] });
   await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
   const form = page.locator('.export-form'), from = form.locator('input').nth(0), to = form.locator('input').nth(1);
-  await from.fill('2024-01-02'); await to.fill('2024-01-01'); await form.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
+  await from.fill('2024-01-02'); await to.fill('2024-01-01'); await form.getByRole('button', { name: 'Gerar ZIP', exact: true }).click();
   assert.equal(await from.getAttribute('aria-invalid'), 'true'); assert.equal(await from.evaluate((el: any) => el === document.activeElement), true);
   assert.equal(await from.evaluate((el: any) => el.getAttribute('aria-describedby').split(/\s+/).some((id: string) => document.getElementById(id)?.textContent?.includes('A data inicial deve ser igual ou anterior'))), true, 'campo focado deve descrever seu erro');
   assert.match(await page.locator('#messages').textContent(), /leitura preservada/);
-  await from.fill('2099-01-01'); await to.fill(''); await form.getByRole('button', { name: 'Preparar exportação', exact: true }).click(); await page.waitForFunction(() => document.activeElement?.getAttribute('aria-invalid') === 'true');
+  await from.fill('2099-01-01'); await to.fill(''); await form.getByRole('button', { name: 'Gerar ZIP', exact: true }).click(); await page.waitForFunction(() => document.activeElement?.getAttribute('aria-invalid') === 'true');
   assert.equal(await from.evaluate((el: any) => el.getAttribute('aria-describedby').split(/\s+/).some((id: string) => document.getElementById(id)?.textContent?.includes('Não encontrado no acervo'))), true);
 });
 test('falhas de contexto e HEAD preview são alertas e repetir restaura status', async t => {
-  const { page } = await mediaUiFixture(t);
+  const { s, page } = await mediaUiFixture(t);
   await page.route(/\/api\/context\//, (route: any) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'sintético' }) }));
   await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.textContent?.includes('Não foi possível carregar'));
   assert.equal(await page.locator('#reader-status').getAttribute('role'), 'alert', 'erro de contexto precisa ser alert');
+  await page.unroute(/\/api\/context\//); await page.route(/\/api\/context\//, (route: any) => route.abort('failed')); await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.getAttribute('role') === 'alert');
+  s.archive.ingestHistory({ messages: Array.from({ length: 181 }, (_, i) => ({ key: { remoteJid: '1@lid', id: 'aria-page-' + i, fromMe: false }, messageTimestamp: 1000 + i, message: { conversation: 'vizinha ' + i } })) });
   await page.unroute(/\/api\/context\//); await page.locator('#refresh-conversation').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.textContent?.includes('mensagens carregadas')); assert.equal(await page.locator('#reader-status').getAttribute('role'), 'status');
+  const previous = await page.locator('#messages li').count();
+  for (const network of [false, true]) { await page.route(/\/api\/context\//, (route: any) => network ? route.abort('failed') : route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })); await page.locator('#more-after').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.getAttribute('role') === 'alert'); assert.equal(await page.locator('#messages li').count(), previous); await page.unroute(/\/api\/context\//); }
+  await page.locator('#more-after').click(); await page.waitForFunction(() => document.getElementById('reader-status')?.getAttribute('role') === 'status' && document.getElementById('reader-status')?.textContent?.includes('mensagens carregadas'));
   await page.route(/\/api\/attachments\/.*\/preview$/, (route: any) => route.request().method() === 'HEAD' ? route.fulfill({ status: 415 }) : route.continue());
   const block = page.locator('#messages .attachment').filter({ has: page.getByRole('button', { name: 'Visualizar imagem', exact: true }) }); await block.getByRole('button', { name: 'Visualizar imagem', exact: true }).click();
   await block.locator('.preview').getByText('Sem visualização integrada para este formato.', { exact: false }).waitFor(); assert.equal(await block.locator('.preview p').getAttribute('role'), 'alert');
+  await block.getByRole('button', { name: 'Fechar visualização' }).click(); await page.unroute(/\/api\/attachments\/.*\/preview$/); await page.route(/\/api\/attachments\/.*\/preview$/, (route: any) => route.abort('failed')); await block.getByRole('button', { name: 'Visualizar imagem', exact: true }).click(); await block.locator('.preview [role=alert]').waitFor();
   await block.getByRole('button', { name: 'Fechar visualização' }).click(); await page.unroute(/\/api\/attachments\/.*\/preview$/); await block.getByRole('button', { name: 'Visualizar imagem', exact: true }).click(); await page.waitForFunction(() => !!(document.querySelector('#messages .preview img') as HTMLImageElement)?.naturalWidth); assert.equal(await block.locator('.preview p').getAttribute('role'), 'status');
 });
 test('browser exporta conversa inteira além da página e conclui download ZIP', async t => {
@@ -43,8 +49,8 @@ test('browser exporta conversa inteira além da página e conclui download ZIP',
   s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 1700000001, message: { documentMessage: { fileName: '../nome repetido.bin', url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32), fileLength: bytes.length, fileSha256: createHash('sha256').update(bytes).digest() } } }] });
   const worker = startMediaWorker({ archive: s.archive, mediaDir: join(s.archiveDb.name, '..', 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Preparar exportação', exact: true }).count(), 1, 'leitor deve oferecer exportação explícita');
-  await page.getByRole('button', { name: 'Preparar exportação', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Gerar ZIP', exact: true }).count(), 1, 'leitor deve oferecer exportação explícita');
+  await page.getByRole('button', { name: 'Gerar ZIP', exact: true }).click();
   await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).waitFor();
   const pending = page.waitForEvent('download'); await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).click(); const download = await pending;
   assert.equal(await download.failure(), null); const path = await download.path();
@@ -55,7 +61,7 @@ test('logout vence status de exportação retido e impede restauração de conte
   await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
   let release!: () => void, started!: () => void; const held = new Promise<void>(r => release = r), began = new Promise<void>(r => started = r);
   await page.route(/\/api\/exports\/[0-9a-f-]{36}$/, async (route: any) => { const response = await route.fetch(); started(); await held; await route.fulfill({ response }); });
-  await page.getByRole('button', { name: 'Preparar exportação', exact: true }).click(); await began;
+  await page.getByRole('button', { name: 'Gerar ZIP', exact: true }).click(); await began;
   await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); release(); await page.waitForTimeout(100);
   assert.equal(await page.locator('#conversation-panels').textContent(), ''); assert.equal(await page.getByRole('link', { name: 'Baixar ZIP' }).count(), 0);
 });
@@ -71,11 +77,11 @@ test('exportação mostra período efetivo e recupera polling sem misturar abas 
   await from.fill(''); await to.fill('');
   let fail = true, posts = 0; page.on('request', (r: any) => { if (r.url().endsWith('/api/exports') && r.method() === 'POST') posts++; });
   await page.route(/\/api\/exports\/[0-9a-f-]{36}$/, async (route: any) => fail ? route.abort('failed') : route.continue());
-  await panel.getByRole('button', { name: 'Preparar exportação', exact: true }).click(); await panel.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).waitFor();
-  assert.equal(await panel.getByRole('link', { name: 'Baixar ZIP' }).count(), 0); assert.match(await panel.textContent(), /Preparando exportação/);
-  await page.locator(`a[data-id="${idB}"]`).click(); await page.locator('#messages article').first().waitFor(); assert.equal(await page.locator('#panel-' + idB).getByRole('button', { name: 'Preparar exportação', exact: true }).isDisabled(), true);
+  await panel.getByRole('button', { name: 'Gerar ZIP', exact: true }).click(); await panel.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).waitFor();
+  assert.equal(await panel.getByRole('link', { name: 'Baixar ZIP' }).count(), 0); assert.match(await panel.textContent(), /Preparando ZIP/);
+  await page.locator(`a[data-id="${idB}"]`).click(); await page.locator('#messages article').first().waitFor(); assert.equal(await page.locator('#panel-' + idB).getByRole('button', { name: 'Gerar ZIP', exact: true }).isDisabled(), true);
   assert.match(await page.locator('#messages').textContent(), /mensagem B/); fail = false; await page.getByRole('button', { name: 'Tentar conferir novamente', exact: true }).filter({ visible: true }).click();
-  await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).filter({ visible: true }).waitFor(); assert.equal(posts, 1); assert.match(await page.locator('#panel-' + idB).textContent(), /1 mensagens · 0 arquivos · 0 faltantes/);
+  await page.getByRole('link', { name: 'Baixar ZIP', exact: true }).filter({ visible: true }).waitFor(); assert.equal(posts, 1); assert.match(await page.locator('#panel-' + idB).textContent(), /ZIP pronto — 1 mensagem, 0 arquivos incluídos, 0 anexos faltantes/);
   for (const width of [320, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: `dist/02-04-ui-${width}.png`, fullPage: true }); }
   await page.evaluate(() => document.styleSheets[0].insertRule(':root{font-size:200%}', document.styleSheets[0].cssRules.length)); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'dist/02-04-ui-zoom200.png', fullPage: true });
 });
