@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, appendFileSync } from 'node:fs';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -8,6 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 // Dynamic loading makes a missing verifier an assertion failure, not a test-load error.
 const modulePath = '../../scripts/phase3-acceptance.mjs';
 const acceptance = await import(modulePath).catch(() => null);
+const source = readFileSync(new URL(modulePath, import.meta.url), 'utf8');
 const audit = (proof: any, live?: any) => acceptance?.auditEvidence(proof, live);
 const liveCopy = (live: any) => Object.assign(acceptance?.beginRun?.() ?? {}, structuredClone(live));
 function control(t: { after(fn: () => void): void }) {
@@ -47,4 +50,44 @@ test('arquivo ausente, parcial, corrupto ou antigo nunca conta como entrega', t 
 test('recibo público usa whitelist e não vaza sentinelas privadas', t => {
   const { proof, live } = control(t); live.oracle.privateText = 'PRIVATE_SENTINEL'; const output = acceptance?.publicReceipt({ ...proof, token: 'PRIVATE_SENTINEL', text: 'PRIVATE_SENTINEL', path: 'PRIVATE_SENTINEL' }, live);
   assert.ok(output); assert.equal(JSON.stringify(output).includes('PRIVATE_SENTINEL'), false); assert.equal(output.accepted, true);
+});
+
+test('WR-01 timeout espera close e encerra filho e descendente que ignoram TERM', { timeout: 10000 }, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-timeout-')); t.after(() => rmSync(dir, { recursive: true }));
+  let child: ChildProcess | undefined, closed = false, descendant = 0, budget: (() => void) | undefined;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  let markReady!: () => void;
+  const ready = new Promise<void>(resolve => markReady = resolve);
+  const trackedSpawn: typeof spawn = ((...args: Parameters<typeof spawn>) => {
+    child = spawn(...args); child.on('close', () => closed = true);
+    child.stdout!.on('data', chunk => { const match = /READY:(\d+)/.exec(String(chunk)); if (match) { descendant = Number(match[1]); markReady(); } });
+    return child;
+  }) as typeof spawn;
+  const clock = (fn: () => void, ms: number) => {
+    if (ms === 240000) { budget = fn; return undefined; }
+    const timer = setTimeout(() => { timers.delete(timer); fn(); }, ms); timers.add(timer); return timer;
+  };
+  const clear = (timer: ReturnType<typeof setTimeout>) => { timers.delete(timer); clearTimeout(timer); };
+  // Execute the current function body; only its budget clock and spawn observation are controlled.
+  const body = source.slice(source.indexOf('function runCodex('), source.indexOf('\nfunction http('));
+  const run = new Function('spawn', 'writeFileSync', 'appendFileSync', 'setTimeout', 'clearTimeout', body + ';return runCodex;')(trackedSpawn, writeFileSync, appendFileSync, clock, clear);
+  const fixture = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>process.stderr.write('TERM_IGNORED\\n'));const c=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});console.log('CHILD_READY');setInterval(()=>{},1000)"],{stdio:['ignore','pipe','inherit']});c.stdout.once('data',()=>console.log('READY:'+c.pid));setInterval(()=>{},1000);`;
+  try {
+    const pending = run(process.execPath, ['-e', fixture], process.env, dir, join(dir, 'transcript'), '');
+    await ready; assert.ok(budget); budget(); await assert.rejects(pending, /budget exceeded/);
+    assert.equal(closed, true, 'Promise rejected before child close');
+    assert.match(readFileSync(join(dir, 'transcript'), 'utf8'), /TERM_IGNORED/, 'child really ignored TERM');
+    assert.equal(timers.size, 0, 'shutdown timers must be cleared');
+    assert.throws(() => process.kill(child!.pid!, 0), /ESRCH/, 'child must no longer exist');
+    const status = (() => { try { return readFileSync('/proc/' + descendant + '/stat', 'utf8').split(' ')[2]; } catch { return null; } })();
+    assert.ok(status === null || status === 'Z', 'descendant must not remain running with inherited pipes');
+  } finally {
+    for (const timer of timers) clearTimeout(timer);
+    if (child && !closed) {
+      const done = once(child, 'close');
+      try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+      try { process.kill(descendant, 'SIGKILL'); } catch {}
+      await done;
+    }
+  }
 });
