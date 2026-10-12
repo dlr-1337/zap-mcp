@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync, renameSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync, renameSync, symlinkSync, readdirSync, openSync, unlinkSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -11,7 +11,7 @@ import express from 'express';
 import { Readable } from 'node:stream';
 import { startMediaWorker } from '../src/media.js';
 import { createHash, createHmac } from 'node:crypto';
-import { request } from 'node:http';
+import { request, createServer as plainServer } from 'node:http';
 import { createServer } from 'node:https';
 import { spawnSync } from 'node:child_process';
 import { openVerifiedAttachment } from '../src/media.js';
@@ -172,6 +172,48 @@ if (process.env.ZAP_MCP_REAL_MODE) test('tracer real: Codex TLS negociado e dois
     const receipt = { status: 'passed', synthetic: false, codex: version.stdout.trim(), node: process.version, tls: { positive: true, untrustedNegative: true, identity: 'localhost' }, negotiation: observed.filter(x => x.method === 'initialize'), toolCalls: observed.filter(x => x.method === 'tools/call').length, originals: received, inlineLimit: 256 * 1024, delivery: 'Codex tool calls then explicit authenticated GET, two saved original files', environment: 'local HTTPS offline clone; VPS not verified', at: new Date().toISOString() };
     writeFileSync(join(c.destination, 'receipt.json'), JSON.stringify(receipt, null, 2), { mode: 0o600 });
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await s.close(); if (originalConfig) assert.deepEqual(readFileSync(configPath), originalConfig, 'Configuração Codex original preservada'); }
+});
+
+for (const fault of ['original inspection', 'TLS setup', 'token publication', 'Codex failure', 'normal return']) test(`tracer cleanup revoga bearer e remove arquivo após ${fault}`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-tracer-cleanup-')), dataDir = join(dir, 'data'), destination = join(dir, 'proof');
+  mkdirSync(destination, { mode: 0o700 }); const seedService = createService({ dataDir });
+  if (fault === 'normal return') rotateMcpToken(seedService.authDb, join(dir, 'deliberate-prior-token'));
+  const prior = seedService.authDb.prepare("SELECT key,value FROM web_config WHERE key LIKE 'mcp-%' ORDER BY key").all();
+  await seedService.close(); writeFileSync(join(dataDir, 'restored.json'), '{"offlineOnly":true}', { mode: 0o600 });
+  const caseFile = join(dir, 'case.json'); writeFileSync(caseFile, JSON.stringify({ synthetic: false, dataDir, destination, smallId: 'small', largeId: 'large', keyFile: caseFile, certFile: caseFile, caFile: caseFile }), { mode: 0o600 });
+  let service: ReturnType<typeof createService> | undefined, listener: ReturnType<typeof plainServer> | undefined, credentialPath = '', temporaryToken = '';
+  const source = readFileSync(new URL(import.meta.url), 'utf8'), start = source.indexOf("test('tracer real: Codex TLS");
+  const callback = source.slice(start, source.indexOf('\n    });', start));
+  let body = callback.slice(callback.indexOf('async () => {') + 'async () => {'.length);
+  if (fault === 'normal return') {
+    // Successful return exercises the actual finally; no mocked real-client receipt is produced.
+    const begin = body.indexOf('await new Promise(resolve => server.listen'), cleanup = body.indexOf('finally {', begin);
+    body = body.slice(0, begin) + "await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); return;\n} " + body.slice(cleanup);
+  }
+  const deps: Record<string, unknown> = { assert, process: { ...process, env: { ...process.env, ZAP_MCP_REAL_MODE: 'tracer', ZAP_MCP_REAL_CASE_FILE: caseFile } }, existsSync, readFileSync, statSync, mkdirSync, mkdtempSync, chmodSync, join, homedir: () => dir, readdirSync, unlinkSync,
+    spawnSync: () => ({ status: 0, stdout: 'codex-cli 0.162.1' }), createService: (options: { dataDir: string }) => service = createService(options), createMcpAccess,
+    rotateMcpToken: (db: Database.Database, path: string) => { credentialPath = path; rotateMcpToken(db, path); temporaryToken = readFileSync(path, 'utf8').trim(); if (fault === 'token publication') throw Error('controlled setup fault'); },
+    openVerifiedAttachment: (_archive: unknown, _media: unknown, id: string) => { if (fault === 'original inspection') throw Error('controlled setup fault'); const file = join(dir, id); const bytes = Buffer.alloc(id === 'small' ? 1 : 2); writeFileSync(file, bytes, { mode: 0o600 }); return { fd: openSync(file, 'r'), size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }; }, closeSync,
+    createServer: (_options: unknown, handler: Parameters<typeof plainServer>[0]) => { if (fault === 'TLS setup') throw Error('controlled setup fault'); return listener = plainServer(handler); },
+    tlsRequest: (url: string, options: any, handler: any) => request(url.replace('https:', 'http:'), options, handler),
+    runCodex: () => { throw Error('controlled child fault'); }, writeFileSync, createHash };
+  const names = Object.keys(deps), run = new Function(...names, 'return async () => {' + body + '};')(...names.map(name => deps[name]));
+  try {
+    if (fault === 'normal return') await run(); else await assert.rejects(run(), /controlled (setup|child) fault/);
+    const db = new Database(join(dataDir, 'auth.sqlite'), { readonly: true });
+    try {
+      assert.equal(createMcpAccess(db).authenticate('Bearer ' + temporaryToken) === null, true, 'temporary bearer remained active');
+      assert.equal(JSON.stringify(db.prepare("SELECT key,value FROM web_config WHERE key LIKE 'mcp-%' ORDER BY key").all()) === JSON.stringify(prior), true, 'deliberate prior grant must be preserved');
+    } finally { db.close(); }
+    assert.equal(existsSync(credentialPath), false, 'temporary credential file remained');
+    assert.equal(existsSync(join(dataDir, 'service.lock')), false, 'service lock remained live');
+    assert.equal(listener?.listening ?? false, false, 'listener remained live');
+    assert.equal(service?.authDb.open, false, 'auth database remained open');
+    assert.equal(existsSync(join(destination, 'receipt.json')), false, 'synthetic control must not generate real receipt');
+  } finally {
+    if (listener) { listener.closeAllConnections(); await new Promise<void>(resolve => listener!.close(() => resolve())); }
+    await service?.close(); rmSync(dir, { recursive: true });
+  }
 });
 
 export async function mcpFixture(t: { after(fn: () => unknown): void }) {
