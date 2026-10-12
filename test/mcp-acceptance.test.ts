@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, appendFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, appendFileSync, mkdirSync, chmodSync, existsSync, readdirSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
@@ -36,6 +36,9 @@ test('aceite rejeita replay JSON antigo sem processo Codex atual', t => {
 for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state capture', 'listener cleanup', 'restore cleanup']) test(`WR-02 cleanup releases live service and readonly DB after ${fault}`, async t => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-setup-')), dataDir = join(dir, 'data'), destination = join(dir, 'proof');
   mkdirSync(destination, { mode: 0o700 });
+  // Setup-failure controls need an isolated preflight, never the user's Codex installation.
+  const executable = join(dir, '.local/share/mise/installs/codex/latest/bin/codex');
+  mkdirSync(join(executable, '..'), { recursive: true, mode: 0o700 }); writeFileSync(executable, Buffer.from([127, 69, 76, 70]), { mode: 0o600 });
   const seed = createService({ dataDir });
   try {
     if (!fault.endsWith('cleanup')) seed.authDb.prepare('INSERT INTO web_config(key,value) VALUES (?,?)').run('mcp-token-generation', 'synthetic-existing-generation');
@@ -57,7 +60,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
   }
   const fs = await import('node:fs'), paths = await import('node:path'), os = await import('node:os'), crypto = await import('node:crypto'), cp = await import('node:child_process'), https = await import('node:https'), http = await import('node:http'), url = await import('node:url'), util = await import('node:util');
   const phase2Path = '../../scripts/phase2-acceptance.mjs', phase2 = await import(phase2Path);
-  const deps = { assert, ...fs, ...paths, ...os, ...crypto, ...cp, ...https, homedir: () => dir, pathToFileURL: url.pathToFileURL, plainRequest: http.request, same: util.isDeepStrictEqual,
+  const deps = { assert, ...fs, ...paths, ...os, ...crypto, ...cp, ...https, homedir: () => dir, spawnSync: () => ({ status: 0, stdout: 'codex-cli synthetic-fixture' }), pathToFileURL: url.pathToFileURL, plainRequest: http.request, same: util.isDeepStrictEqual,
     Database: ObservedDatabase, createService: (options: any) => {
       service = createService(options);
       if (fault === 'state capture') { const prepare = service.authDb.prepare.bind(service.authDb); service.authDb.prepare = ((sql: string) => { if (sql === 'SELECT * FROM web_sessions') throw Error('state capture fault'); return prepare(sql); }) as typeof prepare; }
@@ -73,6 +76,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
     await assert.rejects(run(caseFile), /initial SQL|state capture|cleanup fault|private file|PEM|DECODER|Aceite recusado/);
     assert.equal(existsSync(join(dataDir, 'service.lock')), false, 'setup failure retained live service lock');
     assert.ok(databases.every(db => !db.open), 'setup failure retained readonly database');
+    assert.ok(!readdirSync(destination).some(name => existsSync(join(destination, name, 'receipt.json'))), 'setup control must not produce a real-client receipt');
     const reopened = createService({ dataDir });
     try { assert.ok(JSON.stringify(reopened.authDb.prepare('SELECT * FROM web_owner').all()) === JSON.stringify(originalOwner), 'owner changed'); assert.ok(JSON.stringify(reopened.authDb.prepare('SELECT * FROM web_config').all()) === JSON.stringify(originalConfig), 'preexisting config changed before any mutation'); }
     finally { await reopened.close(); }
