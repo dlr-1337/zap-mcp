@@ -199,6 +199,88 @@ async function callQuery(f: Awaited<ReturnType<typeof mcpFixture>>, name: string
   return reply.result.structuredContent;
 }
 
+test('MCP contexto preserva âncora e DTOs web com páginas congeladas bidirecionais', async t => {
+  const f = await mcpFixture(t), key = { remoteJid: 'context@lid', fromMe: false };
+  const messages = Array.from({ length: 111 }, (_, i) => ({ key: { ...key, id: String(i) }, messageTimestamp: 1700000000 + i, message: { conversation: 'vizinha ' + i } }));
+  f.s.archive.ingestHistory({ messages });
+  const reference = f.s.archive.readStoredMessage(messages[60].key)!.reference;
+  await f.s.setPassword('context-synthetic');
+  const challenge = await fetch(f.base + '/api/session'), session = await challenge.json();
+  const login = await fetch(f.base + '/login', { method: 'POST', headers: { Origin: f.base, Cookie: challenge.headers.get('set-cookie')!.split(';')[0], 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'context-synthetic', csrfToken: session.csrfToken }) });
+  const web = await (await fetch(f.base + '/api/context/' + reference, { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } })).json();
+  const page = await callQuery(f, 'get_context', { reference });
+  assert.equal(page.anchorReference, reference); assert.deepEqual(page.anchor, web.messages.find((m: any) => m.reference === reference));
+  assert.deepEqual(page.messages, web.messages.slice(page.ordinal - 35, page.endOrdinal - 35));
+  assert.deepEqual(page.before, page.messages.filter((m: any) => web.messages.findIndex((w: any) => w.reference === m.reference) < 25));
+  assert.deepEqual(page.after, page.messages.filter((m: any) => web.messages.findIndex((w: any) => w.reference === m.reference) > 25));
+  assert.equal(page.zone, 'America/Sao_Paulo'); assert.equal(page.coverage.completeAccount, false);
+  assert.ok(page.previousCursor); assert.ok(page.nextCursor); assert.ok(f.wireBytes.at(-1)! <= 32768);
+  f.s.archive.ingestUpdates([{ key: messages[60].key, update: { messageTimestamp: 1700009999, message: { conversation: 'editada depois' } } }]);
+  f.s.archive.ingestHistory({ messages: [{ key: { ...key, id: 'retro' }, messageTimestamp: 1700000001, message: { conversation: 'retroativa' } }] });
+  const all = [...page.messages];
+  for (const direction of ['before', 'after']) {
+    let cursor = direction === 'before' ? page.previousCursor : page.nextCursor;
+    while (cursor) {
+      const next = await callQuery(f, 'get_context', { reference, direction, cursor });
+      assert.deepEqual(next.anchor, page.anchor); assert.ok(f.wireBytes.at(-1)! <= 32768);
+      all.push(...next.messages); cursor = direction === 'before' ? next.previousCursor : next.nextCursor;
+    }
+  }
+  assert.equal(all.length, 111); assert.equal(new Set(all.map(m => m.reference)).size, 111);
+  assert.ok(!all.some(m => m.text === 'editada depois' || m.text === 'retroativa'));
+});
+
+test('MCP contexto reutiliza busca histórica e redirect sem perder unknowns ou sanitização', async t => {
+  const f = await mcpFixture(t), key = { remoteJid: 'old@lid', id: 'doc', fromMe: false };
+  const original = { key, message: { documentMessage: { caption: 'orçamento antigo', fileName: 'proposta.pdf', mediaKey: Buffer.alloc(32), url: 'https://private/PRIVATE_CONTEXT_SENTINEL' } } };
+  f.s.archive.ingestHistory({ messages: [original] });
+  const search = await callQuery(f, 'search_messages', { query: 'orcamento' }), reference = search.messages[0].reference;
+  assert.ok(search.searchCursor, 'Mesmo resultado único precisa referência autenticada ao recorte');
+  f.s.archive.ingestHistory({ messages: [{ ...original, key: { ...key, remoteJid: 'old@s.whatsapp.net' } }] });
+  f.s.archive.ingestContacts({ lid: 'old@lid', pn: 'old@s.whatsapp.net' });
+  f.s.archive.ingestUpdates([{ key, update: { messageTimestamp: 124, message: { conversation: 'texto atual' } } }]);
+  const page = await callQuery(f, 'get_context', { reference, searchCursor: search.searchCursor });
+  const source = f.s.archive.searchMessages({ terms: searchTerms('orcamento'), conversationId: null, filters: { terms: searchTerms('orcamento'), conversationId: null, ...parsePeriod() }, session: 'oracle' });
+  const expected = f.s.archive.openContext(reference, 'oracle', source.snapshotId);
+  assert.equal(page.requestedReference, reference); assert.equal(page.anchorReference, expected.anchorReference);
+  assert.deepEqual(page.anchor, expected.messages[0]); assert.equal(page.anchor.originalTimestamp, null);
+  assert.equal(page.matchedEvidence[0].text, 'orçamento antigo'); assert.equal(page.matchedEvidence[0].historical, true);
+  assert.ok(page.anchor.attachments.length); assert.ok(page.anchor.revisions.length);
+  assert.doesNotMatch(JSON.stringify(page), /PRIVATE_CONTEXT_SENTINEL|mediaKey|descriptor|payload/);
+});
+
+test('MCP contexto recusa cursores referência direção geração ordinal e TTL inválidos', async t => {
+  const f = await mcpFixture(t);
+  f.s.archive.ingestHistory({ messages: Array.from({ length: 60 }, (_, i) => ({ key: { remoteJid: 'invalid@lid', id: String(i), fromMe: false }, messageTimestamp: i, message: { conversation: 'validar ' + i } })) });
+  const search = await callQuery(f, 'search_messages', { query: '' }), reference = search.messages[20].reference;
+  const page = await callQuery(f, 'get_context', { reference });
+  const cursor = page.nextCursor;
+  for (const args of [{ reference, direction: 'after' }, { reference, cursor }, { reference, direction: 'before', cursor }, { reference, direction: 'after', cursor: cursor + 'x' }, { reference, direction: 'after', cursor, searchCursor: search.searchCursor }, { reference, searchCursor: page.nextCursor }, { reference: search.messages[0].reference, direction: 'after', cursor }, { reference, sql: 'SELECT *' }, { reference: '00000000-0000-0000-0000-000000000000' }]) {
+    const reply = await f.rpc('tools/call', { name: 'get_context', arguments: args }); assert.ok(reply.error || reply.result?.isError, JSON.stringify(args));
+  }
+  const secret = createMcpAccess(f.s.authDb).cursorSecret()!, body = JSON.parse(Buffer.from(cursor.split('.')[0], 'base64url').toString());
+  for (const fields of [{ ordinal: -1 }, { ordinal: 9999 }, { generation: 'other' }, { expiresAt: body.expiresAt + 1 }]) {
+    const changed = Buffer.from(JSON.stringify({ ...body, ...fields })).toString('base64url'), signed = changed + '.' + createHmac('sha256', secret).update(changed).digest('base64url');
+    assert.ok((await f.rpc('tools/call', { name: 'get_context', arguments: { reference, direction: 'after', cursor: signed } })).result.isError);
+  }
+  f.s.archiveDb.prepare('UPDATE query_snapshots SET expires_at=0 WHERE id=?').run(page.snapshotId);
+  assert.ok((await f.rpc('tools/call', { name: 'get_context', arguments: { reference, direction: 'after', cursor } })).result.isError);
+  f.s.archiveDb.prepare('UPDATE query_snapshots SET expires_at=0 WHERE id=?').run(search.snapshotId);
+  assert.ok((await f.rpc('tools/call', { name: 'get_context', arguments: { reference, searchCursor: search.searchCursor } })).result.isError);
+});
+
+test('MCP contexto limita item grande sem omitir âncora ou avançar evidência', async t => {
+  const f = await mcpFixture(t), key = { remoteJid: 'large@lid', id: 'large', fromMe: false };
+  f.s.archive.ingestHistory({ messages: [{ key, message: { conversation: 'é'.repeat(40000) } }] });
+  const reference = f.s.archive.readStoredMessage(key)!.reference;
+  const reply = await f.rpc('tools/call', { name: 'get_context', arguments: { reference } });
+  assert.equal(reply.result.isError, true); const error = reply.result.structuredContent;
+  assert.equal(error.code, 'response_limit'); assert.equal(error.anchorReference, reference); assert.ok(error.requiredBytes > 32768);
+  assert.ok(error.nextCursor); assert.equal(error.ordinal, 0); assert.ok(f.wireBytes.at(-1)! <= 32768);
+  const retry = await f.rpc('tools/call', { name: 'get_context', arguments: { reference, direction: 'after', cursor: error.nextCursor } });
+  assert.equal(retry.result.structuredContent.ordinal, 0); assert.equal(retry.result.structuredContent.code, 'response_limit');
+});
+
 test('MCP continuação congela candidatos e mensagens sem perder ordinais por budget', async t => {
   const f = await mcpFixture(t);
   for (let i = 0; i < 65; i++) f.s.writeMessage({ reference: 'page-' + String(i).padStart(3, '0'), conversationId: 'pages@lid', conversationName: 'pages', text: 'original ' + 'é'.repeat(1200), originalTimestamp: '2026-01-01T00:00:00Z' });
@@ -358,7 +440,7 @@ test('MCP negocia, lista fechada e entrega original com schema e origem protegid
   const worker = startMediaWorker({ archive: f.s.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   const id = f.s.archive.readStoredMessage(key)!.attachments[0]!.id;
   const init = await f.rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'synthetic', version: '1' } }); assert.ok(init.result.protocolVersion);
-  assert.deepEqual((await f.rpc('tools/list')).result.tools.map((x: any) => x.name), ['find_conversations', 'search_messages', 'get_attachment']);
+  assert.deepEqual((await f.rpc('tools/list')).result.tools.map((x: any) => x.name), ['find_conversations', 'search_messages', 'get_context', 'get_attachment']);
   const result = (await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: id } })).result;
   assert.deepEqual(Buffer.from(result.content[1].data, 'base64'), bytes); assert.equal(result.structuredContent.delivery, 'inline');
   assert.doesNotMatch(JSON.stringify(result), /mediaKey|descriptor|source_key|payload/);
