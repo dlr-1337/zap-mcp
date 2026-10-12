@@ -41,7 +41,8 @@ test('pagehide e logout recusado liberam buscas candidatos e listagem sem callba
 });
 test('POST retido recupera o mesmo ZIP após suspensão ou logout recusado sem duplicar job', async t => {
   for (const lifecycle of ['pagehide', 'logout', 'close', 'expired', 'network']) {
-    const { s, page, login } = await uiFixture(t);
+    const { s, page, login, browser } = await uiFixture(t);
+    try {
     s.archive.ingestHistory({ messages: [{ key: { remoteJid: 'recover@lid', id: 'm', fromMe: false }, message: { conversation: 'conteúdo do ZIP' } }] });
     await login(); await page.locator('#conversations a').click(); await page.locator('#messages article').first().waitFor();
     let release!: () => void, begun!: () => void, jobId: string;
@@ -71,6 +72,7 @@ test('POST retido recupera o mesmo ZIP após suspensão ou logout recusado sem d
       assert.equal(await page.getByRole('button', { name: 'Gerar ZIP', exact: true }).isDisabled(), false);
       release(); await page.waitForTimeout(100); assert.equal(await download.getAttribute('href'), '/api/exports/' + jobId! + '/download');
     }
+    } finally { await browser.close(); }
   }
 });
 test('resposta anterior à suspensão não limpa o loading da nova busca', async t => {
