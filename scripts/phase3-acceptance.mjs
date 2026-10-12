@@ -45,13 +45,19 @@ export function publicReceipt(p, live) {
     configPreserved: true, collectorEnabled: false, environment: 'local native HTTPS; offline linked-account clone; VPS not verified',
     delivery: 'Codex calls then explicit authenticated original GET; destination size and SHA independently checked', at: new Date(live.endedAt).toISOString() };
 }
-function runCodex(executable, args, env, cwd, transcript, prompt) {
+export function runCodex(executable, args, env, cwd, transcript, prompt) {
   return new Promise((accept, reject) => {
     writeFileSync(transcript, '', { mode: 0o600, flag: 'wx' });
-    const child = spawn(executable, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'] }); let output = '', stderr = '';
-    const timer = setTimeout(() => { child.kill('SIGTERM'); reject(Error('Codex budget exceeded')); }, 240000);
-    child.on('error', e => { clearTimeout(timer); reject(e); }); child.stdout.on('data', b => { output += b; appendFileSync(transcript, b); }); child.stderr.on('data', b => stderr += b);
-    child.on('close', code => { clearTimeout(timer); appendFileSync(transcript, '\n' + stderr);
+    // Codex can launch helpers inheriting its pipes; stop the whole Linux process group.
+    const child = spawn(executable, args, { env, cwd, detached: true, stdio: ['pipe', 'pipe', 'pipe'] }); let output = '', stderr = '', failure, killTimer;
+    const signal = name => { if (child.pid) { try { process.kill(-child.pid, name); } catch (error) { if (error.code !== 'ESRCH') throw error; } } };
+    const timer = setTimeout(() => {
+      failure = Error('Codex budget exceeded'); signal('SIGTERM'); killTimer = setTimeout(() => signal('SIGKILL'), 2000);
+    }, 240000);
+    child.on('error', e => { failure ??= e; }); child.stdin.on('error', e => { if (e.code !== 'EPIPE') failure ??= e; });
+    child.stdout.on('data', b => { output += b; appendFileSync(transcript, b); }); child.stderr.on('data', b => stderr += b);
+    child.on('close', code => { clearTimeout(timer); clearTimeout(killTimer); appendFileSync(transcript, '\n' + stderr);
+      if (failure) { reject(failure); return; }
       const events = output.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
       accept({ pid: child.pid, code, output: output + stderr, events }); }); child.stdin.end(prompt);
   });
@@ -253,8 +259,8 @@ export async function runAcceptance(caseFile) {
 const downloaderPath = directory => join(directory, 'download-case.json');
 export function selfTest() {
   const run = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'dist/test/mcp-acceptance.test.js'], { encoding: 'utf8' });
-  check(run.status === 0 && /# tests 4\b/.test(run.stdout) && /# fail 0\b/.test(run.stdout) && /# skipped 0\b/.test(run.stdout), 'non-vacuous verifier controls');
-  return { accepted: true, mode: 'self-test', synthetic: true, controls: 4 };
+  check(run.status === 0 && /# tests 5\b/.test(run.stdout) && /# fail 0\b/.test(run.stdout) && /# skipped 0\b/.test(run.stdout), 'non-vacuous verifier controls');
+  return { accepted: true, mode: 'self-test', synthetic: true, controls: 5 };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const mode = process.argv[process.argv.indexOf('--mode') + 1];
