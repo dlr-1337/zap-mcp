@@ -199,6 +199,27 @@ async function callQuery(f: Awaited<ReturnType<typeof mcpFixture>>, name: string
   return reply.result.structuredContent;
 }
 
+test('MCP resume muitos lotes sem bloquear consultas nem perder cobertura observada', async t => {
+  const f = await mcpFixture(t), key = { remoteJid: 'coverage@lid', fromMe: false };
+  const messages = Array.from({ length: 120 }, (_, i) => ({ key: { ...key, id: String(i) }, messageTimestamp: 1700000000 + i, message: { conversation: 'evidência' } }));
+  f.s.archive.ingestHistory({ messages });
+  const insert = f.s.archiveDb.prepare('INSERT INTO batches(id,kind,received,confirmed,failed,received_at,last_progress,completed_at,is_latest,metadata) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  f.s.archiveDb.transaction(() => { for (let i = 0; i < 600; i++) insert.run('synthetic-' + i, 'history', 4, 2, 1, '2020-01-01T00:00:00Z', null, null, null, '{}'); })();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const reference = f.s.archive.readStoredMessage(messages[60].key)!.reference;
+  const expected = { count: 601, received: 2520, confirmed: 1320, failed: 600, pending: 600, completed: 1, inProgress: 600, stalled: 600 };
+  for (const [name, args] of [['find_conversations', { query: '' }], ['search_messages', { query: 'evidência' }], ['get_context', { reference }]] as const) {
+    const reply = await f.rpc('tools/call', { name, arguments: args });
+    assert.equal(reply.result?.isError ?? false, false, 'muitos lotes não podem tornar o menor resultado impossível');
+    const page = reply.result.structuredContent;
+    assert.deepEqual(page.coverage.batchSummary, expected);
+    assert.equal(page.coverage.batches, undefined); assert.match(page.coverage.batchDetails, /site.*status/i);
+    assert.equal(page.coverage.uniqueMessages, 120); assert.equal(page.coverage.completeAccount, false);
+    assert.deepEqual(page.coverage.interval, f.s.archive.getCoverage().interval); assert.deepEqual(page.coverage.historyStatuses, []);
+    assert.ok(f.wireBytes.at(-1)! <= 32768);
+  }
+});
+
 test('MCP contexto preserva âncora e DTOs web com páginas congeladas bidirecionais', async t => {
   const f = await mcpFixture(t), key = { remoteJid: 'context@lid', fromMe: false };
   const messages = Array.from({ length: 111 }, (_, i) => ({ key: { ...key, id: String(i) }, messageTimestamp: 1700000000 + i, message: { conversation: 'vizinha ' + i } }));
