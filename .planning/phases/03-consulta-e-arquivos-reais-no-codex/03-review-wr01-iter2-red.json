@@ -1,0 +1,9 @@
+{
+  "finding": "WR-01",
+  "iteration": 2,
+  "classification": "RED_EVIDENCE_OK",
+  "command": "TMPDIR=<private-cache> mise exec node@24.21.0 -- node --test --test-name-pattern=WR-01 --test-reporter=tap dist/test/mcp-acceptance.test.js",
+  "exit": 1,
+  "semanticFailure": "Actual runCodex. Original inherited-pipe scenario succeeds; added real parent defaults to TERM exit, descendant in same Linux group ignores TERM with ignored stdio and readiness over IPC. At rejection parent close is confirmed, timers cleared, but descendant remains non-Z. Fixture finally kills descendant regardless of parent close.",
+  "output": "TAP version 13\n# Subtest: WR-01 timeout espera close e encerra filho e descendente que ignoram TERM\nnot ok 1 - WR-01 timeout espera close e encerra filho e descendente que ignoram TERM\n  ---\n  duration_ms: 2093.177783\n  type: 'test'\n  location: '<checkout>/dist/test/mcp-acceptance.test.js:146:1'\n  failureType: 'testCodeFailure'\n  error: 'descendant with independent pipes still executes when Promise settles'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  actual: false\n  operator: '=='\n  stack: |-\n    TestContext.<anonymous> (file://<checkout>/dist/test/mcp-acceptance.test.js:198:20)\n    process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2420.907811\n"
+}
