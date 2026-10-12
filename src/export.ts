@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { chmodSync, closeSync, constants, createReadStream, createWriteStream, existsSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, statfsSync, unlinkSync } from 'node:fs';
+import { chmodSync, closeSync, constants, createWriteStream, existsSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, statfsSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
@@ -17,7 +17,8 @@ const error = (status: number, text: string) => Object.assign(Error(text), { sta
 type Expected = Map<string, { size: number; sha256: string }>;
 type Selection = ReturnType<Archive['freezeExportSelection']>;
 function newlyRestricted(archive: Archive, selection: Selection) {
-  return selection.messages.some(m => !m.restricted && archive.isRestricted(m.reference));
+  const references = selection.messages.filter(m => !m.restricted).map(m => m.reference);
+  return Boolean(archive.db.prepare('SELECT 1 FROM json_each(?) refs LEFT JOIN message_redirects r ON r.old_reference=refs.value JOIN messages m ON m.reference=coalesce(r.target_reference,refs.value) WHERE m.restricted=1 LIMIT 1').get(JSON.stringify(references)));
 }
 type Fault = (point: string, path: string) => void | Promise<void>;
 const digest = (b: Buffer) => ({ size: b.length, sha256: createHash('sha256').update(b).digest('hex') });
@@ -98,7 +99,8 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
   db.exec("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,session TEXT NOT NULL,state TEXT NOT NULL,selection TEXT NOT NULL,expires INTEGER NOT NULL,counts TEXT,reason TEXT); CREATE UNIQUE INDEX IF NOT EXISTS single_export ON jobs(state) WHERE state='preparing'; UPDATE jobs SET state='failed',reason='Preparação interrompida. Gere novamente.' WHERE state='preparing';");
   db.prepare("UPDATE jobs SET selection='{}',counts=NULL WHERE expires<=?").run(Date.now());
   let active: Promise<void> | undefined, stopped = false;
-  const remove = (id: string) => { if (!idPattern.test(id)) return; for (const suffix of ['.part', '.zip']) { const path = join(directory, id + suffix); if (existsSync(path)) unlinkSync(path); } };
+  const downloads = new Map<Readable, { id: string; check: () => void }>();
+  const remove = (id: string) => { if (!idPattern.test(id)) return; for (const [stream, download] of downloads) if (download.id === id) stream.destroy(error(409, 'Exportação indisponível')); for (const suffix of ['.part', '.zip']) { const path = join(directory, id + suffix); if (existsSync(path)) unlinkSync(path); } };
   const expire = (id: string) => { remove(id); db.prepare("UPDATE jobs SET state='failed',selection='{}',counts=NULL,reason='Esta exportação expirou.' WHERE id=?").run(id); };
   for (const name of readdirSync(directory)) if (/^[0-9a-f-]{36}\.(part|zip)$/.test(name)) {
     const id = name.slice(0, 36), row = db.prepare('SELECT state,expires FROM jobs WHERE id=?').get(id) as { state: string; expires: number } | undefined;
@@ -150,15 +152,60 @@ export function createExportManager({ archive, dataDir, mediaDir, fault }: { arc
     }).finally(() => { active = undefined; });
     return get(id, session);
   };
+  const unsubscribe = archive.onChange(() => {
+    for (const [stream, download] of downloads) { try { download.check(); } catch (e) { stream.destroy(e as Error); } }
+  });
   return {
     createExportJob: create, getExportJob: get,
     openExport(id: string, session: string) {
       const job = get(id, session); if (job.state !== 'ready') throw error(409, 'Exportação ainda não está pronta');
-      const fd = openSync(join(directory, id + '.zip'), constants.O_RDONLY | constants.O_NOFOLLOW);
-      try { const stat = fstatSync(fd); if (!stat.isFile()) throw Error('Pacote inválido'); return { fd, size: stat.size }; } catch (e) { closeSync(fd); throw e; }
+      let fd: number | null = openSync(join(directory, id + '.zip'), constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const stat = fstatSync(fd); if (!stat.isFile()) throw Error('Pacote inválido');
+        const selection: Selection = JSON.parse((db.prepare('SELECT selection FROM jobs WHERE id=?').get(id) as { selection: string }).selection);
+        let position = 0, version = '';
+        const check = () => {
+          if (stopped) throw error(409, 'Exportação indisponível');
+          const row = db.prepare('SELECT state,expires FROM jobs WHERE id=? AND session=?').get(id, session) as { state: string; expires: number } | undefined;
+          if (!row || row.state !== 'ready') throw error(409, 'Exportação indisponível');
+          if (row.expires <= Date.now()) { expire(id); throw error(410, 'Esta exportação expirou.'); }
+          // Cache the frozen-reference check only while both SQLite connections see no archive change.
+          const current = (archive.db.prepare('SELECT total_changes() n').get() as { n: number }).n + ':' + archive.db.pragma('data_version', { simple: true });
+          if (current !== version) {
+            if (newlyRestricted(archive, selection)) { get(id, session); throw error(409, 'Conteúdo restrito indisponível'); }
+            version = current;
+          }
+        };
+        const stream = new Readable({ highWaterMark: 64 * 1024,
+          read() {
+            try {
+              check();
+              if (position === stat.size) { this.push(null); return; }
+              const bytes = Buffer.allocUnsafe(Math.min(64 * 1024, stat.size - position));
+              const count = readSync(fd!, bytes, 0, bytes.length, position); if (!count) throw Error('Pacote incompleto');
+              position += count; this.push(bytes.subarray(0, count));
+            } catch (e) { this.destroy(e as Error); }
+          },
+          destroy(e, callback) {
+            downloads.delete(this);
+            const owned = fd; fd = null;
+            try { if (owned !== null) closeSync(owned); callback(e); } catch (closeError) { callback(e ?? closeError as Error); }
+          }
+        });
+        // Readable.destroy keeps buffered bytes; gate consumption as well as disk reads.
+        const read = stream.read.bind(stream);
+        stream.read = size => {
+          if (stream.destroyed) return null;
+          try { check(); return read(size); } catch (e) { stream.destroy(e as Error); return null; }
+        };
+        downloads.set(stream, { id, check }); return { stream, size: stat.size };
+      } catch (e) { if (fd !== null) closeSync(fd); throw e; }
     },
     dropSession(session: string) { for (const row of db.prepare('SELECT id FROM jobs WHERE session=?').all(session) as { id: string }[]) remove(row.id); db.prepare('DELETE FROM jobs WHERE session=?').run(session); },
     purge() { for (const row of db.prepare('SELECT id FROM jobs WHERE expires<=?').all(Date.now()) as { id: string }[]) expire(row.id); db.prepare('DELETE FROM jobs WHERE expires<?').run(Date.now() - 24 * 3600_000); },
-    close() { stopped = true; if (active) return active.then(() => db.close()); db.close(); }
+    close() {
+      stopped = true; unsubscribe(); for (const stream of downloads.keys()) stream.destroy(error(409, 'Exportação indisponível'));
+      if (active) return active.then(() => db.close()); db.close();
+    }
   };
 }

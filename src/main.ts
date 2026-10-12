@@ -2,7 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { createWebAuth, setOwnerPassword } from './auth.js';
 import { openArchive, searchTerms, parsePeriod, type Archive } from './archive.js';
 import Database from 'better-sqlite3';
-import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync, createReadStream } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -144,8 +144,9 @@ export function createService({ dataDir }: { dataDir: string }) {
     try {
       const file = exports.openExport(req.params.id, searchSession(req));
       res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="exportacao-' + req.params.id + '.zip"', 'Content-Length': String(file.size) });
-      if (req.method === 'HEAD') { closeSync(file.fd); res.end(); return; }
-      const stream = createReadStream('', { fd: file.fd, autoClose: true, start: 0 }); res.on('close', () => stream.destroy()); stream.on('error', e => res.headersSent ? res.destroy() : next(e)); stream.pipe(res);
+      const stream = file.stream;
+      if (req.method === 'HEAD') { stream.destroy(); res.end(); return; }
+      res.on('close', () => stream.destroy()); stream.on('error', e => res.headersSent ? res.destroy() : exportError(e, res, next)); stream.pipe(res);
     } catch (e) { exportError(e, res, next); }
   });
   auth.store.on('revoked', (id: string, generation: string | undefined) => exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([id, generation])).digest('hex')));

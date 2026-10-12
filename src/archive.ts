@@ -107,6 +107,8 @@ function originalBody(payload: Buffer) {
 }
 
 export function openArchive(dataDir: string) {
+  const changeListeners = new Set<() => void>();
+  const changed = () => { for (const listener of changeListeners) listener(); };
   const location = resolve(dataDir);
   mkdirSync(location, { recursive: true, mode: 0o700 });
   if (realpathSync(location) !== location || lstatSync(location).isSymbolicLink()) throw Error('Diretório privado inválido');
@@ -335,6 +337,7 @@ export function openArchive(dataDir: string) {
       });
     })();
     processBatch(id, kind);
+    changed();
     return id;
   }
   function processBatch(id: string, kind: string) {
@@ -515,6 +518,7 @@ export function openArchive(dataDir: string) {
   }
   return {
     db,
+    onChange(listener: () => void) { changeListeners.add(listener); return () => { changeListeners.delete(listener); }; },
     searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence, isRestricted,
     dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
@@ -527,8 +531,8 @@ export function openArchive(dataDir: string) {
       if (!Number.isSafeInteger(event.syncType) || !['complete', 'paused'].includes(event.status) || typeof event.explicit !== 'boolean') throw Error('Estado de lote inválido');
       db.prepare('INSERT OR IGNORE INTO history_statuses VALUES(?,?,?,?)').run(event.syncType, event.status, Number(event.explicit), now());
     },
-    ingestContacts: db.transaction((event: readonly unknown[] | Obj) => { for (const c of Array.isArray(event) ? event : [event]) ingestIdentity(c); }),
-    ingestGroups: db.transaction((event: readonly unknown[]) => { for (const c of event) ingestIdentity(c, true); }),
+    ingestContacts(event: readonly unknown[] | Obj) { db.transaction(() => { for (const c of Array.isArray(event) ? event : [event]) ingestIdentity(c); })(); changed(); },
+    ingestGroups(event: readonly unknown[]) { db.transaction(() => { for (const c of event) ingestIdentity(c, true); })(); changed(); },
     readStoredMessage(input: unknown) { const ref = locate(input); return ref ? dto(ref) : null; },
     readPrivateMessage(input: unknown) {
       const ref = locate(input), message = ref ? dto(ref) : null;

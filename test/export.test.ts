@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, readlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, readlinkSync, openSync, fstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once, EventEmitter } from 'node:events';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { get as httpGet } from 'node:http';
 import { Readable } from 'node:stream';
 import { spawnSync, spawn } from 'node:child_process';
 import Database from 'better-sqlite3';
@@ -53,7 +54,7 @@ async function fixture(t: any) {
   const headers = { Cookie: l.headers.get('set-cookie')!.split(';')[0] }, session = await (await fetch(base + '/api/session', { headers })).json();
   const conversationId = s.archive.readStoredMessage(key)!.conversationId;
   const post = (body: any = {}) => fetch(base + '/api/exports', { method: 'POST', headers: { ...headers, Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId, from: '', to: '', csrfToken: session.csrfToken, ...body }) });
-  return { s, dir, base, headers, key, bytes, post, conversationId, csrfToken: session.csrfToken };
+  return { s, dir, base, headers, key, bytes, post, conversationId, csrfToken: session.csrfToken, server };
 }
 async function ready(f: Awaited<ReturnType<typeof fixture>>, id: string) {
   for (let i = 0; i < 200; i++) {
@@ -98,6 +99,68 @@ test('restrição posterior revoga ZIP pronto e falha preparação congelada sem
   assert.equal(row.state, 'failed', 'descritor já aberto não autoriza publicação após restrição');
   assert.equal(existsSync(join(second.dir, 'exports', pending.jobId + '.zip')), false);
   assert.equal(existsSync(join(second.dir, 'exports', pending.jobId + '.part')), false);
+});
+test('ZIP HTTP em backpressure interrompe bytes futuros com e sem polling', async t => {
+  for (const polling of [false, true]) {
+    const f = await fixture(t), bytes = randomBytes(2 * 1024 ** 2), key = { ...f.key, id: 'large' };
+    f.s.archive.ingestHistory({ messages: [{ key, messageTimestamp: 1700000002, message: { documentMessage: { url: 'https://mmg.whatsapp.net/test', mediaKey: Buffer.alloc(32), fileLength: bytes.length } } }] });
+    const worker = startMediaWorker({ archive: f.s.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
+    const initial = await (await f.post()).json(), job = await ready(f, initial.jobId);
+    let began!: () => void, resume!: () => void, writes = 0;
+    const started = new Promise<void>(r => began = r);
+    f.server.prependListener('request', (req, res) => {
+      if (req.url !== job.downloadURL) return;
+      const write = res.write.bind(res), emit = res.emit.bind(res); let held = true;
+      res.emit = ((name: string, ...args: unknown[]) => name === 'drain' && held ? false : emit(name, ...args)) as typeof res.emit;
+      res.write = ((...args: Parameters<typeof res.write>) => { writes++; const flowing = write(...args); began(); return writes === 1 ? false : flowing; }) as typeof res.write;
+      resume = () => { held = false; res.emit('drain'); };
+    });
+    let received = 0, completed = false;
+    const finished = new Promise<void>((resolve, reject) => {
+      const req = httpGet(f.base + job.downloadURL, { headers: { ...f.headers, Range: 'bytes=0-999999' } }, res => {
+        assert.equal(res.statusCode, 200); res.pause();
+        res.on('data', b => received += b.length); res.on('end', () => { completed = true; }); res.on('error', () => {}); res.on('close', resolve);
+        resume = (() => { const drain = resume; return () => { drain(); res.resume(); }; })();
+      }); req.on('error', reject);
+    });
+    await started; await new Promise(r => setTimeout(r, 20));
+    assert.equal(writes, 1, 'resposta retida após primeiro chunk');
+    f.s.archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, message: { conversation: 'restrita' } }] });
+    if (polling) assert.equal((await ready(f, initial.jobId)).state, 'failed');
+    resume(); await finished;
+    assert.equal(writes, 1, 'nenhum write posterior à restrição'); assert.equal(completed, false); assert.ok(received < bytes.length);
+    assert.equal((await ready(f, initial.jobId)).state, 'failed');
+    assert.equal(f.s.archive.getCoverage().uniqueMessages, 163);
+    const attachment = f.s.archiveDb.prepare('SELECT id FROM attachments WHERE reference=?').get(f.s.archive.readStoredMessage(key)!.reference) as { id: string };
+    assert.deepEqual(readFileSync(join(f.dir, 'media', attachment.id + '.bin')), bytes);
+  }
+});
+test('ZIP já aberto conserva guarda, descarta buffer e fecha fd uma vez', async t => {
+  for (const invalidation of ['restricted', 'polling', 'session', 'expiry', 'close']) {
+    const dir = mkdtempSync(join(tmpdir(), 'zap-export-open-')), archive = openArchive(dir);
+    const manager = createExportManager({ archive, dataDir: dir, mediaDir: join(dir, 'media') });
+    let closed = false;
+    t.after(async () => { if (!closed) await manager.close(); archive.close(); rmSync(dir, { recursive: true }); });
+    const key = { remoteJid: 'open@lid', id: 'm', fromMe: false };
+    archive.ingestHistory({ messages: [{ key, messageTimestamp: 123, message: { conversation: 'mensagem comum' } }] });
+    const id = archive.readStoredMessage(key)!.conversationId, job = manager.createExportJob('session', id, '', '');
+    for (let i = 0; i < 200 && manager.getExportJob(job.jobId, 'session').state === 'preparing'; i++) await new Promise(r => setTimeout(r, 5));
+    const opened = manager.openExport(job.jobId, 'session'), errors: Error[] = [];
+    assert.equal('fd' in opened, false, 'API não delega fd cru sem guarda');
+    opened.stream.on('error', e => errors.push(e));
+    const ended = new Promise<void>(r => opened.stream.once('close', r));
+    opened.stream.read(0); assert.ok(opened.stream.readableLength > 0, 'chunk já retido no stream');
+    if (invalidation === 'restricted' || invalidation === 'polling') {
+      archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, message: { conversation: 'restrita' } }] });
+      if (invalidation === 'polling') assert.equal(manager.getExportJob(job.jobId, 'session').state, 'failed');
+    } else if (invalidation === 'session') manager.dropSession('session');
+    else if (invalidation === 'expiry') { const db = new Database(join(dir, 'exports', 'jobs.sqlite')); db.prepare('UPDATE jobs SET expires=0').run(); db.close(); manager.purge(); }
+    else { await manager.close(); closed = true; }
+    await ended; assert.ok(errors.length); assert.equal(opened.stream.read(), null);
+    const probe = openSync(join(dir, 'archive.sqlite'), 'r');
+    try { opened.stream.destroy(); await new Promise(r => setImmediate(r)); assert.ok(fstatSync(probe).isFile(), 'destroy repetido não fecha fd reutilizado'); } finally { closeSync(probe); }
+    assert.equal(archive.getCoverage().uniqueMessages, 1);
+  }
 });
 test('expiração elimina DTOs privados derivados e mantém tombstone seguro', async t => {
   const f = await fixture(t), r = await f.post(), j = await r.json(); assert.equal((await ready(f, j.jobId)).state, 'ready');
