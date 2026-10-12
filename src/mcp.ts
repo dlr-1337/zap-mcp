@@ -18,6 +18,15 @@ const queryLimits = { pageItems: 50, snapshotItems: 50000, snapshotBytes: 64 * 1
 const queryResult = (data: Record<string, unknown>) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data });
 export const MCP_INLINE_LIMIT = 256 * 1024;
 export const MCP_QUERY_RESPONSE_LIMIT = 32 * 1024;
+function queryCoverage(archive: Archive) {
+  const { batches: source, ...coverage } = archive.getCoverage();
+  const batches = source as Record<string, unknown>[];
+  const total = (field: string) => batches.reduce((sum, batch) => sum + Number(batch[field]), 0);
+  const completed = batches.filter(batch => batch.completedAt !== null).length;
+  return { ...coverage, batchSummary: { count: batches.length, received: total('received'), confirmed: total('confirmed'), failed: total('failed'), pending: total('pending'),
+    completed, inProgress: batches.length - completed, stalled: batches.filter(batch => batch.stalled).length },
+    batchDetails: 'Cobertura resumida dos lotes observados; detalhes de cada lote no status autenticado do site (/api/status). Não comprova histórico integral.' };
+}
 const value = (db: Database.Database, key: string) => (db.prepare('SELECT value FROM web_config WHERE key=?').get(key) as { value: string } | undefined)?.value;
 const digest = (token: string) => createHash('sha256').update(token).digest();
 export function createMcpAccess(authDb: Database.Database) {
@@ -118,7 +127,7 @@ export function createMcpAdapter({ archive, authDb, mediaDir }: { archive: Archi
       return { reference: item.reference ?? item.conversationId, originalTimestamp: original, utc, offset, zone: 'America/Sao_Paulo' };
     });
     const boundedPage = (operation: 'find_conversations' | 'search_messages', key: 'conversations' | 'messages', items: Record<string, unknown>[], filters: unknown, snapshotId: string, ordinal: number, expiresAt: number, more: boolean) => {
-      const metadata = { effectiveFilters: filters, snapshotId, expiresAt: new Date(expiresAt).toISOString(), snapshotStable: true, coverage: archive.getCoverage(), limits: { ...queryLimits, responseBytes: MCP_QUERY_RESPONSE_LIMIT, responseBudgetPolicy: 'Orçamento do servidor; não é o teto do cliente Codex' } };
+      const metadata = { effectiveFilters: filters, snapshotId, expiresAt: new Date(expiresAt).toISOString(), snapshotStable: true, coverage: queryCoverage(archive), limits: { ...queryLimits, responseBytes: MCP_QUERY_RESPONSE_LIMIT, responseBudgetPolicy: 'Orçamento do servidor; não é o teto do cliente Codex' } };
       const cursor = (position: number) => encodeCursor(operation, filters, snapshotId, position, expiresAt);
       const size = (result: unknown) => Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id: req.body?.id ?? null, result })) + Buffer.byteLength('event: message\ndata: \n\n');
       const make = (count: number) => queryResult({ ...metadata, [key]: items.slice(0, count), timestamps: timestamps(items.slice(0, count)), ...(operation === 'search_messages' ? { searchCursor: cursor(ordinal) } : {}), nextCursor: count < items.length || more ? cursor(ordinal + count) : null, absence: !items.length && !more ? 'Não encontrado no acervo observado' : null });
@@ -188,7 +197,7 @@ export function createMcpAdapter({ archive, authDb, mediaDir }: { archive: Archi
         const make = (count: number) => {
           const offset = continuation ? direction === 'before' ? messages.length - count : 0 : Math.min(Math.max(0, anchorOrdinal - start - Math.floor(count / 2)), messages.length - count);
           const selected = messages.slice(offset, offset + count), ordinal = start + offset, endOrdinal = ordinal + count;
-          return queryResult({ ...metadata, anchor, anchorOrdinal, messages: selected, before: selected.filter((_m: unknown, i: number) => ordinal + i < anchorOrdinal), after: selected.filter((_m: unknown, i: number) => ordinal + i > anchorOrdinal), ordinal, endOrdinal, direction: direction ?? null, zone: 'America/Sao_Paulo', timestamps: timestamps([anchor, ...selected]), effectiveFilters: { reference, sourceSnapshotId: sourceSnapshotId ?? null }, snapshotStable: true, coverage: archive.getCoverage(), limits: { ...queryLimits, responseBytes: MCP_QUERY_RESPONSE_LIMIT, responseBudgetPolicy: 'Orçamento do servidor; não é o teto do cliente Codex' }, previousCursor: ordinal > 0 ? sign('before', ordinal) : null, nextCursor: nextOrdinal !== null || endOrdinal < start + messages.length ? sign('after', endOrdinal) : null });
+          return queryResult({ ...metadata, anchor, anchorOrdinal, messages: selected, before: selected.filter((_m: unknown, i: number) => ordinal + i < anchorOrdinal), after: selected.filter((_m: unknown, i: number) => ordinal + i > anchorOrdinal), ordinal, endOrdinal, direction: direction ?? null, zone: 'America/Sao_Paulo', timestamps: timestamps([anchor, ...selected]), effectiveFilters: { reference, sourceSnapshotId: sourceSnapshotId ?? null }, snapshotStable: true, coverage: queryCoverage(archive), limits: { ...queryLimits, responseBytes: MCP_QUERY_RESPONSE_LIMIT, responseBudgetPolicy: 'Orçamento do servidor; não é o teto do cliente Codex' }, previousCursor: ordinal > 0 ? sign('before', ordinal) : null, nextCursor: nextOrdinal !== null || endOrdinal < start + messages.length ? sign('after', endOrdinal) : null });
         };
         const requiredBytes = size(make(messages.length ? 1 : 0));
         for (let count = messages.length; count >= (messages.length ? 1 : 0); count--) {
