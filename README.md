@@ -4,7 +4,11 @@ Arquivo privado de WhatsApp com uma conta, um proprietário e um coletor, por di
 
 ## Status
 
-A implementação técnica da fase1 está testada localmente; o piloto privado já vinculou a conta por QR e confirmou conexão e ingestão reais. O lote inicial observado contém 8.924 itens confirmados e 8.679 mensagens distintas, sem falhas de persistência após recuperar seis edições de grupo do diário recebido. Referências e IDs dos anexos anteriores foram preservados. Quatro originais reais do grupo conhecido — áudio, imagem, vídeo e documento — estão persistidos e conferidos por tamanho/hash de origem, download privado, restauração offline e novo acesso após reinício. O mesmo coletor reconectou sem novo QR. A fila mantém os demais originais pendentes ou indisponíveis com estado explícito; quatro amostras não comprovam toda a mídia. A comparação humana com o celular continua pendente; lote confirmado não garante histórico integral. A fase1 permanece aberta. VPS/domínio ainda não foram identificados. Busca, abas e exportação pertencem à fase2; MCP no Codex à fase3; operação e backup externo recorrente à fase4.
+As fases 1 e 2 locais estão concluídas e verificadas. O site oferece busca por contato, texto e período, contexto paginado, conversas em abas, preview sob ação e exportação integral do recorte arquivado em ZIP. A suíte integrada passou 144/144 testes; a verificação independente da fase 2 passou 45/45 critérios e 8/8 requisitos, sem gaps, após corrigir a perda de posição ao alcançar abas e concluir a UAT autônoma.
+
+O aceite real conferiu 1.028 mensagens, 190 originais e 112 faltantes no recorte escolhido, preservando versões e citações; ambos ZIPs tiveram todas as 192 entradas e os hashes conferidos. A atualização local preservou senha, identidade e IDs, após snapshot/restore de 8.792 mensagens e 856 originais. Essas contagens são das cópias verificadas, sem garantia de histórico integral. [Evidências da fase 2](.planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-VERIFICATION.md).
+
+MCP no Codex pertence à fase 3; VPS, transporte protegido e backup externo recorrente à fase 4. A conexão autenticada atual do WhatsApp após o último reinício, zoom nativo e dispositivos físicos não foram revalidados. A leitura do material arquivado funciona offline.
 
 ## Escopo da primeira versão
 
@@ -22,6 +26,14 @@ Uma conta e um proprietário. O site e o MCP consultam o arquivo persistido; nã
 4. Operação, backup e restauração na VPS.
 
 Veja o [contexto do projeto](.planning/PROJECT.md), os [requisitos](.planning/REQUIREMENTS.md), o [roadmap completo](.planning/ROADMAP.md) e a [pesquisa técnica](.planning/research/SUMMARY.md).
+
+## Busca, abas e exportação
+
+Depois de entrar, escolha um contato ou grupo pelos candidatos apresentados e combine termo e período. Datas dos filtros usam America/Sao_Paulo; mensagens sem instante original conhecido ficam explícitas e não recebem uma data inventada. Um resultado abre sua mensagem no contexto; abas conservam posições de leitura independentes.
+
+Imagem, áudio e vídeo suportados abrem sob ação. Arquivos disponíveis continuam com download privado quando o navegador não suporta o formato. “Exportar conversa” permite gerar um ZIP de toda a conversa arquivada ou do período escolhido, incluindo mensagens além da página visível. O pacote inclui mensagens.txt, manifest.json e os originais disponíveis; anexos faltantes e versões capturadas são relacionados no manifesto. Falha não produz um pacote rotulado como pronto.
+
+O recorte fica congelado, mas uma restrição de privacidade recebida depois bloqueia conteúdo e bytes futuros, inclusive em downloads já abertos. Bytes que já foram entregues não podem ser recolhidos. Não há envio, edição, exclusão ou confirmação de leitura no WhatsApp.
 
 ## Piloto local verificado
 
@@ -42,7 +54,6 @@ Node24.21.0 é obrigatório, inclusive para o módulo SQLite. Com mise instalado
 ```sh
 mise exec node@24.21.0 -- npm ci
 mise exec node@24.21.0 -- npm run build
-mise exec node@24.21.0 -- npm test
 export ZAP_DATA_DIR=/caminho/privado/zap
 export ZAP_PORT=3000
 mise exec node@24.21.0 -- node dist/src/main.js profile-init
@@ -52,13 +63,17 @@ unset ZAP_OWNER_PASSWORD
 mise exec node@24.21.0 -- node dist/src/main.js serve
 ```
 
+Os testes de interface exigem Playwright1.62.1 e seu Chromium151.0.7922.34. O CI instala esse ambiente de teste em diretório temporário externo, define `ZAP_BROWSER_MODULE` e `ZAP_BROWSER_EXECUTABLE` e executa `npm test`, sem conta ou sessão WhatsApp. Esses componentes são exclusivos dos testes; o coletor funciona sem navegador. A instalação no CI segue a [documentação oficial do Playwright](https://playwright.dev/docs/ci).
+
+Para testar localmente com uma instalação existente, aponte `ZAP_BROWSER_MODULE` para o `package.json` do diretório `node_modules` que contém Playwright e `ZAP_BROWSER_EXECUTABLE` para o executável desse Chromium. Então execute `mise exec node@24.21.0 -- npm test`. No Codex, o harness já possui um caminho padrão para o Playwright do bundle; o executável pode ser indicado explicitamente.
+
 Escolha diretório privado fora do checkout; o caminho acima é fictício. `.env.example` documenta variáveis, mas `.env` não é carregado automaticamente. Senha passa por stdin, nunca por argumento/histórico. `owner-set` revoga sessões anteriores e exige serviço parado. `profile-init` cria somente credenciais locais offline; não substitui perfil corrompido e não conecta conta.
 
-Abra http://127.0.0.1:3000, entre e consulte o acervo local. `serve` inicia com coletor desligado. Transporte aceita apenas loopback; não expor porta diretamente nem configurar proxy antes da preparação da fase4. Nenhuma superfície oferece envio, edição, exclusão ou confirmação de leitura no WhatsApp.
+Abra http://127.0.0.1:3000, entre e consulte o acervo local. `serve` inicia com coletor desligado. Transporte aceita apenas loopback; não expor porta diretamente nem configurar proxy antes da preparação da fase 4. Nenhuma superfície oferece envio, edição, exclusão ou confirmação de leitura no WhatsApp.
 
 ## Cópia e recuperação antes do piloto
 
-Pare o serviço com Ctrl+C ou `kill -TERM PID_DO_SERVICO` e aguarde o processo encerrar. O encerramento suspende o coletor, cancela/drena streams e fecha bancos antes de liberar a trava. Backup recusa serviço ativo; nunca remova uma trava à força. Escolha destino novo, fora do perfil fonte e do checkout, com espaço para a cópia mais reserva de max(256MiB,5% do volume).
+Pare o serviço com Ctrl+C ou `kill -TERM PID_DO_SERVICO` e aguarde o processo encerrar. O encerramento suspende o coletor, cancela/drena streams e fecha bancos antes de liberar a trava. Backup recusa serviço ativo; nunca remova uma trava à força. Escolha destino novo, fora do perfil fonte e do checkout, com espaço para a cópia mais reserva de max(256MiB, 5% do volume).
 
 ```sh
 mise exec node@24.21.0 -- node dist/src/main.js backup /caminho/privado/copia-001

@@ -7,7 +7,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 ## Phases
 
 - [x] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício. (completed 2026-10-11)
-- [ ] **Phase 2: Busca, contexto, abas e exportação no site** - Encontrar evidências, comparar conversas e exportar o recorte completo com seus arquivos.
+- [x] **Phase 2: Busca, contexto, abas e exportação no site** - Encontrar evidências, comparar conversas e exportar o recorte completo com seus arquivos. (completed 2026-10-11)
 - [ ] **Phase 3: Consulta e arquivos reais no Codex** - Usar o MCP privado no Codex instalado e comprovar recebimento ou download dos binários.
 - [ ] **Phase 4: Operação e restauração na VPS** - Manter o serviço supervisionado, backup privado fora da VPS e o fluxo real verificável após restauração.
 
@@ -42,7 +42,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ### Phase 2: Busca, contexto, abas e exportação no site
 
-**Goal:** O proprietário encontra mensagens e anexos no site com contexto verificável, compara conversas em abas e exporta todo o recorte escolhido.
+**Goal:** As a proprietário do acervo privado, I want to encontrar mensagens e anexos com contexto verificável, comparar conversas em abas e exportar todo o recorte escolhido, so that eu possa recuperar e conferir minhas conversas e arquivos arquivados.
 **Mode:** mvp
 **Depends on**: Phase 1
 **Requirements**: EVID-02, WEB-02, WEB-03, WEB-04, WEB-05, EXP-01, EXP-02, EXP-03
@@ -55,6 +55,13 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 5. Ao escolher conversa e período, o proprietário recebe um ZIP com todas as mensagens arquivadas do recorte, além da página visível, mensagens legíveis, manifesto estruturado e arquivos ligados à origem, inclusive faltantes listados e nomes iguais sem sobrescrita. Interrupção/falha é explícita e não gera pacote rotulado como concluído; nomes/caminhos recebidos não permitem incluir arquivos arbitrários da VPS nem segredos.
 
 **Plans**: 0 (não planejados)
+- [x] 02-06-PLAN.md
+- [x] 02-01-PLAN.md
+- [x] 02-02-PLAN.md
+- [x] 02-03-PLAN.md
+- [x] 02-04-PLAN.md
+- [x] 02-05-PLAN.md
+
 **UI hint**: yes
 
 **Verificação da entrega:** Localizar o João correto e seu orçamento, abrir o contexto, comparar duas conversas e conferir o ZIP offline. Revalidar PRIV-02/PRIV-03 nas rotas de busca, preview, download e exportação, inclusive acessos diretos sem sessão; os mesmos IDs, instantes originais e estados de mídia do arquivo continuam canônicos.
@@ -110,7 +117,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
-| 2. Busca, contexto, abas e exportação no site | 0/0 | Not started | - |
+| 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
 | 3. Consulta e arquivos reais no Codex | 0/0 | Not started | - |
 | 4. Operação e restauração na VPS | 0/0 | Not started | - |
 

@@ -4,9 +4,31 @@ import { join, resolve } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { serialize, deserialize } from 'node:v8';
 import { isDeepStrictEqual } from 'node:util';
+import { Temporal } from '@js-temporal/polyfill';
 
 type Obj = Record<string, unknown>;
+export type EffectivePeriod = { zone: 'America/Sao_Paulo'; from: string | null; to: string | null; startMs: number | null; endMs: number | null; startUtc: string | null; endUtc: string | null; dateUnknownPolicy: string };
+export function parsePeriod(from?: unknown, to?: unknown): EffectivePeriod {
+  try {
+    const day = (value: unknown) => {
+      if (value == null || value === '') return null;
+      if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000-')) throw Error('date');
+      return Temporal.PlainDate.from(value, { overflow: 'reject' });
+    };
+    const start = day(from), end = day(to), zone = 'America/Sao_Paulo';
+    if (start && end && Temporal.PlainDate.compare(start, end) > 0) throw Error('range');
+    const startMs = start?.toZonedDateTime(zone).startOfDay().epochMilliseconds ?? null;
+    const endMs = end?.add({ days: 1 }).toZonedDateTime(zone).startOfDay().epochMilliseconds ?? null;
+    return { zone, from: start?.toString() ?? null, to: end?.toString() ?? null, startMs, endMs, startUtc: startMs === null ? null : new Date(startMs).toISOString(), endUtc: endMs === null ? null : new Date(endMs).toISOString(), dateUnknownPolicy: start || end ? 'Instantes originais desconhecidos são excluídos do período.' : 'Sem período, instantes desconhecidos aparecem por último.' };
+  } catch { throw Object.assign(Error('Confira as datas. A data inicial deve ser igual ou anterior à final.'), { status: 400 }); }
+}
 export type Attachment = { id: string; reference: string; type: string; name: string | null; mimeType: string | null; state: string; reason: string | null; attempts: number; size: number | null; sha256: string | null; sourceHashVerified: boolean };
+export function searchTerms(input: unknown = '') {
+  if (typeof input !== 'string' || [...input].length > 2000) throw Object.assign(Error('Use até 2000 caracteres e 25 termos simples.'), { status: 400 });
+  const terms = input.normalize('NFC').match(/[\p{L}\p{N}\p{M}]+/gu) ?? [];
+  if (terms.length > 25 || input.trim() && !terms.length) throw Object.assign(Error('Use até 2000 caracteres e 25 termos simples.'), { status: 400 });
+  return terms.map(t => t.toLocaleLowerCase('pt-BR'));
+}
 const obj = (value: unknown): Obj => value && typeof value === 'object' && !Array.isArray(value) ? value as Obj : {};
 const str = (value: unknown) => typeof value === 'string' && value.length ? value : null;
 const bool = (value: unknown) => typeof value === 'boolean' ? value : null;
@@ -85,6 +107,8 @@ function originalBody(payload: Buffer) {
 }
 
 export function openArchive(dataDir: string) {
+  const changeListeners = new Set<() => void>();
+  const changed = () => { for (const listener of changeListeners) listener(); };
   const location = resolve(dataDir);
   mkdirSync(location, { recursive: true, mode: 0o700 });
   if (realpathSync(location) !== location || lstatSync(location).isSymbolicLink()) throw Error('Diretório privado inválido');
@@ -92,6 +116,8 @@ export function openArchive(dataDir: string) {
   if (existsSync(path) && (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink())) throw Error('Arquivo privado inválido');
   chmodSync(location, 0o700);
   const db = new Database(path);
+  db.function('unicode_lower', { deterministic: true }, value => typeof value === 'string' ? value.normalize('NFC').toLocaleLowerCase('pt-BR') : '');
+  db.function('original_ms', { deterministic: true }, value => { const ms = typeof value === 'string' ? Date.parse(value) : NaN; return Number.isSafeInteger(ms) ? ms : null; });
   chmodSync(path, 0o600);
   // Rebuild the attachment table inside the migration; validate all references before committing.
   db.pragma('foreign_keys = OFF'); db.pragma('secure_delete = ON');
@@ -173,6 +199,7 @@ export function openArchive(dataDir: string) {
     const current = uncertain ? undefined : latest ?? candidates[0];
     const evidence = current ? JSON.parse(current.evidence) as Obj : { type: 'unknown', text: null };
     db.prepare('UPDATE messages SET text=?,restricted=?,order_uncertain=?,revoked=?,evidence=? WHERE reference=?').run(blocked || revoked || uncertain ? null : evidence.text ?? null, Number(blocked), Number(uncertain), Number(revoked), JSON.stringify({ ...evidence, restricted: blocked }), reference);
+    indexMessage(reference);
   }
   function mergeMessages(keep: string, drop: string) {
     const a = db.prepare('SELECT * FROM messages WHERE reference=?').get(keep) as MessageRow, b = db.prepare('SELECT * FROM messages WHERE reference=?').get(drop) as MessageRow;
@@ -202,6 +229,7 @@ export function openArchive(dataDir: string) {
     db.prepare('UPDATE message_redirects SET target_reference=? WHERE target_reference=?').run(keep, drop);
     db.prepare('INSERT OR REPLACE INTO message_redirects VALUES(?,?)').run(drop, keep);
     db.prepare('DELETE FROM messages WHERE reference=?').run(drop);
+    db.prepare('DELETE FROM search_fts WHERE reference=?').run(drop);
     project(a.reference);
   }
   function reconcile() {
@@ -309,6 +337,7 @@ export function openArchive(dataDir: string) {
       });
     })();
     processBatch(id, kind);
+    changed();
     return id;
   }
   function processBatch(id: string, kind: string) {
@@ -329,17 +358,25 @@ export function openArchive(dataDir: string) {
     db.prepare('UPDATE batches SET completed_at=? WHERE id=?').run(now(), id);
   }
   function resolveConversation(id: string) { return (db.prepare('SELECT target_id FROM conversation_redirects WHERE old_id=?').get(id) as { target_id: string } | undefined)?.target_id ?? id; }
+  function isRestricted(reference: string): boolean {
+    const resolved = (db.prepare('SELECT target_reference FROM message_redirects WHERE old_reference=?').get(reference) as { target_reference: string } | undefined)?.target_reference ?? reference;
+    return Boolean((db.prepare('SELECT restricted FROM messages WHERE reference=?').get(resolved) as { restricted: number } | undefined)?.restricted);
+  }
+  // A privacy restriction overrides frozen content, while order and ordinary history stay frozen.
+  function permittedMessage<T extends { reference: string; revisions: { text: string | null }[] }>(message: T): T {
+    return isRestricted(message.reference) ? { ...message, type: 'viewOnce', restricted: true, text: null, quote: null, attachments: [], matchingRevisions: [], revisions: message.revisions.map(r => ({ ...r, text: null, quote: null, restricted: true })) } : message;
+  }
   function dto(reference: string) {
     const redirected = (db.prepare('SELECT target_reference FROM message_redirects WHERE old_reference=?').get(reference) as { target_reference: string } | undefined)?.target_reference ?? reference;
     const row = db.prepare('SELECT * FROM messages WHERE reference=?').get(redirected) as MessageRow | undefined;
     if (!row) return null;
     const evidence = row.evidence ? JSON.parse(row.evidence) as Obj : { type: 'unknown', text: row.text };
     const origins = (db.prepare('SELECT key_json FROM origins WHERE reference=? ORDER BY rowid').all(redirected) as { key_json: string }[]).map(o => JSON.parse(o.key_json) as Key);
-    const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => ({ kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at, ...JSON.parse(r.evidence) as Obj }));
+    const revisions = (db.prepare('SELECT * FROM revisions WHERE reference=? ORDER BY id').all(redirected) as Revision[]).map(r => { const e = JSON.parse(r.evidence) as Obj; return { ...e, text: str(e.text), revisionId: r.id, fingerprint: revisionFingerprint(r), kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at }; });
     const identities = new Set(origins.flatMap(k => [k.remoteJid, k.participant, k.remoteJidAlt, k.participantAlt]).filter(k => k !== null));
     const identityMappings = (db.prepare('SELECT jid,alternate FROM identity_evidence').all() as { jid: string; alternate: string }[]).filter(m => identities.has(m.jid) || identities.has(m.alternate));
-    const attachments = (db.prepare('SELECT id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string }[]).map(a => getAttachment(a.id));
-    return { ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments };
+    const attachments = (db.prepare('SELECT id,revision_id FROM attachments WHERE reference=? ORDER BY rowid').all(redirected) as { id: string; revision_id: number }[]).map(a => ({ ...getAttachment(a.id)!, revisionId: a.revision_id }));
+    return permittedMessage({ ...evidence, reference: row.reference, conversationId: row.conversation_id, text: row.text, originalTimestamp: row.original_timestamp, author: row.author, fromMe: row.from_me === null ? null : Boolean(row.from_me), key: origins[0] ?? null, origins, identityMappings, revisions, revoked: Boolean(row.revoked), restricted: Boolean(row.restricted), orderUncertain: Boolean(row.order_uncertain), attachments });
   }
   function locate(input: unknown) {
     if (typeof input === 'string') return input;
@@ -356,7 +393,123 @@ export function openArchive(dataDir: string) {
       return { ...span, interval: { oldest: span.oldestTimestamp, newest: span.newestTimestamp }, lastIngestion: last.value, batches: safeBatches, historyStatuses: statuses.map(s => ({ ...s, explicit: Boolean(s.explicit) })), completeAccount: false, watchdogSeconds: 120 };
     })();
   }
-  try { for (const batch of db.prepare('SELECT id,kind FROM batches WHERE completed_at IS NULL ORDER BY rowid').all() as { id: string; kind: string }[]) processBatch(batch.id, batch.kind); }
+  function revisionFingerprint(r: Revision) { return createHash('sha256').update(JSON.stringify([r.kind, r.source_time, JSON.parse(r.evidence)])).digest('hex'); }
+  function indexMessage(reference: string) {
+    db.prepare('DELETE FROM search_fts WHERE reference=?').run(reference);
+    const m = db.prepare('SELECT * FROM messages WHERE reference=?').get(reference) as MessageRow | undefined;
+    if (!m || m.restricted) return;
+    const revisions = db.prepare("SELECT * FROM revisions WHERE reference=? AND restricted=0 AND kind IN ('original','edit') ORDER BY id").all(reference) as Revision[];
+    const insert = db.prepare('INSERT INTO search_fts(reference,revision_id,content) VALUES(?,?,?)');
+    for (const r of revisions) {
+      const e = JSON.parse(r.evidence) as Obj;
+      const names = db.prepare('SELECT name FROM attachments WHERE revision_id=? ORDER BY rowid').all(r.id) as { name: string | null }[];
+      insert.run(reference, r.id, [str(e.text), ...names.map(a => a.name)].filter(v => v !== null).join('\n').normalize('NFC'));
+    }
+    if (!revisions.length && m.text) insert.run(reference, 0, m.text.normalize('NFC'));
+  }
+  function conversationEvidence(id: string) {
+    const c = db.prepare('SELECT id,name,source_id FROM conversations WHERE id=?').get(id) as { id: string; name: string | null; source_id: string | null } | undefined;
+    if (!c) return null;
+    const identity = c.source_id && /@(g\.us|s\.whatsapp\.net|lid)$/.test(c.source_id) ? c.source_id : null;
+    return { id: c.id, name: c.name, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity ? 'individual' : null };
+  }
+  function searchMessages({ terms, conversationId, session, filters, limit = 50, snapshotId, ordinal = 0 }: { terms: string[]; conversationId: string | null; session: string; filters: Obj; limit?: number; snapshotId?: string; ordinal?: number }) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(ordinal) || ordinal < 0) throw Object.assign(Error('Consulta inválida'), { status: 400 });
+    return db.transaction(() => {
+      db.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+      let snapshot: { id: string; filters: string; expires_at: number; count: number } | undefined;
+      if (snapshotId) {
+        snapshot = db.prepare('SELECT id,filters,expires_at,count FROM query_snapshots WHERE id=? AND session=?').get(snapshotId, session) as typeof snapshot;
+        if (!snapshot) throw Object.assign(Error('Este recorte expirou. Atualize a busca para criar um novo recorte.'), { status: 410 });
+        if (snapshot.filters !== JSON.stringify(filters) || ordinal > snapshot.count) throw Object.assign(Error('Continuação inválida'), { status: 400 });
+      } else {
+        if ((db.prepare('SELECT count(*) AS n FROM query_snapshots WHERE session=?').get(session) as { n: number }).n >= 20) throw Object.assign(Error('Limite de 20 recortes ativos. Aguarde a expiração para atualizar.'), { status: 429 });
+        const id = conversationId ? resolveConversation(conversationId) : null;
+        if (id && !conversationEvidence(id)) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
+        const match = terms.map(t => '"' + t.replaceAll('"', '""') + '"').join(' AND ');
+        const startMs = filters.startMs ?? null, endMs = filters.endMs ?? null;
+        const rows = (terms.length ? db.prepare("SELECT m.reference,m.original_timestamp,group_concat(search_fts.revision_id) AS matched FROM messages m JOIN search_fts ON search_fts.reference=m.reference WHERE search_fts MATCH ? AND (? IS NULL OR m.conversation_id=?) AND (? IS NULL OR original_ms(m.original_timestamp)>=?) AND (? IS NULL OR original_ms(m.original_timestamp)<?) GROUP BY m.reference ORDER BY original_ms(m.original_timestamp) IS NULL,original_ms(m.original_timestamp) DESC,m.reference COLLATE BINARY DESC LIMIT 50001").all(match, id, id, startMs, startMs, endMs, endMs) : db.prepare('SELECT reference,original_timestamp,NULL AS matched FROM messages WHERE (? IS NULL OR conversation_id=?) AND (? IS NULL OR original_ms(original_timestamp)>=?) AND (? IS NULL OR original_ms(original_timestamp)<?) ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp) DESC,reference COLLATE BINARY DESC LIMIT 50001').all(id, id, startMs, startMs, endMs, endMs)) as { reference: string; original_timestamp: string | null; matched: string | null }[];
+        if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja os filtros.'), { status: 413 });
+        const items: string[] = []; let bytes = 0;
+        for (const row of rows) {
+          const message = dto(row.reference)!;
+          const matched = new Set(row.matched?.split(',').map(Number) ?? []);
+          const edits = message.revisions.filter(r => r.kind === 'edit');
+          const current = (edits.length ? edits : message.revisions.filter(r => r.kind === 'original')).filter(r => r.sourceTimestamp !== null).sort((a, b) => Date.parse(b.sourceTimestamp!) - Date.parse(a.sourceTimestamp!))[0];
+          const matchingRevisions = message.restricted ? [] : message.revisions.filter(r => matched.has(r.revisionId)).map(r => ({ ...r, historical: message.revoked || message.orderUncertain || (current ? r.revisionId !== current.revisionId : r.text !== message.text) }));
+          const json = JSON.stringify({ ...message, conversation: conversationEvidence(message.conversationId), matchingRevisions });
+          bytes += Buffer.byteLength(json); if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja os filtros.'), { status: 413 });
+          items.push(json);
+        }
+        snapshot = { id: randomUUID(), filters: JSON.stringify(filters), expires_at: Date.now() + 30 * 60_000, count: items.length };
+        db.prepare('INSERT INTO query_snapshots(id,session,filters,expires_at,count) VALUES(?,?,?,?,?)').run(snapshot.id, session, snapshot.filters, snapshot.expires_at, snapshot.count);
+        const insert = db.prepare('INSERT INTO query_items(snapshot_id,ordinal,dto) VALUES(?,?,?)'); items.forEach((json, i) => insert.run(snapshot!.id, i, json));
+      }
+      const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? ORDER BY ordinal LIMIT ?').all(snapshot.id, ordinal, limit) as { dto: string }[]).map(r => permittedMessage(JSON.parse(r.dto)));
+      return { messages, effectiveFilters: JSON.parse(snapshot.filters), snapshotId: snapshot.id, expiresAt: new Date(snapshot.expires_at).toISOString(), nextOrdinal: ordinal + messages.length < snapshot.count ? ordinal + messages.length : null };
+    })();
+  }
+  function openContext(reference: string, session: string, sourceSnapshotId?: string) {
+    return db.transaction(() => {
+      db.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+      const anchor = dto(reference);
+      if (!anchor) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
+      let matchedEvidence: Obj[] = [];
+      if (sourceSnapshotId) {
+        const source = db.prepare('SELECT filters FROM query_snapshots WHERE id=? AND session=?').get(sourceSnapshotId, session) as { filters: string } | undefined;
+        if (!source) throw Object.assign(Error('Este recorte expirou. Atualize a busca para criar um novo recorte.'), { status: 410 });
+        if (JSON.parse(source.filters).kind) throw Object.assign(Error('Recorte de origem inválido'), { status: 400 });
+        const item = db.prepare("SELECT dto FROM query_items WHERE snapshot_id=? AND json_extract(dto,'$.reference')=?").get(sourceSnapshotId, reference) as { dto: string } | undefined;
+        if (!item) throw Object.assign(Error('Referência fora do recorte de origem'), { status: 400 });
+        matchedEvidence = anchor.restricted ? [] : (JSON.parse(item.dto).matchingRevisions as Obj[]).map(r => ({ ...r, historical: Boolean(r.historical) || !anchor.revisions.some(current => current.fingerprint === r.fingerprint && current.text === anchor.text) }));
+      }
+      if ((db.prepare('SELECT count(*) AS n FROM query_snapshots WHERE session=?').get(session) as { n: number }).n >= 20) throw Object.assign(Error('Limite de 20 recortes ativos. Aguarde a expiração para atualizar.'), { status: 429 });
+      const rows = db.prepare('SELECT reference FROM messages WHERE conversation_id=? ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp),reference COLLATE BINARY LIMIT 50001').all(anchor.conversationId) as { reference: string }[];
+      if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja os filtros.'), { status: 413 });
+      let bytes = 0;
+      const items = rows.map(r => { const json = JSON.stringify(dto(r.reference)); bytes += Buffer.byteLength(json); if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja os filtros.'), { status: 413 }); return json; });
+      const ordinal = rows.findIndex(r => r.reference === anchor.reference), snapshotId = randomUUID();
+      const metadata = { kind: 'context', conversation: conversationEvidence(anchor.conversationId), anchorReference: anchor.reference, requestedReference: reference, matchedEvidence, anchorOrdinal: ordinal };
+      db.prepare('INSERT INTO query_snapshots(id,session,filters,expires_at,count) VALUES(?,?,?,?,?)').run(snapshotId, session, JSON.stringify(metadata), Date.now() + 30 * 60_000, items.length);
+      const insert = db.prepare('INSERT INTO query_items(snapshot_id,ordinal,dto) VALUES(?,?,?)'); items.forEach((json, i) => insert.run(snapshotId, i, json));
+      return readContextPage({ reference, session, snapshotId, ordinal: Math.max(0, ordinal - 25), limit: Math.min(items.length - Math.max(0, ordinal - 25), ordinal + 26 - Math.max(0, ordinal - 25)) });
+    })();
+  }
+  function readContextPage({ reference, session, snapshotId, ordinal, limit = 50, direction = 'after' }: { reference: string; session: string; snapshotId: string; ordinal: number; limit?: number; direction?: 'before' | 'after' }) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(ordinal) || ordinal < 0 || !['before', 'after'].includes(direction)) throw Object.assign(Error('Continuação inválida'), { status: 400 });
+    const snapshot = db.prepare('SELECT filters,expires_at,count FROM query_snapshots WHERE id=? AND session=? AND expires_at>?').get(snapshotId, session, Date.now()) as { filters: string; expires_at: number; count: number } | undefined;
+    if (!snapshot) throw Object.assign(Error('Este recorte expirou. Atualize a conversa para criar um novo recorte.'), { status: 410 });
+    const metadata = JSON.parse(snapshot.filters);
+    if (metadata.kind !== 'context' || metadata.requestedReference !== reference || ordinal > snapshot.count) throw Object.assign(Error('Continuação inválida'), { status: 400 });
+    const start = direction === 'before' ? Math.max(0, ordinal - limit) : ordinal, end = direction === 'before' ? ordinal : Math.min(snapshot.count, ordinal + limit);
+    const messages = (db.prepare('SELECT dto FROM query_items WHERE snapshot_id=? AND ordinal>=? AND ordinal<? ORDER BY ordinal').all(snapshotId, start, end) as { dto: string }[]).map(r => permittedMessage(JSON.parse(r.dto)));
+    const { kind: _kind, anchorOrdinal: _anchorOrdinal, ...safe } = metadata;
+    return { ...safe, matchedEvidence: isRestricted(metadata.anchorReference) ? [] : metadata.matchedEvidence, messages, snapshotId, expiresAt: new Date(snapshot.expires_at).toISOString(), previousOrdinal: start > 0 ? start : null, nextOrdinal: end < snapshot.count ? end : null };
+  }
+  function freezeExportSelection(conversationId: string, period: EffectivePeriod) {
+    return db.transaction(() => {
+      const id = resolveConversation(conversationId), conversation = conversationEvidence(id);
+      if (!conversation) throw Object.assign(Error('Não encontrado no acervo'), { status: 404 });
+      const rows = db.prepare('SELECT reference FROM messages WHERE conversation_id=? AND (? IS NULL OR original_ms(original_timestamp)>=?) AND (? IS NULL OR original_ms(original_timestamp)<?) ORDER BY original_ms(original_timestamp) IS NULL,original_ms(original_timestamp),reference COLLATE BINARY LIMIT 50001').all(id, period.startMs, period.startMs, period.endMs, period.endMs) as { reference: string }[];
+      if (!rows.length) throw Object.assign(Error('Não encontrado no acervo para este período. Ajuste as datas.'), { status: 422 });
+      if (rows.length > 50000) throw Object.assign(Error('Recorte excede 50000 mensagens. Restrinja o período.'), { status: 413 });
+      let bytes = 0;
+      const messages = rows.map(row => {
+        const message = dto(row.reference)!;
+        bytes += Buffer.byteLength(JSON.stringify(message));
+        if (bytes > 64 * 1024 * 1024) throw Object.assign(Error('Recorte excede 64MiB. Restrinja o período.'), { status: 413 });
+        return message;
+      });
+      return { snapshotAt: now(), effectiveFilters: { conversationId: id, ...period }, conversation, coverage: getCoverage(), messages };
+    })();
+  }
+  try {
+    db.transaction(() => {
+      db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(reference UNINDEXED,revision_id UNINDEXED,content,tokenize='unicode61 remove_diacritics 2'); CREATE TABLE IF NOT EXISTS query_snapshots(id TEXT PRIMARY KEY,session TEXT NOT NULL,filters TEXT NOT NULL,expires_at INTEGER NOT NULL,count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS query_items(snapshot_id TEXT NOT NULL REFERENCES query_snapshots(id) ON DELETE CASCADE,ordinal INTEGER NOT NULL,dto TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal)); DELETE FROM query_snapshots; DELETE FROM search_fts;");
+      for (const row of db.prepare('SELECT reference FROM messages').all() as { reference: string }[]) indexMessage(row.reference);
+    })();
+    for (const batch of db.prepare('SELECT id,kind FROM batches WHERE completed_at IS NULL ORDER BY rowid').all() as { id: string; kind: string }[]) processBatch(batch.id, batch.kind);
+  }
   catch (error) { db.close(); throw error; }
   function getAttachment(id: string): Attachment | null {
     const row = db.prepare('SELECT a.id,a.reference,a.type,a.name,a.mime_type AS mimeType,a.state,a.reason,a.size,a.sha256,a.source_hash_verified AS verified,coalesce(j.attempts,0) AS attempts FROM attachments a LEFT JOIN media_jobs j ON j.attachment_id=a.id WHERE a.id=?').get(id) as (Omit<Attachment, 'sourceHashVerified'> & { verified: number }) | undefined;
@@ -365,6 +518,9 @@ export function openArchive(dataDir: string) {
   }
   return {
     db,
+    onChange(listener: () => void) { changeListeners.add(listener); return () => { changeListeners.delete(listener); }; },
+    searchMessages, openContext, readContextPage, freezeExportSelection, indexMessage, conversationEvidence, isRestricted, resolveConversation,
+    dropQueries(session: string) { db.prepare('DELETE FROM query_snapshots WHERE session=?').run(session); },
     ingestHistory(batch: { messages: readonly unknown[]; contacts?: readonly unknown[]; chats?: readonly unknown[]; lidPnMappings?: readonly unknown[]; [key: string]: unknown }) {
       db.transaction(() => { for (const m of batch.lidPnMappings ?? []) ingestIdentity(m); for (const c of batch.contacts ?? []) ingestIdentity(c); for (const c of batch.chats ?? []) ingestIdentity(c, true); })();
       return ingestBatch('history', batch.messages, batch);
@@ -375,8 +531,8 @@ export function openArchive(dataDir: string) {
       if (!Number.isSafeInteger(event.syncType) || !['complete', 'paused'].includes(event.status) || typeof event.explicit !== 'boolean') throw Error('Estado de lote inválido');
       db.prepare('INSERT OR IGNORE INTO history_statuses VALUES(?,?,?,?)').run(event.syncType, event.status, Number(event.explicit), now());
     },
-    ingestContacts: db.transaction((event: readonly unknown[] | Obj) => { for (const c of Array.isArray(event) ? event : [event]) ingestIdentity(c); }),
-    ingestGroups: db.transaction((event: readonly unknown[]) => { for (const c of event) ingestIdentity(c, true); }),
+    ingestContacts(event: readonly unknown[] | Obj) { db.transaction(() => { for (const c of Array.isArray(event) ? event : [event]) ingestIdentity(c); })(); changed(); },
+    ingestGroups(event: readonly unknown[]) { db.transaction(() => { for (const c of event) ingestIdentity(c, true); })(); changed(); },
     readStoredMessage(input: unknown) { const ref = locate(input); return ref ? dto(ref) : null; },
     readPrivateMessage(input: unknown) {
       const ref = locate(input), message = ref ? dto(ref) : null;
@@ -384,9 +540,9 @@ export function openArchive(dataDir: string) {
       const revision = db.prepare("SELECT payload FROM revisions WHERE reference=? AND kind IN ('original','edit') AND payload IS NOT NULL ORDER BY CASE kind WHEN 'edit' THEN 1 ELSE 0 END DESC,source_time DESC,id DESC LIMIT 1").get(message.reference) as { payload: Buffer } | undefined;
       return revision ? deserialize(revision.payload) as Obj : undefined;
     },
-    listConversations({ limit = 50, cursor = '' }: { limit?: number; cursor?: string } = {}) {
+    listConversations({ limit = 50, cursor = '', q = '' }: { limit?: number; cursor?: string; q?: string } = {}) {
       const size = Math.max(1, Math.min(50, limit));
-      const rows = db.prepare('SELECT c.id,c.name,(SELECT max(original_timestamp) FROM messages WHERE conversation_id=c.id) AS lastTimestamp FROM conversations c WHERE c.id>? ORDER BY c.id LIMIT ?').all(cursor, size + 1) as { id: string; name: string | null; lastTimestamp: string | null }[];
+      const rows = db.prepare("SELECT c.id,c.name,(SELECT max(original_timestamp) FROM messages WHERE conversation_id=c.id) AS lastTimestamp FROM conversations c WHERE c.id>? AND (instr(unicode_lower(c.name),unicode_lower(?))>0 OR instr(unicode_lower(c.source_id),unicode_lower(?))>0) ORDER BY c.id LIMIT ?").all(cursor, q, q, size + 1) as { id: string; name: string | null; lastTimestamp: string | null }[];
       return { conversations: rows.slice(0, size), nextCursor: rows.length > size ? rows[size - 1].id : null };
     },
     readConversation(id: string, { limit = 100, cursor }: { limit?: number; cursor?: { timestamp: string; reference: string } } = {}) {

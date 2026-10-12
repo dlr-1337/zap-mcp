@@ -36,6 +36,31 @@
     </section>
     <p id="archive-error" role="alert"></p>
     <button id="retry" hidden>Tentar carregar novamente</button>
+    <section id="search-panel" aria-labelledby="search-title">
+      <h2 id="search-title">Buscar mensagens</h2>
+      <form id="search-form" novalidate>
+        <div id="candidate-panel">
+          <label for="contact-query">Contato ou conversa</label>
+          <input id="contact-query" type="text" aria-describedby="contact-error contact-selection" dir="auto">
+          <div class="search-actions"><button id="locate-contact" type="button">Localizar conversa</button><button id="all-archive" type="button">Buscar em todo o acervo</button></div>
+          <p id="contact-error" role="alert"></p><p id="contact-selection">Todo o acervo</p><p id="candidate-status" role="status"></p>
+          <ul id="contact-candidates"></ul><button id="more-candidates" type="button" hidden>Localizar conversas seguintes</button>
+        </div>
+        <label for="search-terms">Termos</label>
+        <input id="search-terms" type="text" aria-describedby="search-help search-error" dir="auto">
+        <p id="search-help" class="meta">Busca em texto, legendas e nomes de arquivos recebidos. Termos simples combinados; sem OCR ou transcrição.</p>
+        <div class="search-dates"><div><label for="search-from">De</label><input id="search-from" type="date" aria-describedby="period-help search-error"></div><div><label for="search-to">Até</label><input id="search-to" type="date" aria-describedby="period-help search-error"></div></div>
+        <p id="period-help" class="meta">Dias inclusivos em America/Sao_Paulo. Deixe um limite vazio para manter esse lado aberto.</p>
+        <button id="search-submit" type="submit" class="primary">Buscar mensagens</button>
+      </form>
+      <p id="search-error" role="alert"></p>
+      <p id="search-status" role="status">Combine conversa, termos e período e selecione Buscar mensagens. Campos vazios buscam todo o acervo.</p>
+      <p id="search-scope" dir="auto">Todo o acervo</p>
+      <details id="search-utc" hidden><summary>Ver limites em UTC</summary><div id="search-limits"></div></details>
+      <div id="search-empty" hidden><h3>Não encontrado no acervo</h3><p>Nenhuma mensagem corresponde aos filtros. Ajuste a conversa, os termos ou o período e busque novamente.</p></div>
+      <ol id="search-results"></ol>
+      <div class="search-actions"><button id="more-results" hidden>Carregar resultados seguintes</button><button id="refresh-search" hidden>Atualizar busca</button></div>
+    </section>
     <main class="workspace">
       <nav id="conversation-panel" aria-label="Conversas arquivadas">
         <h2>Conversas arquivadas</h2>
@@ -45,13 +70,18 @@
         <button id="more-conversations" hidden>Carregar conversas seguintes</button>
       </nav>
       <section id="reader" aria-labelledby="message-title">
-        <a id="back" href="/" hidden>Voltar às conversas</a>
+        <a id="back" href="/" hidden>Voltar à busca e às conversas</a>
         <h2 id="message-title" tabindex="-1">Mensagens arquivadas</h2>
         <p class="meta">Datas em America/Sao_Paulo</p>
+        <p class="meta">Anexos disponíveis carregam sob ação. Use os controles do navegador; Baixar original mantém os bytes preservados.</p>
+        <p id="export-help" class="meta">Exportação inclui toda a conversa arquivada no período, além da página carregada. Datas próprias, inclusivas em America/Sao_Paulo; limites vazios ficam abertos. Conteúdo e faltantes são congelados ao iniciar.</p>
+        <div id="conversation-tabs" role="tablist" aria-label="Conversas abertas"></div>
+        <div id="conversation-panels"></div>
         <button id="refresh-conversation" hidden>Há novas mensagens arquivadas. Atualizar conversa</button>
-        <p id="reader-status" role="status">Abra uma conversa da lista para ler as mensagens arquivadas.</p>
+        <p id="reader-status" role="status">Abra uma conversa ou um resultado para ler o contexto.</p>
         <ol id="messages"></ol>
         <button id="more-messages" hidden>Carregar mensagens anteriores</button>
+        <button id="more-after" hidden>Carregar mensagens posteriores</button>
       </section>
     </main>
   </div>

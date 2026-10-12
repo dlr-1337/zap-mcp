@@ -1,45 +1,46 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 2
-current_phase_name: Busca, contexto, abas e exportação no site
-status: "Phase 1 shipped — PR #1; Phase 2 ready to plan"
-stopped_at: Phase 1 complete, ready to plan Phase 2
-last_updated: "2026-10-11T19:20:57.146Z"
-last_activity: 2026-10-11
-last_activity_desc: "Phase 1 shipped — PR #1"
-state_head: 6af18f73f4e299d97d014fd2269c8ad017fd3264
+current_phase: 3
+current_phase_name: Consulta e arquivos reais no Codex
+current_plan: Not started
+status: "Phase 02 shipped — PR #2; ready to plan Phase 3"
+stopped_at: "Phase 2 autonomous UAT complete: 17 passing, native scroll corrected; verification45/45; ready to discuss/plan Phase 3"
+last_updated: "2026-10-12T12:22:17.113Z"
+last_activity: 2026-10-12
+state_head: 617832fb9958a2c65120a5c5e38b34cf922b7797
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
-  percent: 25
+  completed_phases: 2
+  total_plans: 13
+  completed_plans: 13
+  percent: 50
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-10)
+See: .planning/PROJECT.md (updated 2026-10-12)
 
 **Core value:** Recuperar uma conversa e seus anexos com contexto verificável, pelo site ou pelas IAs, a partir de um arquivo privado sob controle do usuário.
-**Current focus:** Phase2 — pronta para planejamento; Phase1 local concluída
+**Current focus:** Phase 3 ready to discuss/plan — Phase 2 local verified: 45/45 criteria, 8/8 requirements; autonomous UAT 17 passing, G-02-6 resolved; Phase 1 local complete
 
 **Publicação da Phase1:** [PR #1](https://github.com/dlr-1337/zap-mcp/pull/1), branch codex/phase-1-private-archive; fase local verificada, sem implantação na VPS.
 
 ## Current Position
 
-Phase: 2 — Busca, contexto, abas e exportação no site
-Plan: Not started
-Status: Phase 1 shipped — PR #1; Phase 2 ready to plan
-Last activity: 2026-10-11 — Phase 1 shipped — PR #1
+Phase: 3 — Consulta e arquivos reais no Codex
+Current Plan: Not started
+Total Plans in Phase: 0
+Status: Phase 02 shipped — PR #2; ready to plan Phase 3
+Last activity: 2026-10-12
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 13
 - Average duration: Não consolidada; plano07 teve piloto continuado
 - Total execution time:71min registrados nos planos01–06, além do piloto continuado01–07
 
@@ -48,7 +49,7 @@ Progress: [███░░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
-| 2 | 0 | 0 | - |
+| 2 | 6 | - | - |
 | 3 | 0 | 0 | - |
 | 4 | 0 | 0 | - |
 
@@ -66,6 +67,12 @@ Progress: [███░░░░░░░] 25%
 | Phase 01 P04 | 14min | 2 tasks | 7 files |
 | Phase 01 P05 | 12min | 2 tasks | 7 files |
 | Phase 01 P06 | 15min | 2 tasks | 8 files |
+| Phase 02 P01 | 14min | 3 tasks | 10 files |
+| Phase 02 P02 | 16min | 3 tasks | 10 files |
+| Phase 02 P03 | 12min | 3 tasks | 9 files |
+| Phase 02 P04 | 17min | 3 tasks | 9 files |
+| Phase 02 P05 | 18min | 3 tasks | 4 files |
+| Phase 02 P06 | 26min30s | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -87,10 +94,17 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 01]: Plano01-06 usa snapshot offline exclusivo por API SQLite, restore HTTP autenticado e recibo HMAC do perfil/diretório fonte; clone restaurado bloqueia coletor. Preflight somente leitura e60 testes padrão passam; conta/VPS pendentes.
 - [Phase 01]: Piloto pré-QR demonstrou428 com macOS Desktop; WEB_BROWSER Chrome emite QR real no mesmo perfil/pin, preservando syncFullHistory. Requisitos continuam Pending.
 - [Phase 01]: Piloto real ligado: DNS IPv4 Node24 e participant do envelope rc14 corrigidos com RED/GREEN; lote recebido sem falhas,4originais com hash/HTTP/restore/restart conferidos. Comparação Web autorizada substitui a condição manual; plano07 com3/3 tarefas, fase1 local concluída após controles e verificador.
+- [Phase 02]: Busca usa FTS por revisão e snapshots sanitizados de sessão; período Temporal respeita DST, mantendo requisitos globais pendentes do aceite real.
+- [Phase 02]: Contexto reutiliza snapshots existentes; abas conservam DOM e posições próprios com geração por sessão/aba e purge TTL/logout/reset;105 testes sintéticos passaram, aceite real segue02-05.
+- [Phase 02]: Preview usa fd verificado, assinatura/MIME e controls nativos sob ação; 113 testes sintéticos passaram, codecs reais permanecem02-05.
+- [Phase 02]: Exportação congela DTOs e expected media por sessão; ZIP pronto só após releitura CRC/SHA/conjunto, fsync e publicação exclusiva;127 testes sintéticos passaram, aceite real segue02-05.
+- [Phase 02]: Aceite real offline/browser conferiu 1.028 mensagens,190originais e112faltantes por SQL/bytes independentes; fonte local atualizada preservando 8.771mensagens/853originais e credenciais, sem confirmar conexão original atual.
+- [Phase 02]: Phase2 local:40/40criteria,8/8requirements,7/7prohibitions;143tests and real1028-message ZIP accepted; next Phase3 MCP.
+- [Phase 02]: G-02-6: abas sticky e foco da âncora pelo início, sem novo estado de leitura; UAT autônoma física delta0. — Alcançar controles não pode substituir a posição salva; fonte200 e mensagens altas exigem início alcançável; provas reais sanitizadas.
 
 ### Pending Todos
 
-Nenhum todo avulso registrado. Próxima ação: planejar a Phase2; nenhuma execução iniciada.
+Nenhum todo avulso registrado. Próxima ação: executar02-02;02-01 concluído com97/97 testes, sem aplicar busca no acervo real.
 
 ### Blockers/Concerns
 
@@ -101,6 +115,10 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
 
+### Roadmap Evolution
+
+- Phase 2 edited: Normalized only Goal to the already-derived MVP user story; scope and criteria identical.
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At | Milestone |
@@ -110,9 +128,9 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-11T01:56:57.468Z
-Stopped at: Phase 1 complete, ready to plan Phase 2
-Resume file: .planning/phases/01-arquivo-privado-com-mensagens-e-m-dias-reais/01-07-CHECKPOINT.md
+Last session: 2026-10-12T12:05:08.872Z
+Stopped at: Phase 2 autonomous UAT complete: 17 passing, native scroll corrected; verification45/45; ready to discuss/plan Phase 3
+Resume file: None
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
 

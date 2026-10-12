@@ -23,7 +23,7 @@ test('HTTP janelas validam limites e preservam identidade, empates, aliases e ev
   const hostile = '<img src=x onerror=alert(1)>\nOlá שלום 🧪';
   s.archive.ingestHistory({ chats: [{ id: key.remoteJid, name: 'Homônimo' }], messages: Array.from({ length: 105 }, (_, i) => ({ key: { ...key, id: 'm' + i }, messageTimestamp: 1700000000, message: { conversation: hostile } })) });
   for (let i = 2; i <= 56; i++) s.writeMessage({ reference: 'other' + i, conversationId: i + '@s.whatsapp.net', conversationName: 'Homônimo', text: 'outra conversa', originalTimestamp: '2020-01-01T00:00:00.000Z' });
-  const id = s.archive.listConversations().conversations.find(c => s.archive.readConversation(c.id)?.messages.some(m => m?.text === hostile))!.id;
+  const id = s.archive.readStoredMessage({ ...key, id: 'm0' })!.conversationId;
   const first = await read('/api/conversations'); assert.equal(first.conversations.length, 50); assert.ok(first.nextCursor);
   assert.equal(first.conversations[0].identity !== undefined, true);
   const next = await read('/api/conversations?cursor=' + first.nextCursor); assert.equal(next.conversations.length, 6);

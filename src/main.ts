@@ -1,15 +1,16 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createWebAuth, setOwnerPassword } from './auth.js';
-import { openArchive, type Archive } from './archive.js';
+import { openArchive, searchTerms, parsePeriod, type Archive } from './archive.js';
 import Database from 'better-sqlite3';
-import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync, createReadStream } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, closeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
-import { startMediaWorker, openVerifiedAttachment, reconcileMedia } from './media.js';
+import { startMediaWorker, openVerifiedAttachment, streamVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
+import { createExportManager } from './export.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -42,12 +43,14 @@ export function createService({ dataDir }: { dataDir: string }) {
   for (const name of ['archive.sqlite', 'auth.sqlite']) chmodSync(join(dataDir, name), 0o600);
   } catch (error) { for (const db of opened) db.close(); lock.release(); throw error; }
   const app = express();
+  let exports: ReturnType<typeof createExportManager>;
+  try { exports = createExportManager({ archive, dataDir, mediaDir }); } catch (e) { for (const db of opened) db.close(); lock.release(); throw e; }
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     if (!/^(127\.0\.0\.1|localhost)(:[0-9]+)?$/.test(req.get('Host') ?? '') || !['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(req.socket.remoteAddress ?? '')) { res.status(403).json({ error: 'Transporte recusado' }); return; } next();
   });
   app.use((_req, res, next) => {
-    res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
+    res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
   app.use(express.json({ limit: '4kb' }));
   app.use(express.urlencoded({ extended: false, limit: '4kb' }));
@@ -55,14 +58,21 @@ export function createService({ dataDir }: { dataDir: string }) {
   const requireOwner = auth.requireOwner;
   app.get('/api/session', auth.sessionInfo);
   app.post('/login', auth.csrf, auth.login);
-  app.post('/logout', auth.csrf, async (req, res) => { await auth.logout(req, res); collector?.hidePairing(); });
+  app.post('/logout', auth.csrf, async (req, res) => { const scope = searchSession(req); await auth.logout(req, res); archive.dropQueries(scope); collector?.hidePairing(); });
   app.use('/api/status', requireOwner);
   app.use('/api/qr', requireOwner);
   app.use('/api/conversations', requireOwner);
+  app.use('/api/search', requireOwner);
+  app.use('/api/context', requireOwner);
   app.use('/api/attachments', requireOwner);
-  app.get('/api/attachments/:id', (req, res, next) => {
-    const file = openVerifiedAttachment(archive, mediaDir, req.params.id);
+  app.use('/api/exports', requireOwner);
+  app.get(['/api/attachments/:id', '/api/attachments/:id/preview'], (req, res, next) => {
+    const file = typeof req.params.id === 'string' ? openVerifiedAttachment(archive, mediaDir, req.params.id) : null;
     if (!file) { res.status(404).json({ error: 'Original disponível não encontrado no acervo' }); return; }
+    const preview = req.path.endsWith('/preview');
+    let mime: string | null = 'application/octet-stream';
+    try { if (preview) mime = classifyPreview(file); } catch (error) { closeSync(file.fd); next(error); return; }
+    if (!mime) { closeSync(file.fd); res.status(415).json({ error: 'Sem visualização integrada para este formato. Baixe o original para abrir em outro aplicativo.' }); return; }
     let start = 0, end = file.size - 1;
     if (req.headers.range) {
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
@@ -74,9 +84,9 @@ export function createService({ dataDir }: { dataDir: string }) {
     }
     const name = (file.attachment.name ?? 'original').replace(/[\u0000-\u001f\u007f/\\]/g, '_').slice(0, 180);
     const encoded = encodeURIComponent(Buffer.from(name).toString('utf8')).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
-    res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
+    res.set({ 'Content-Type': mime, 'Content-Disposition': `${preview ? 'inline' : 'attachment'}; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
     if (req.method === 'HEAD' || file.size === 0) { closeSync(file.fd); res.end(); return; }
-    const stream = createReadStream('', { fd: file.fd, autoClose: true, start, end });
+    const stream = streamVerifiedAttachment(archive, file, start, end);
     res.on('close', () => stream.destroy()); stream.on('error', error => { if (res.headersSent) res.destroy(); else next(error); }); stream.pipe(res);
   });
   app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });
@@ -102,7 +112,7 @@ export function createService({ dataDir }: { dataDir: string }) {
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) throw Object.assign(Error('cursor'), { status: 400 });
     let parts: unknown;
     try { parts = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { throw Object.assign(Error('cursor'), { status: 400 }); }
-    if (!Array.isArray(parts) || !parts.every(p => typeof p === 'string') || parts[0] !== kind || parts[1] !== scope || parts.length !== (kind === 'conversations' ? 3 : 4)) throw Object.assign(Error('cursor'), { status: 400 });
+    if (!Array.isArray(parts) || !parts.every(p => typeof p === 'string') || parts[0] !== kind || parts[1] !== scope || parts.length !== (kind === 'conversations' ? 3 : ['search', 'context'].includes(kind) ? 5 : 4)) throw Object.assign(Error('cursor'), { status: 400 });
     return parts;
   };
   const limit = (input: unknown, maximum: number) => {
@@ -118,11 +128,69 @@ export function createService({ dataDir }: { dataDir: string }) {
     const identity = row.source_id && /@(g\.us|s\.whatsapp\.net|lid)$/.test(row.source_id) ? row.source_id : null;
     return { ...conversation, identity, kind: identity?.endsWith('@g.us') ? 'group' : identity?.endsWith('@s.whatsapp.net') || identity?.endsWith('@lid') ? 'individual' : null };
   };
+  const searchSession = (req: Request) => createHmac('sha256', signingKey).update(JSON.stringify([req.sessionID, req.session.ownerGeneration])).digest('hex');
+  const exportError = (error: unknown, res: Response, next: NextFunction) => {
+    const status = (error as { status?: number }).status;
+    if ([400, 404, 409, 410, 413, 422, 507].includes(status ?? 0)) res.status(status!).json({ error: (error as Error).message }); else next(error);
+  };
+  app.post('/api/exports', auth.csrf, (req, res, next) => {
+    try { if (!req.body || Object.keys(req.body).some(k => !['conversationId', 'from', 'to', 'csrfToken', 'requestId'].includes(k))) throw Object.assign(Error('Seleção inválida'), { status: 400 }); res.status(202).json(exports.createExportJob(searchSession(req), req.body.conversationId, req.body.from, req.body.to, req.body.requestId)); } catch (e) { exportError(e, res, next); }
+  });
+  app.get('/api/exports/period', (req, res, next) => {
+    try { if (Object.keys(req.query).some(k => !['from', 'to'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('Período inválido'), { status: 400 }); res.json(parsePeriod(req.query.from, req.query.to)); } catch (e) { exportError(e, res, next); }
+  });
+  app.get('/api/exports/:id', (req, res, next) => { try { res.json(exports.getExportJob(req.params.id, searchSession(req))); } catch (e) { exportError(e, res, next); } });
+  app.get('/api/exports/:id/download', (req, res, next) => {
+    try {
+      const file = exports.openExport(req.params.id, searchSession(req));
+      res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="exportacao-' + req.params.id + '.zip"', 'Content-Length': String(file.size) });
+      const stream = file.stream;
+      if (req.method === 'HEAD') { stream.destroy(); res.end(); return; }
+      res.on('close', () => stream.destroy()); stream.on('error', e => res.headersSent ? res.destroy() : exportError(e, res, next)); stream.pipe(res);
+    } catch (e) { exportError(e, res, next); }
+  });
+  auth.store.on('revoked', (id: string, generation: string | undefined) => exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([id, generation])).digest('hex')));
+  auth.store.on('revoked', (id: string, generation: string | undefined) => archive.dropQueries(createHmac('sha256', signingKey).update(JSON.stringify([id, generation])).digest('hex')));
+  const querySweep = setInterval(() => {
+    for (const row of authDb.prepare('SELECT id FROM web_sessions').all() as { id: string }[]) auth.store.get(row.id, () => {});
+    archiveDb.prepare('DELETE FROM query_snapshots WHERE expires_at<=?').run(Date.now());
+    exports.purge();
+  }, 60_000); querySweep.unref();
+  app.get('/api/context/:reference', (req, res) => {
+    if (Object.keys(req.query).some(k => !['sourceSnapshotId', 'limit', 'cursor', 'direction'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(req.params.reference)) { res.status(404).json({ error: 'Não encontrado no acervo' }); return; }
+    const session = searchSession(req), scope = createHmac('sha256', signingKey).update(JSON.stringify([session, req.params.reference])).digest('hex');
+    const cursor = decodeCursor(req.query.cursor, 'context', scope), direction = req.query.direction;
+    if (cursor ? !['before', 'after'].includes(direction as string) || cursor[3] !== direction || !/^\d+$/.test(cursor[4]) || !Number.isSafeInteger(Number(cursor[4])) || req.query.sourceSnapshotId !== undefined : direction !== undefined) throw Object.assign(Error('cursor'), { status: 400 });
+    if (req.query.sourceSnapshotId !== undefined && !/^[0-9a-f-]{36}$/.test(req.query.sourceSnapshotId as string)) throw Object.assign(Error('snapshot'), { status: 400 });
+    const size = req.query.limit === undefined ? 50 : limit(req.query.limit, 100);
+    try {
+      const { previousOrdinal, nextOrdinal, ...page } = cursor ? archive.readContextPage({ reference: req.params.reference, session, snapshotId: cursor[2], ordinal: Number(cursor[4]), direction: direction as 'before' | 'after', limit: size }) : archive.openContext(req.params.reference, session, req.query.sourceSnapshotId as string | undefined);
+      res.json({ ...page, previousCursor: previousOrdinal !== null ? encodeCursor(['context', scope, page.snapshotId, 'before', String(previousOrdinal)]) : null, nextCursor: nextOrdinal !== null ? encodeCursor(['context', scope, page.snapshotId, 'after', String(nextOrdinal)]) : null });
+    } catch (error) { const status = (error as { status?: number }).status; if ([400, 404, 410, 413, 429].includes(status ?? 0)) { res.status(status!).json({ error: (error as Error).message }); return; } throw error; }
+  });
+  app.get('/api/search', (req, res) => {
+    if (Object.keys(req.query).some(k => !['q', 'conversationId', 'from', 'to', 'limit', 'cursor'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
+    const terms = searchTerms(req.query.q), conversationId = typeof req.query.conversationId === 'string' && req.query.conversationId ? req.query.conversationId : null;
+    const filters = { terms, conversationId, ...parsePeriod(req.query.from, req.query.to) };
+    const session = searchSession(req), scope = createHmac('sha256', signingKey).update(JSON.stringify([session, filters])).digest('hex');
+    const cursor = decodeCursor(req.query.cursor, 'search', scope);
+    if (cursor && (cursor[3] !== 'next' || !/^\d+$/.test(cursor[4]) || !Number.isSafeInteger(Number(cursor[4])))) throw Object.assign(Error('cursor'), { status: 400 });
+    try {
+      const { nextOrdinal, ...page } = archive.searchMessages({ terms, conversationId, session, filters, limit: req.query.limit === undefined ? 50 : limit(req.query.limit, 100), snapshotId: cursor?.[2], ordinal: cursor ? Number(cursor[4]) : 0 });
+      res.json({ ...page, nextCursor: nextOrdinal !== null ? encodeCursor(['search', scope, page.snapshotId, 'next', String(nextOrdinal)]) : null });
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if ([400, 404, 410, 413, 429].includes(status ?? 0)) { res.status(status!).json({ error: (error as Error).message }); return; }
+      throw error;
+    }
+  });
   app.get('/api/conversations', (req, res) => {
-    pageQuery(req);
-    const cursor = decodeCursor(req.query.cursor, 'conversations', '');
-    const page = archive.listConversations({ cursor: cursor?.[2], limit: limit(req.query.limit, 50) });
-    res.json({ conversations: page.conversations.map(conversationEvidence), nextCursor: page.nextCursor ? encodeCursor(['conversations', '', page.nextCursor]) : null });
+    if (Object.keys(req.query).some(k => !['q', 'limit', 'cursor'].includes(k)) || Object.values(req.query).some(v => typeof v !== 'string')) throw Object.assign(Error('query'), { status: 400 });
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''; if ([...q].length > 2000) throw Object.assign(Error('query'), { status: 400 });
+    const cursor = decodeCursor(req.query.cursor, 'conversations', q);
+    const page = archive.listConversations({ q, cursor: cursor?.[2], limit: limit(req.query.limit, 50) });
+    res.json({ conversations: page.conversations.map(conversationEvidence), nextCursor: page.nextCursor ? encodeCursor(['conversations', q, page.nextCursor]) : null });
   });
   app.get('/api/conversations/:id/messages', (req, res) => {
     pageQuery(req);
@@ -151,9 +219,10 @@ export function createService({ dataDir }: { dataDir: string }) {
       const id = existing?.id ?? randomUUID();
       archiveDb.prepare('INSERT INTO conversations(id, name, source_id) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET name = excluded.name').run(id, message.conversationName, message.conversationId);
       archiveDb.prepare('INSERT INTO messages(reference,conversation_id,text,original_timestamp) VALUES (?, ?, ?, ?) ON CONFLICT(reference) DO NOTHING').run(message.reference, id, message.text, message.originalTimestamp);
+      archive.indexMessage(message.reference);
       return id;
     }),
-    setPassword(password: string) { return setOwnerPassword(authDb, password); },
+    async setPassword(password: string) { const sessions = authDb.prepare('SELECT id,data FROM web_sessions').all() as { id: string; data: string }[]; await setOwnerPassword(authDb, password); for (const row of sessions) exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([row.id, JSON.parse(row.data).ownerGeneration])).digest('hex')); archiveDb.exec('DELETE FROM query_snapshots'); },
     startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
       lock.assert(); if (collector) throw Error('Coletor já ativo');
       collector = createCollector({ authDb, archive, lock, ...options });
@@ -162,9 +231,9 @@ export function createService({ dataDir }: { dataDir: string }) {
       return collector;
     },
     close() {
-      const finish = () => { archiveDb.close(); authDb.close(); lock.release(); };
-      if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(finish);
-      finish();
+      const finish = () => { clearInterval(querySweep); archiveDb.close(); authDb.close(); lock.release(); };
+      if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(() => exports.close()).then(finish);
+      const closing = exports.close(); if (closing) return closing.then(finish); finish();
     }
   };
 }

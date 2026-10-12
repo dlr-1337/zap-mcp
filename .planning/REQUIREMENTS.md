@@ -24,7 +24,7 @@
 ### Evidência e consulta básica
 
 - [x] **EVID-01**: Cada mensagem arquivada preserva referência estável, chave de origem, conversa, autor/direção, instante original, tipo, texto/legenda, citação recebida e estados dos anexos; campos desconhecidos não são inventados.
-- [ ] **EVID-02**: Datas permanecem no instante original e filtros por período usam America/Sao_Paulo de forma explícita; site, exportação e MCP permitem conferir UTC ou offset sem trocar a data da mensagem pela data de ingestão.
+- [x] **EVID-02**: Datas permanecem no instante original e filtros por período usam America/Sao_Paulo de forma explícita; site, exportação e MCP permitem conferir UTC ou offset sem trocar a data da mensagem pela data de ingestão.
 
 ### Arquivos reais
 
@@ -35,16 +35,16 @@
 ### Consulta pelo site
 
 - [x] **WEB-01**: O proprietário pode listar e reabrir conversas com mensagens e anexos já arquivados em uma interface privada básica, inclusive com o coletor WhatsApp desconectado.
-- [ ] **WEB-02**: O proprietário pode combinar busca por contato, palavra e período sobre texto, legendas e nomes de arquivo recebidos; nomes homônimos aparecem como candidatos distintos e o alcance da busca fica explícito.
-- [ ] **WEB-03**: O proprietário pode percorrer mensagens por páginas e abrir o contexto de um resultado por referência estável; um recorte paginado não pula nem repete registros quando novas mensagens chegam.
-- [ ] **WEB-04**: O proprietário pode manter pelo menos duas conversas abertas em abas independentes dentro do site, alternando entre elas sem perder a conversa e o ponto de leitura de cada aba.
-- [ ] **WEB-05**: O proprietário pode visualizar os formatos suportados de imagem/áudio/vídeo e baixar qualquer anexo disponível por acesso privado, com indicação clara de arquivo ausente ou sem visualização integrada.
+- [x] **WEB-02**: O proprietário pode combinar busca por contato, palavra e período sobre texto, legendas e nomes de arquivo recebidos; nomes homônimos aparecem como candidatos distintos e o alcance da busca fica explícito.
+- [x] **WEB-03**: O proprietário pode percorrer mensagens por páginas e abrir o contexto de um resultado por referência estável; um recorte paginado não pula nem repete registros quando novas mensagens chegam.
+- [x] **WEB-04**: O proprietário pode manter pelo menos duas conversas abertas em abas independentes dentro do site, alternando entre elas sem perder a conversa e o ponto de leitura de cada aba.
+- [x] **WEB-05**: O proprietário pode visualizar os formatos suportados de imagem/áudio/vídeo e baixar qualquer anexo disponível por acesso privado, com indicação clara de arquivo ausente ou sem visualização integrada.
 
 ### Exportação com anexos
 
-- [ ] **EXP-01**: O proprietário pode escolher uma conversa e período para exportar todo o recorte arquivado correspondente, incluindo as mensagens além da página atualmente visível.
-- [ ] **EXP-02**: A exportação produz ZIP com mensagens legíveis, manifesto estruturado e arquivos disponíveis, relacionando cada binário à mensagem de origem e listando anexos não recuperados; nomes iguais não sobrescrevem arquivos.
-- [ ] **EXP-03**: Falha ou interrupção da exportação é informada e um pacote incompleto não é rotulado como concluído; caminhos e nomes recebidos não permitem ler arquivos arbitrários da VPS.
+- [x] **EXP-01**: O proprietário pode escolher uma conversa e período para exportar todo o recorte arquivado correspondente, incluindo as mensagens além da página atualmente visível.
+- [x] **EXP-02**: A exportação produz ZIP com mensagens legíveis, manifesto estruturado e arquivos disponíveis, relacionando cada binário à mensagem de origem e listando anexos não recuperados; nomes iguais não sobrescrevem arquivos.
+- [x] **EXP-03**: Falha ou interrupção da exportação é informada e um pacote incompleto não é rotulado como concluído; caminhos e nomes recebidos não permitem ler arquivos arbitrários da VPS.
 
 ### MCP no Codex do usuário
 
@@ -105,18 +105,18 @@ Cada requisito v1 pertence a exatamente uma fase responsável. Requisitos transv
 | SYNC-06 | Phase 1 | Complete |
 | SYNC-07 | Phase 1 | Complete |
 | EVID-01 | Phase 1 | Complete |
-| EVID-02 | Phase 2 | Pending |
+| EVID-02 | Phase 2 | Complete |
 | MEDIA-01 | Phase 1 | Complete |
 | MEDIA-02 | Phase 1 | Complete |
 | MEDIA-03 | Phase 1 | Complete |
 | WEB-01 | Phase 1 | Complete |
-| WEB-02 | Phase 2 | Pending |
-| WEB-03 | Phase 2 | Pending |
-| WEB-04 | Phase 2 | Pending |
-| WEB-05 | Phase 2 | Pending |
-| EXP-01 | Phase 2 | Pending |
-| EXP-02 | Phase 2 | Pending |
-| EXP-03 | Phase 2 | Pending |
+| WEB-02 | Phase 2 | Complete |
+| WEB-03 | Phase 2 | Complete |
+| WEB-04 | Phase 2 | Complete |
+| WEB-05 | Phase 2 | Complete |
+| EXP-01 | Phase 2 | Complete |
+| EXP-02 | Phase 2 | Complete |
+| EXP-03 | Phase 2 | Complete |
 | MCP-01 | Phase 3 | Pending |
 | MCP-02 | Phase 3 | Pending |
 | MCP-03 | Phase 3 | Pending |
