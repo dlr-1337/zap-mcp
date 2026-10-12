@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
-import { rotateMcpToken } from '../src/mcp.js';
+import { rotateMcpToken, createMcpAccess, guardMcpConsumption } from '../src/mcp.js';
 import { Readable } from 'node:stream';
 import { startMediaWorker } from '../src/media.js';
 import { createHash } from 'node:crypto';
@@ -15,6 +15,67 @@ import { createServer } from 'node:https';
 import { spawn, spawnSync } from 'node:child_process';
 import { openVerifiedAttachment } from '../src/media.js';
 import { closeSync, readSync } from 'node:fs';
+import Database from 'better-sqlite3';
+
+async function seed(f: Awaited<ReturnType<typeof mcpFixture>>, bytes: Buffer, type = 'imageMessage') {
+  const key = { remoteJid: '1@lid', id: String(Date.now()), fromMe: false };
+  f.s.archive.ingestHistory({ messages: [{ key, message: { [type]: { mimetype: type === 'imageMessage' ? 'image/jpeg' : 'application/octet-stream', url: 'https://mmg.whatsapp.net/a', mediaKey: Buffer.alloc(32), fileLength: bytes.length } } }] });
+  const worker = startMediaWorker({ archive: f.s.archive, mediaDir: join(f.dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
+  return { key, id: f.s.archive.readStoredMessage(key)!.attachments[0]!.id };
+}
+
+test('rotação concorrente não concede geração nova ao bearer antigo', async t => {
+  const f = await mcpFixture(t), second = new Database(join(f.dir, 'auth.sqlite')), access = createMcpAccess(f.s.authDb);
+  t.after(() => second.close()); const prepare = f.s.authDb.prepare.bind(f.s.authDb); let rotated = false;
+  f.s.authDb.prepare = ((sql: string) => { const statement = prepare(sql); if (sql === 'SELECT value FROM web_config WHERE key=?' || sql.includes("'mcp-token-digest'")) {
+    const get = statement.get.bind(statement); statement.get = ((...args: any[]) => { const found = get(...args); if ((args[0] === 'mcp-token-digest' || sql.includes("'mcp-token-digest'")) && !rotated) { rotated = true; rotateMcpToken(second, join(f.dir, 'rotated')); } return found; }) as typeof statement.get;
+  } return statement; }) as typeof f.s.authDb.prepare;
+  try { const grant = access.authenticate(f.headers.Authorization); assert.equal(grant === null, true, 'digest e geração devem formar um snapshot atômico'); }
+  finally { f.s.authDb.prepare = prepare; }
+});
+
+test('rotacionar em outra conexão bloqueia resposta inline bufferizada e persiste ao restart', async t => {
+  const f = await mcpFixture(t), { id } = await seed(f, Buffer.from('ffd8ff' + '01'.repeat(100), 'hex'));
+  const second = new Database(join(f.dir, 'auth.sqlite')), get = f.s.archive.getAttachment; let rotated = false;
+  const before = f.s.authDb.prepare("SELECT key,value FROM web_config WHERE key NOT LIKE 'mcp-%' ORDER BY key").all();
+  f.s.archive.getAttachment = attachmentId => { const result = get(attachmentId); if (!rotated) { rotated = true; queueMicrotask(() => rotateMcpToken(second, join(f.dir, 'next-token'))); } return result; };
+  await assert.rejects(fetch(f.base + '/mcp', { method: 'POST', headers: f.headers, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_attachment', arguments: { attachmentId: id } } }) }));
+  second.close(); f.s.archive.getAttachment = get;
+  const reopened = new Database(join(f.dir, 'auth.sqlite')); t.after(() => reopened.close());
+  assert.equal(createMcpAccess(reopened).authenticate(f.headers.Authorization), null);
+  const next = readFileSync(join(f.dir, 'next-token'), 'utf8').trim(); assert.ok(createMcpAccess(reopened).authenticate('Bearer ' + next));
+  assert.deepEqual(reopened.prepare("SELECT key,value FROM web_config WHERE key NOT LIKE 'mcp-%' ORDER BY key").all(), before);
+  assert.equal((await fetch(f.base + '/mcp/attachments/' + id, { headers: f.headers })).status, 401);
+  assert.equal(statSync(join(f.dir, 'next-token')).mode & 0o777, 0o600);
+});
+
+test('restrição antes do consumo e estados/corrupção permanecem explícitos', async t => {
+  const f = await mcpFixture(t), bytes = Buffer.from('ffd8ff' + '01'.repeat(100), 'hex'), { id, key } = await seed(f, bytes);
+  const access = createMcpAccess(f.s.authDb), generation = access.authenticate(f.headers.Authorization)!;
+  const reference = f.s.archive.getAttachment(id)!.reference;
+  f.s.archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, message: { conversation: 'private' } }] });
+  assert.throws(() => guardMcpConsumption(access, generation, f.s.archive, [reference]), /restrito/);
+  assert.equal((await fetch(f.base + '/mcp/attachments/' + id, { headers: f.headers })).status, 404);
+  const unavailable = await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: id } }); assert.ok(unavailable.result?.isError || unavailable.error);
+  const other = await seed(f, bytes); writeFileSync(join(f.dir, 'media', other.id + '.bin'), Buffer.from('corrupt'));
+  const failed = (await f.rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: other.id } })).result;
+  assert.equal(failed.isError, true); assert.equal(JSON.parse(failed.content[0].text).delivery, 'unavailable'); assert.equal(f.s.archive.getAttachment(other.id)!.state, 'retryable');
+});
+
+test('streams simultâneos revogados interrompem sem publicar transferência completa', async t => {
+  const f = await mcpFixture(t), bytes = Buffer.alloc(8 * 1024 * 1024, 1), { id } = await seed(f, bytes, 'documentMessage');
+  const second = new Database(join(f.dir, 'auth.sqlite')); t.after(() => second.close());
+  const start = () => new Promise<{ response: import('node:http').IncomingMessage; done: Promise<{ count: number; complete: boolean }> }>((resolve, reject) => {
+    request(f.base + '/mcp/attachments/' + id, { headers: f.headers }, response => { response.pause(); let count = 0;
+      const done = new Promise<{ count: number; complete: boolean }>(ok => { response.on('data', chunk => { count += chunk.length; }); response.on('error', () => {}); response.on('close', () => ok({ count, complete: response.complete })); }); resolve({ response, done });
+    }).on('error', reject).end();
+  });
+  const downloads = await Promise.all([start(), start()]); rotateMcpToken(second, join(f.dir, 'stream-rotated'));
+  for (const d of downloads) d.response.resume();
+  for (const d of downloads) { const result = await d.done; assert.equal(result.complete, false); assert.ok(result.count < bytes.length); }
+  assert.deepEqual(readFileSync(join(f.dir, 'media', id + '.bin')), bytes);
+  const latest = readFileSync(join(f.dir, 'stream-rotated'), 'utf8').trim(); const cancelled = await fetch(f.base + '/mcp/attachments/' + id, { headers: { Authorization: 'Bearer ' + latest } }); await cancelled.body!.cancel();
+});
 
 function runCodex(args: string[], env: NodeJS.ProcessEnv, cwd: string, transcript: string, prompt: string) {
   return new Promise<{ code: number; output: string }>((resolve, reject) => {
