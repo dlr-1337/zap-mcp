@@ -13,7 +13,7 @@ audited: "2026-10-11"
 ---
 # Phase 2 — Security Verification
 
-Auditoria independente `gsd-security-auditor` dos registros planejados; 23 IDs únicos/27 ocorrências, 19 high e quatro medium, todos mitigate/CLOSED. Evidência localizada no código e assertions executadas no log dist/02-05-full-tests.log: 130/130 pass, zero fail/skip/todo. Não é certificação ASVS nem varredura exaustiva de ameaças novas.
+Auditoria independente `gsd-security-auditor` dos registros planejados; 23 IDs únicos/27 ocorrências, 19 high e quatro medium, todos mitigate/CLOSED após a reverificação incremental abaixo. A auditoria inicial usou dist/02-05-full-tests.log: 130/130 pass. A suíte final integrada passou 143/143, zero fail/cancelled/skip/todo, em38,366s. Não é certificação ASVS nem varredura exaustiva de ameaças novas.
 
 ## Trust Boundaries
 | Boundary | Control |
@@ -37,7 +37,7 @@ Auditoria independente `gsd-security-auditor` dos registros planejados; 23 IDs �
 | T-02-09 | Information Disclosure | browser storage | high | mitigate | public/app.js:9; test/ui.test.ts:193 | closed |
 | T-02-10 | Elevation of Privilege | MIME preview | high | mitigate | src/media.ts:77; test/preview.test.ts:55 | closed |
 | T-02-11 | Information Disclosure | preview GET/HEAD/Range | high | mitigate | src/main.ts:67; test/security.test.ts:54 | closed |
-| T-02-12 | Information Disclosure | paths/symlinks/original | high | mitigate | src/media.ts:15; src/main.ts:85; test/preview.test.ts:70 | closed |
+| T-02-12 | Information Disclosure | paths/symlinks/original | high | mitigate | src/media.ts:77; src/archive.ts:361; test/preview.test.ts:68 e84; CR-04/reteste buffer e HTTP com/sem notificação | closed |
 | T-02-13 | Denial of Service | streams/Range/resources | medium | mitigate | src/main.ts:77; src/media.ts:78; test/preview.test.ts:86 | closed |
 | T-02-14 | Spoofing | exports CSRF/session | high | mitigate | src/auth.ts:64; src/main.ts:68; src/export.ts:104; test/security.test.ts:62 | closed |
 | T-02-15 | Information Disclosure | ZIP/archive paths | high | mitigate | src/archive.ts:478; src/export.ts:61; test/export.test.ts:86 | closed |
@@ -76,3 +76,13 @@ Nenhuma disposição accept ou transfer foi usada para fechar os registros.
 - [x] No accepted/transfer risks; threats_open: 0.
 - [x] status: verified; independent ASVS L1 planned-register audit completed.
 **Approval:** verified 2026-10-11 within the stated scope.
+
+## Reabertura incremental — 2026-10-12
+
+A aprovação acima é histórica. Auditoria independente do delta confirmou CR-04/T-02-12: `streamVerifiedAttachment` verificava antes de preencher o buffer, mas não ao consumi-lo. Probe sem dados privados reteve `drain`, aplicou a restrição e observou outra escrita HTTP. O gate foi reaberto durante a correção.
+
+`1a5b7c8` adicionou guarda ao consumo e cancelamento por `archive.onChange`, com remoção da inscrição e um único dono do fd. Auditor independente repetiu dois probes com e sem notificação: **4/4 PASS**, buffer62.292→zero bytes entregues após a restrição; HTTP reteve45.645 bytes e manteve somente a escrita anterior, sem escrita futura. Fd fechado/inscrição removida em todos os casos; destroy repetido não fechou descritor reaproveitado. T-02-12 está novamente CLOSED. O arquivo primário permanece preservado; bytes já entregues não podem ser recolhidos.
+
+Delta também confirmou guarda de ZIP aberto (`src/export.ts:155`, `test/export.test.ts:103 e138`), requestId restrito à sessão/recorte/CSRF (`src/main.ts`, `test/security.test.ts:74`) e resolução de aliases sem mudar a seleção congelada (`test/export.test.ts:200`). Retomada de página é exercitada em `test/ui.test.ts:42`; texto/DTOs e evidências restritas têm gate compartilhado em `src/archive.ts:361`. Os controles das sete proibições continuam presentes; a disposição canônica pertence ao verificador.
+
+Suíte final integrada em Node24.21.0:143/143,0fail/cancelled/skip/todo,38.366,233ms. Log ignorado `dist/02-final-tests.log`, SHA256 `e44473cc9da55c2abc3bc2d69b5fe0a11f3b3fff7ba1bae8562ba2f134ae6f7d`. A suíte inclui os testes da Phase1; o diagnóstico e a correção da simulação de fd e do encerramento dos navegadores estão preservados nos relatórios de correção. A auditoria delta não executou novamente a suíte inteira nem o aceite real. Nenhuma certificação, implantação ou ampliação de escopo foi feita.
