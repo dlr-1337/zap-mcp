@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, readlinkSync, openSync, fstatSync } from 'node:fs';
+import fs, { mkdtempSync, rmSync, readFileSync, writeFileSync, closeSync, existsSync, readdirSync, readlinkSync, openSync, fstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once, EventEmitter } from 'node:events';
@@ -240,11 +240,23 @@ test('falhas ENOSPC stream conferência e publicação não anunciam pronto nem 
   const bytes = Buffer.from('original intacto'), mediaKey = { ...key, id: 'file' }; a.ingestHistory({ messages: [{ key: mediaKey, messageTimestamp: 123, message: { documentMessage: { url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32), fileLength: bytes.length } } }] }); const worker = startMediaWorker({ archive: a, mediaDir: join(dir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop(); const attachment = a.readStoredMessage(mediaKey)!.attachments[0];
   const id = a.readStoredMessage(key)!.conversationId;
   for (const point of ['claimed', 'stream', 'entry', 'written', 'verified', 'synced', 'published']) {
-    const m = createExportManager({ archive: a, dataDir: dir, mediaDir: join(dir, 'media'), fault: async (stage, path) => { if (stage === point) { if (point === 'written') writeFileSync(path, 'truncated'); else if (point === 'stream') { const fd = readdirSync('/proc/self/fd').find(n => { try { return readlinkSync('/proc/self/fd/' + n) === join(dir, 'media', attachment.id + '.bin'); } catch { return false; } }); assert.ok(fd); closeSync(Number(fd)); } else throw Object.assign(Error('PRIVATE_FAULT'), { code: 'ENOSPC' }); } } });
-    const j = m.createExportJob('session', id, '', ''); assert.equal(j.state, 'preparing'); assert.throws(() => m.createExportJob('other', id, '', ''), (e: any) => e.status === 409);
-    for (let i = 0; i < 100 && m.getExportJob(j.jobId, 'session').state === 'preparing'; i++) await new Promise(r => setTimeout(r, 5));
-    const done = m.getExportJob(j.jobId, 'session'); assert.equal(done.state, 'failed', point); assert.equal('downloadURL' in done, false); assert.doesNotMatch(done.reason!, /PRIVATE_FAULT/); assert.throws(() => m.openExport(j.jobId, 'session'));
-    assert.equal(a.readStoredMessage(key)!.text, 'intacto'); assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), bytes); assert.equal(a.getAttachment(attachment.id)!.state, 'available'); assert.equal(readdirSync(join(dir, 'exports')).some(n => /\.(part|zip)$/.test(n)), false); await m.close();
+    const originalRead = fs.read, probe = openSync(join(dir, 'archive.sqlite'), 'r'); let injected = 0;
+    // The stream owns its fd; inject I/O failure without closing a number SQLite might reuse.
+    const readFault = point === 'stream' ? t.mock.method(fs, 'read', (fd: number, ...args: any[]) => {
+      let target = false; try { target = readlinkSync('/proc/self/fd/' + fd) === join(dir, 'media', attachment.id + '.bin'); } catch {}
+      if (!target) return Reflect.apply(originalRead, fs, [fd, ...args]);
+      injected++; queueMicrotask(() => args.at(-1)(Object.assign(Error('PRIVATE_FAULT'), { code: 'EIO' }), 0, args[0]));
+    }) : undefined;
+    let m: ReturnType<typeof createExportManager> | undefined;
+    try {
+      const manager = m = createExportManager({ archive: a, dataDir: dir, mediaDir: join(dir, 'media'), fault: async (stage, path) => { if (stage === point) { if (point === 'written') writeFileSync(path, 'truncated'); else if (point !== 'stream') throw Object.assign(Error('PRIVATE_FAULT'), { code: 'ENOSPC' }); } } });
+      const j = manager.createExportJob('session', id, '', ''); assert.equal(j.state, 'preparing'); assert.throws(() => manager.createExportJob('other', id, '', ''), (e: any) => e.status === 409);
+      for (let i = 0; i < 100 && manager.getExportJob(j.jobId, 'session').state === 'preparing'; i++) await new Promise(r => setTimeout(r, 5));
+      const done = manager.getExportJob(j.jobId, 'session'); assert.equal(done.state, 'failed', point); assert.equal('downloadURL' in done, false); assert.doesNotMatch(done.reason!, /PRIVATE_FAULT/); assert.throws(() => manager.openExport(j.jobId, 'session'));
+      if (point === 'stream') assert.ok(injected > 0, 'falha real de leitura simulada no original');
+      assert.ok(fstatSync(probe).isFile(), 'falha não fecha descritor de outro arquivo');
+      assert.equal(a.readStoredMessage(key)!.text, 'intacto'); assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), bytes); assert.equal(a.getAttachment(attachment.id)!.state, 'available'); assert.equal(readdirSync(join(dir, 'exports')).some(n => /\.(part|zip)$/.test(n)), false);
+    } finally { readFault?.mock.restore(); await m?.close(); closeSync(probe); }
   }
 });
 test('limites de seleção e orçamento recusam explicitamente sem truncar o arquivo', async t => {
