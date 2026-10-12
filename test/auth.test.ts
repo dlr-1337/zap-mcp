@@ -214,6 +214,8 @@ test('UI HTTP vazia, texto hostil e janelas com cursor estável sem coletor', as
     for (let n = 0; n < 205; n++) id = service.writeMessage({ reference: `m-${String(n).padStart(3, '0')}`, conversationId: 'source-private', conversationName: hostile, text: hostile, originalTimestamp: '2026-10-10T00:00:00.000Z' });
     assert.match(id, /^[0-9a-f-]{36}$/);
     for (let n = 0; n < 55; n++) service.writeMessage({ reference: `extra-${n}`, conversationId: `source-${n}`, conversationName: 'Homônimo', text: 'texto', originalTimestamp: '2026-10-10T00:00:00.000Z' });
+    // Let client/server process expired keep-alive sockets after synchronous seeding.
+    await new Promise<void>(resolve => setImmediate(resolve));
     let cursor: string | null = null; const ids: string[] = [];
     do {
       const data = await (await fetch(service.base + '/api/conversations' + (cursor ? '?cursor=' + cursor : ''), { headers })).json();
