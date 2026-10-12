@@ -197,6 +197,63 @@ async function callQuery(f: Awaited<ReturnType<typeof mcpFixture>>, name: string
   return reply.result.structuredContent;
 }
 
+test('MCP continuação congela candidatos e mensagens sem perder ordinais por budget', async t => {
+  const f = await mcpFixture(t);
+  for (let i = 0; i < 65; i++) f.s.writeMessage({ reference: 'page-' + String(i).padStart(3, '0'), conversationId: 'pages@lid', conversationName: 'pages', text: 'original ' + 'é'.repeat(1200), originalTimestamp: '2026-01-01T00:00:00Z' });
+  const expected = f.s.archive.searchMessages({ terms: [], conversationId: null, filters: { terms: [], conversationId: null, ...parsePeriod() }, session: 'oracle' }).messages;
+  const frozen = f.s.archiveDb.prepare('SELECT dto FROM query_items WHERE snapshot_id=(SELECT id FROM query_snapshots WHERE session=?) ORDER BY ordinal').all('oracle').map((r: any) => JSON.parse(r.dto));
+  let page = await callQuery(f, 'search_messages', { query: '' }), messages = [...page.messages];
+  assert.ok(page.nextCursor, 'Uma página byte-limitada precisa continuação'); assert.ok(page.messages.length < 50);
+  assert.equal(page.snapshotStable, true); assert.equal(page.limits.responseBytes, 32768);
+  assert.deepEqual(page.messages, expected.slice(0, page.messages.length));
+  f.s.writeMessage({ reference: 'inserted', conversationId: 'pages@lid', conversationName: 'renamed', text: 'new', originalTimestamp: '2026-01-02T00:00:00Z' });
+  f.s.archiveDb.prepare('UPDATE messages SET text=? WHERE reference=?').run('edited', frozen.at(-1).reference);
+  while (page.nextCursor) { const reply = await f.rpc('tools/call', { name: 'search_messages', arguments: { query: '', cursor: page.nextCursor } }); assert.ok(Buffer.byteLength(JSON.stringify(reply)) <= page.limits.responseBytes); page = reply.result.structuredContent; messages.push(...page.messages); }
+  assert.deepEqual(messages, frozen); assert.equal(new Set(messages.map(m => m.reference)).size, 65);
+  assert.equal((await callQuery(f, 'search_messages', { query: '' })).messages[0].reference, 'inserted');
+  f.s.archive.ingestHistory({ chats: Array.from({ length: 55 }, (_, i) => ({ id: 'candidate-' + i + '@lid', subject: 'same' })), messages: [] });
+  const first = await callQuery(f, 'find_conversations', { query: 'same' }); assert.ok(first.nextCursor);
+  f.s.archive.ingestHistory({ chats: [{ id: 'new@lid', subject: 'same' }], messages: [] });
+  const tail = await callQuery(f, 'find_conversations', { query: 'same', cursor: first.nextCursor });
+  assert.equal(first.conversations.length + tail.conversations.length, 55); assert.equal(tail.nextCursor, null);
+});
+
+test('MCP cursor recusa operação filtros assinatura expiração geração e restart', async t => {
+  const f = await mcpFixture(t);
+  for (let i = 0; i < 51; i++) f.s.writeMessage({ reference: 'cursor-' + i, conversationId: 'cursor@lid', conversationName: null, text: 'cursor', originalTimestamp: '2026-01-01T00:00:00Z' });
+  const page = await callQuery(f, 'search_messages', { query: '' }); assert.ok(page.nextCursor);
+  for (const [name, args] of [['search_messages', { query: 'other', cursor: page.nextCursor }], ['find_conversations', { query: '', cursor: page.nextCursor }], ['search_messages', { query: '', cursor: page.nextCursor + 'x' }]] as const) { const reply = await f.rpc('tools/call', { name, arguments: args }); assert.ok(reply.result?.isError || reply.error); }
+  f.s.archiveDb.prepare('UPDATE query_snapshots SET expires_at=0 WHERE id=?').run(page.snapshotId);
+  assert.ok((await f.rpc('tools/call', { name: 'search_messages', arguments: { query: '', cursor: page.nextCursor } })).result.isError);
+  const next = await callQuery(f, 'search_messages', { query: '' });
+  rotateMcpToken(f.s.authDb, join(f.dir, 'rotated-query'));
+  const token = readFileSync(join(f.dir, 'rotated-query'), 'utf8').trim();
+  const r = await fetch(f.base + '/mcp', { method: 'POST', headers: { ...f.headers, Authorization: 'Bearer ' + token }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_messages', arguments: { query: '', cursor: next.nextCursor } } }) });
+  const reply = JSON.parse((await r.text()).split('data: ')[1].split('\n')[0]); assert.ok(reply.result?.isError || reply.error);
+  assert.equal((f.s.archiveDb.prepare("SELECT count(*) AS n FROM query_snapshots WHERE session LIKE 'mcp:%'").get() as { n: number }).n, 0);
+});
+
+test('MCP mensagem excessiva retorna limite sem cortar evidência nem avançar', async t => {
+  const f = await mcpFixture(t);
+  f.s.writeMessage({ reference: 'oversized', conversationId: 'size@lid', conversationName: null, text: 'z'.repeat(40000), originalTimestamp: '2026-01-01T00:00:00Z' });
+  const reply = await f.rpc('tools/call', { name: 'search_messages', arguments: { query: '' } });
+  assert.equal(reply.result.isError, true); const error = reply.result.structuredContent;
+  assert.equal(error.code, 'response_limit'); assert.ok(error.requiredBytes > error.responseBytes); assert.equal(error.ordinal, 0); assert.ok(error.nextCursor); assert.match(error.alternative, /site|export/i);
+  assert.ok(Buffer.byteLength(JSON.stringify(reply)) <= error.responseBytes);
+  const retry = await f.rpc('tools/call', { name: 'search_messages', arguments: { query: '', cursor: error.nextCursor } }); assert.equal(retry.result.structuredContent.ordinal, 0);
+});
+
+test('MCP bloqueia buffer após restrição e mantém requests paralelos isolados', async t => {
+  const f = await mcpFixture(t), key = { remoteJid: 'buffer@lid', id: 'secret', fromMe: false };
+  f.s.archive.ingestHistory({ messages: [{ key, message: { conversation: 'private buffer' } }, { key: { remoteJid: 'safe@lid', id: 'safe', fromMe: false }, message: { conversation: 'safe buffer' } }] });
+  const original = f.s.archive.searchMessages;
+  f.s.archive.searchMessages = args => { const page = original(args); if (args.terms.includes('private')) queueMicrotask(() => f.s.archive.ingestHistory({ messages: [{ key: { ...key, isViewOnce: true }, message: { conversation: 'restricted' } }] })); return page; };
+  const results = await Promise.allSettled([callQuery(f, 'search_messages', { query: 'private' }), callQuery(f, 'search_messages', { query: 'safe' })]);
+  assert.equal(results[0].status, 'rejected'); assert.equal(results[1].status, 'fulfilled');
+  if (results[1].status === 'fulfilled') assert.equal(results[1].value.messages[0].text, 'safe buffer');
+  f.s.archive.searchMessages = original;
+});
+
 test('MCP candidatos preservam homônimos grupo e identidades recebidas', async t => {
   const f = await mcpFixture(t);
   f.s.archive.ingestHistory({ chats: ['1@lid', '1@s.whatsapp.net', '2@g.us'].map(id => ({ id, subject: 'Homônimo' })), messages: [] });
