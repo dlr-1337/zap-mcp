@@ -68,7 +68,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ### Phase 3: Consulta e arquivos reais no Codex
 
-**Goal:** O Codex instalado do usuário consegue consultar o mesmo acervo privado por MCP somente leitura e receber ou baixar anexos com integridade verificável.
+**Goal:** As a proprietário do acervo privado, I want to consultar no Codex instalado o mesmo acervo privado por MCP somente leitura e receber ou baixar anexos com integridade verificável, so that eu possa recuperar e conferir conversas e originais arquivados.
 **Mode:** mvp
 **Depends on**: Phase 2
 **Requirements**: MCP-01, MCP-02, MCP-03, MCP-04, MCP-05
