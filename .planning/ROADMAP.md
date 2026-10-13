@@ -101,7 +101,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 3. A restauração em diretório limpo recupera mensagens, índice de busca e binários com contagens/integridade/hash conferíveis e permite consultar/exportar o acervo offline pelo site e MCP sem iniciar um segundo coletor. A validade da sessão WhatsApp restaurada é avaliada separadamente, com a instância original parada antes de eventual reconexão.
 4. Com uma conversa real conhecida, o proprietário completa “encontrar João, localizar orçamento, ler contexto e conferir anexo” no site e no Codex instalado, distingue proposta de confirmação e confere evidências ou limitações. O fluxo permanece verificável no acervo restaurado; pareamento isolado ou dados sintéticos não substituem esse aceite.
 
-**Plans**: 0 (não planejados)
+**Plans**: 6 (quatro concluídos; implantação real e aceite pendentes)
 **Wave 1**
 - [x] 04-01-PLAN.md
 
@@ -112,7 +112,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 - [x] 04-03-PLAN.md
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-04-PLAN.md
+- [x] 04-04-PLAN.md
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 04-05-PLAN.md
@@ -140,6 +140,6 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
 | 3. Consulta e arquivos reais no Codex | 4/4 | Complete    | 2026-10-12 |
-| 4. Operação e restauração na VPS | 3/6 | In Progress | - |
+| 4. Operação e restauração na VPS | 4/6 | Aguardando implantação real | - |
 
-**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. Status de todos: Pending. Planos ainda não criados; progresso de execução: 0%.
+**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. 28 requisitos concluídos nas fases 1–3; OPS-01 a OPS-04 permanecem pendentes. O SUMMARY halted de 04-05 registra uma de duas tarefas e não conclui esse plano.

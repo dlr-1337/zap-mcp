@@ -5,15 +5,15 @@ current_phase_name: Operação e restauração na VPS
 current_plan: 5
 status: executing
 stopped_at: 04-05-01 verified; 04-05-02 awaits temporary SSH confirmation and real gates
-last_updated: "2026-10-13T02:53:01.394Z"
-last_activity: 2026-10-12
-last_activity_desc: Phase 4 planning complete
-state_head: 781027180ae2bd0d7e8ceddfd1c65df04b7d04c8
+last_updated: "2026-10-13T03:57:30.888Z"
+last_activity: 2026-10-13
+last_activity_desc: Local deployment verified and reviewed; real migration awaits SSH confirmation
+state_head: 083366e667c543558ebb32750ff879bcd975fab7
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 23
-  completed_plans: 22
+  completed_plans: 21
   percent: 75
 ---
 
@@ -30,18 +30,18 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 
 ## Current Position
 
-Phase: 4 (Operação e restauração na VPS) — READY TO EXECUTE
+Phase: 4 (Operação e restauração na VPS) — AGUARDANDO IMPLANTAÇÃO REAL
 Current Plan: 5
 Total Plans in Phase: 6
 Status: Executing
-Last activity: 2026-10-12 — Phase 4 planning complete
+Last activity: 2026-10-13 — Local deployment verified and reviewed; real migration awaits SSH confirmation
 
-Progress: [████████░░] 75% — 3/4 fases; 17/17 planos definidos concluídos
+Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem apenas uma de duas tarefas e permanece em checkpoint; 04-06 não foi iniciado.
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17
+- Total plans completed: 21
 - Average duration: Não consolidada; plano07 teve piloto continuado
 - Total execution time:71min registrados nos planos01–06, além do piloto continuado01–07
 
@@ -52,7 +52,7 @@ Progress: [████████░░] 75% — 3/4 fases; 17/17 planos defin
 | 1 | 7 | - | - |
 | 2 | 6 | - | - |
 | 03 | 4 | - | - |
-| 4 | 0 | 0 | - |
+| 4 | 4 | 65min | 16min15s |
 
 **Recent Trend:**
 - Last 5 plans:01-03,01-04,01-05,01-06,01-07
@@ -126,6 +126,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: PR #3 integrado por merge commit905028a; CI da main38314994967 aprovado. Checkout main sincronizado, histórico original protegido no backup local; código de execução/pins/serviço/dados privados preservados. Próxima capacidade permanece fase4.
 - [Phase 04]: Plan04-04 implementa pull cifrado com age e ACK apos restore; teste PN/LID corrigido por reserva proporcional, suite padrao239/239. Backup externo e OPS seguem pendentes da implantacao real.
 - [Phase 04]: 04-05-01 pronto: suite244/244 e Docker nao root/helper restrito conferidos. 04-05-02 aguarda SSH autorizado, configs privadas e backup externo real; fonte intacta e fase06 nao iniciada.
+- [Phase 04]: Predeployment review converged clean30files; six findings fixed. Final source ad9942b:257/257 standard tests, rebuilt nonroot Docker image Node24/FTS imports passed. Real05-02 and06 remain pending SSH confirmation and operational evidence.
 
 ### Pending Todos
 
