@@ -6,7 +6,8 @@ import { randomUUID } from 'node:crypto';
 import type { Archive } from './archive.js';
 import QRCode from 'qrcode';
 import { mediaDispatcher, type MediaJob } from './media.js';
-import { assertCollectorReady } from './backup.js';
+import { assertCollectorReady, isRestoredProfile } from './backup.js';
+import { consumePromotionPermit, authorizePromotedCollector, type PromotionPermit } from './promotion.js';
 
 function processStart(pid: number) {
   const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
@@ -99,10 +100,11 @@ export type Clock = { now(): number; setTimeout(fn: () => void, ms: number): Ret
 const realClock: Clock = { now: Date.now, setTimeout, clearTimeout, random: Math.random };
 const silent: SocketConfig['logger'] = { level: 'silent', child: () => silent, trace() {}, debug() {}, info() {}, warn() {}, error() {} };
 
-export function createCollector({ authDb, archive, lock, onStatus = () => {}, socketFactory, newProfile = false, clock = realClock }: { authDb: Database.Database; archive: Archive; lock: ServiceLock; onStatus?: () => void; socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock }) {
+export function createCollector({ authDb, archive, lock, onStatus = () => {}, socketFactory, newProfile = false, clock = realClock, promotionPermit }: { authDb: Database.Database; archive: Archive; lock: ServiceLock; onStatus?: () => void; socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock; promotionPermit?: PromotionPermit }) {
   lock.assert();
   if (dirname(resolve(authDb.name)) !== lock.dir || dirname(resolve(archive.db.name)) !== lock.dir) throw Error('Bancos fora da trava exclusiva');
-  if (!socketFactory) { assertCollectorReady(lock.dir, authDb); socketFactory = makeWASocket; }
+  const realSocket = !socketFactory;
+  if (realSocket) { assertCollectorReady(lock.dir, authDb); socketFactory = makeWASocket; }
   lock.claimCollector();
   let socket: Socket | undefined, generation = 0, stopped = false, state: CollectorState = 'connecting', diagnostic: string | null = null;
   let downloads = new AbortController();
@@ -127,15 +129,16 @@ export function createCollector({ authDb, archive, lock, onStatus = () => {}, so
       retryAttempt++; state = 'reconnecting'; diagnostic = 'Aguardando tentativa limitada de reconexão';
       const wait = Math.min(60_000, 1000 * 2 ** (retryAttempt - 1) * (1 + clock.random() * 0.5));
       retryAt = clock.now() + wait;
-      retry = clock.setTimeout(() => {
+      retry = clock.setTimeout(() => { void (async () => {
         retry = undefined; retryAt = null;
         if (stopped) return;
-        try { connect(); } catch { try { disconnect(503); } catch { fail(); } }
-      }, wait);
+        try { if (realSocket && isRestoredProfile(lock.dir, authDb)) promotionPermit = await authorizePromotedCollector(lock.dir, authDb); if (!stopped) connect(); } catch { try { disconnect(503); } catch { fail(); } }
+      })(); }, wait);
     }
     onStatus();
   }
   function connect() {
+    if (realSocket && isRestoredProfile(lock.dir, authDb)) consumePromotionPermit(promotionPermit, lock.dir, authDb);
     const current = ++generation; clearQr(); state = 'connecting';
     const config: Parameters<typeof makeWASocket>[0] = { auth: { creds: JSON.parse(JSON.stringify(auth.state.creds, BufferJSON.replacer), BufferJSON.reviver), keys: {
       get: (type, ids) => { if (current !== generation || stopped) throw Error('Socket expirado'); return auth.state.keys.get(type, ids); },

@@ -41,10 +41,13 @@ test('deadline deixa writer e trava intactos e aborta recursos', async t => {
 test('coletor inválido preserva consulta com diagnóstico privado', async t => {
   const dataDir = mkdtempSync(join(tmpdir(), 'zap-operation-'));
   const s = createService({ dataDir });
+  await s.setPassword('senha diagnóstico fixture');
   assert.equal(typeof (s as any).enableCollector, 'function', 'collector failure must keep archive available');
   await (s as any).enableCollector();
   const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening'); t.after(async () => { await mShutdown(server, s); rmSync(dataDir, { recursive: true }); });
-  assert.equal((await fetch(`http://127.0.0.1:${(server.address() as any).port}/api/session`)).status, 200);
+  const base = `http://127.0.0.1:${(server.address() as any).port}`, challenge = await fetch(base + '/api/session'), csrfToken = (await challenge.json()).csrfToken;
+  const login = await fetch(base + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'senha diagnóstico fixture', csrfToken }) }); assert.equal(login.status, 200);
+  const status = await fetch(base + '/api/status', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } }); assert.equal(status.status, 200); const state = await status.json(); assert.equal(state.collectorEnabled, false); assert.match(state.diagnostic, /offline/);
   assert.equal(s.archive.getCoverage().uniqueMessages, 0);
 });
 async function mShutdown(server: import('node:http').Server, s: ReturnType<typeof createService>) { const m = await operations(); await m.shutdownService({ server, close: () => s.close() }); }
@@ -80,7 +83,7 @@ async function operationFixture(t: { after(fn: () => unknown): void }) {
 
 test('snapshot coordenado retoma antes da rede e serializa operações', async t => {
   const m = await operations(), f = await operationFixture(t); assert.equal(typeof m.coordinatedSnapshot, 'function', 'stop snapshot resume must exist');
-  await m.coordinatedSnapshot(f.config, { controller: f.controller, fault: async (stage: string) => { if (stage === 'stopped') await assert.rejects(m.coordinatedSnapshot(f.config, { controller: f.controller }), /ativo|operação/); }, transfer: async () => { f.events.push('network'); assert.equal((await f.controller.inspect()).running, true); } });
+  await m.coordinatedSnapshot(f.config, { controller: f.controller, fault: async (stage: string) => { if (stage === 'stopped') await assert.rejects(m.coordinatedSnapshot(f.config, { controller: f.controller }), /ativo|operação/); }, transfer: async () => { f.events.push('network'); assert.equal((await f.controller.inspect()).running, true); await assert.rejects(m.coordinatedSnapshot(f.config, { controller: f.controller }), /ativo|operação/); } });
   assert.deepEqual(f.events, ['stop', 'start:offline', 'network']); assert.equal(existsSync(join(f.config.destination, 'manifest.json')), true);
 });
 
@@ -90,6 +93,18 @@ test('snapshot falho ou stop ambíguo retoma consulta sem publicar backup', asyn
   assert.equal((await f.controller.inspect()).running, true); assert.equal(existsSync(f.config.destination), false);
   const broken = { ...f.controller, async stop() { throw Error('stop denied'); } };
   await assert.rejects(m.coordinatedSnapshot(f.config, { controller: broken }), /stop denied/); assert.equal(existsSync(f.config.destination), false);
+});
+
+test('coleta sem gate retoma offline e falha de retomada exige recovery', async t => {
+  const m = await operations(), f = await operationFixture(t); f.config.priorMode = 'collect';
+  await m.coordinatedSnapshot(f.config, { controller: f.controller }); assert.equal(f.events.at(-1), 'start:offline');
+  const active = await operationFixture(t), collecting = { ...active.controller, async inspect() { return { ...(await active.controller.inspect()), mode: 'collect' }; } }; active.config.priorMode = 'collect';
+  await m.coordinatedSnapshot(active.config, { controller: collecting }); assert.equal(active.events.at(-1), 'start:offline'); assert.match(JSON.parse(readFileSync(join(active.config.operationDir, 'journal.json'), 'utf8')).diagnostic, /não autorizada/);
+  f.config.destination = join(f.base, 'next'); f.config.priorMode = 'offline';
+  const failed = { ...f.controller, async start() { throw Error('supervisor unavailable'); } };
+  await assert.rejects(m.coordinatedSnapshot(f.config, { controller: failed }), /Retomada falhou/);
+  assert.equal(JSON.parse(readFileSync(join(f.config.operationDir, 'journal.json'), 'utf8')).stage, 'resume-failed');
+  await assert.rejects(m.coordinatedSnapshot(f.config, { controller: f.controller }), /interrompida/); assert.equal((await m.recoverOperation(f.config, { controller: f.controller })).mode, 'offline');
 });
 
 test('SIGKILL em cada estágio de snapshot exige recovery com mutex órfão', async t => {

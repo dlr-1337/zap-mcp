@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
+import { once } from 'node:events';
 import { acquireServiceLock, createCollector, createAuthState, type Collector, type SocketFactory, type Clock } from './whatsapp.js';
 import { startMediaWorker, openVerifiedAttachment, streamVerifiedAttachment, reconcileMedia, classifyPreview } from './media.js';
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
@@ -14,6 +15,8 @@ import { createExportManager } from './export.js';
 import { createMcpAdapter, rotateMcpToken } from './mcp.js';
 import { createTransport, transportFromEnv, type TransportConfig } from './transport.js';
 import { shutdownService, readOperationConfig, coordinatedSnapshot, recoverOperation } from './operation.js';
+import { authorizePromotedCollector, promoteProfile, createSourceFence, type PromotionPermit } from './promotion.js';
+import { isRestoredProfile } from './backup.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -231,7 +234,7 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
       return id;
     }),
     async setPassword(password: string) { const sessions = authDb.prepare('SELECT id,data FROM web_sessions').all() as { id: string; data: string }[]; await setOwnerPassword(authDb, password); for (const row of sessions) exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([row.id, JSON.parse(row.data).ownerGeneration])).digest('hex')); archiveDb.exec('DELETE FROM query_snapshots'); },
-    startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
+    startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock; promotionPermit?: PromotionPermit } = {}) {
       if (closing || closed) throw Error('Serviço encerrando');
       lock.assert(); if (collector) throw Error('Coletor já ativo');
       collector = createCollector({ authDb, archive, lock, ...options });
@@ -240,15 +243,16 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
       return collector;
     },
     async enableCollector() {
-      try { this.startCollector(); return true; }
+      try { const promotionPermit = isRestoredProfile(dataDir, authDb) ? await authorizePromotedCollector(dataDir, authDb) : undefined; this.startCollector({ promotionPermit }); return true; }
       catch { collectorFailure = 'Coleta indisponível; confira backup, exclusividade e sessão. Consulta offline preservada'; return false; }
     },
     close() {
       if (closing || closed) return closing;
-      clearInterval(querySweep); for (const stream of streams) stream.destroy();
+      clearInterval(querySweep);
+      const streamCloses = [...streams].map(stream => { const drained = new Promise<void>(done => stream.once('close', done)); stream.destroy(); return drained; });
       const finish = () => { archiveDb.close(); authDb.close(); lock.release(); closed = true; };
-      if (collector) { closing = (async () => { await collector!.stop(); await mediaWorker?.stop(); await collector!.drain(); await exports.close(); finish(); })(); return closing; }
-      const exporting = exports.close(); if (exporting) { closing = exporting.then(finish); return closing; } finish();
+      if (collector) { closing = (async () => { await collector!.stop(); await mediaWorker?.stop(); await collector!.drain(); await exports.close(); await Promise.all(streamCloses); finish(); })(); return closing; }
+      const exporting = exports.close(); if (exporting || streamCloses.length) { closing = Promise.all([exporting, ...streamCloses]).then(finish); return closing; } finish();
     }
   };
 }
@@ -256,11 +260,11 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
 async function cli() {
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
-  if (['operation-snapshot', 'operation-recover'].includes(process.argv[2])) {
+  if (['operation-snapshot', 'operation-recover', 'promote-profile', 'fence-source'].includes(process.argv[2])) {
     if (process.argv.length !== 3 || !process.env.ZAP_OPERATION_CONFIG_FILE) throw Error('Configuração operacional privada obrigatória');
     const config = readOperationConfig(process.env.ZAP_OPERATION_CONFIG_FILE);
     if (resolve(config.dataDir) !== resolve(dataDir)) throw Error('Configuração de outro perfil');
-    if (process.argv[2] === 'operation-snapshot') await coordinatedSnapshot(config); else await recoverOperation(config);
+    if (process.argv[2] === 'operation-snapshot') await coordinatedSnapshot(config); else if (process.argv[2] === 'operation-recover') await recoverOperation(config); else if (process.argv[2] === 'fence-source') await createSourceFence(config as import('./promotion.js').SourceFenceConfig); else await promoteProfile(config as import('./promotion.js').PromotionConfig);
     console.log('Operação privada concluída; aceite externo não presumido'); return;
   }
   if (process.argv[2] === 'mcp-token-rotate') {
@@ -287,13 +291,14 @@ async function cli() {
       await service.setPassword(input.replace(/\r?\n$/, ''));
     } finally { service.close(); }
   } else if (process.argv[2] === 'serve') {
-    if (collect) await service.enableCollector();
     const port = Number(process.env.ZAP_PORT ?? 3000);
     if (!Number.isInteger(port) || port < 1 || port > 65535) { await service.close(); throw Error('ZAP_PORT inválido'); }
-    const host = bindHost(process.env.ZAP_BIND_HOST, transport);
+    let host: string; try { host = bindHost(process.env.ZAP_BIND_HOST, transport); } catch (error) { await service.close(); throw error; }
     const timeoutMs = Number(process.env.ZAP_SHUTDOWN_MS ?? 30_000);
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120_000) { await service.close(); throw Error('Prazo inválido'); }
+    if (collect) await service.enableCollector();
     const server = service.app.listen(port, host);
+    try { await once(server, 'listening'); } catch { await service.close(); throw Error('Listener privado indisponível'); }
     const shutdown = () => { void shutdownService({ server, close: () => service.close(), timeoutMs }).catch(() => { console.error('Shutdown incompleto; recovery obrigatório'); process.exit(1); }); };
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, shutdown);
   } else { service.close(); throw Error('Comando inválido'); }

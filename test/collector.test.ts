@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { createService } from '../src/main.js';
 import { spawnSync, spawn } from 'node:child_process';
 import { once, EventEmitter } from 'node:events';
+import { createServer } from 'node:http';
 import type { Clock, SocketFactory } from '../src/whatsapp.js';
 import { generateRegistrationNode, proto, DEFAULT_CONNECTION_CONFIG } from '@whiskeysockets/baileys';
 
@@ -32,13 +33,16 @@ test('processos disputam writer e morte abrupta permite retomar auth persistida'
   } finally { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); rmSync(dir, { recursive: true }); }
 });
 
-test('trava incompleta falha fechada e --collect real exige backup conferido', () => {
+test('trava incompleta falha fechada e --collect sem backup conserva consulta offline', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zap-gate-')); mkdirSync(join(dir, 'service.lock'));
+  let child: ReturnType<typeof spawn> | undefined;
   try {
     assert.throws(() => createService({ dataDir: dir }), /trava|Trava/); rmSync(join(dir, 'service.lock'), { recursive: true });
-    const result = spawnSync(process.execPath, ['dist/src/main.js', 'serve', '--collect'], { env: { ...process.env, ZAP_DATA_DIR: dir }, encoding: 'utf8', timeout: 2000 });
-    assert.match(result.stderr, /cópia|backup/); assert.notEqual(result.status, 0);
-  } finally { rmSync(dir, { recursive: true }); }
+    const probe = createServer(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening'); const port = (probe.address() as any).port; await new Promise<void>(r => probe.close(() => r()));
+    child = spawn(process.execPath, ['dist/src/main.js', 'serve', '--collect'], { env: { ...process.env, ZAP_DATA_DIR: dir, ZAP_PORT: String(port) }, stdio: 'ignore' });
+    for (let i = 0; ; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/api/session`)).status === 200) break; } catch {} if (i === 100) throw Error('Consulta não iniciou'); await new Promise(r => setTimeout(r, 20)); }
+    assert.equal(child.exitCode, null); const exit = once(child, 'exit'); child.kill('SIGTERM'); assert.equal((await exit)[0], 0);
+  } finally { child?.kill('SIGKILL'); rmSync(dir, { recursive: true }); }
 });
 
 export function fakeSocket() {

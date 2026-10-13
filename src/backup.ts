@@ -6,6 +6,7 @@ import { createHash, createHmac, timingSafeEqual, randomUUID } from 'node:crypto
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { acquireServiceLock } from './whatsapp.js';
+import { assertPromotionAuthorization } from './promotion.js';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const allowed = new RegExp(`^(archive\\.sqlite|auth\\.sqlite|media/${uuid}\\.bin|media/${uuid}\\.${uuid}\\.manifest)$`);
@@ -62,7 +63,7 @@ function evidence(db: Database.Database): Evidence {
   const schema = db.prepare('SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name').all();
   return { schema: Number(db.pragma('user_version', { simple: true })), counts, schemaHash: createHash('sha256').update(JSON.stringify(schema)).digest('hex') };
 }
-function profileReadonly(db: Database.Database) {
+export function profileReadonly(db: Database.Database) {
   const row = db.prepare('SELECT creds FROM whatsapp_profile WHERE id=1').get() as { creds: string } | undefined;
   // BufferJSON encodes buffers as {type: Buffer,data: base64}; only the public identity is hashed.
   const pub = row && JSON.parse(row.creds).signedIdentityKey?.public;
@@ -86,11 +87,12 @@ function publish(staging: string, dest: string) {
   try { renameSync(staging, dest); sync(dirname(dest), true); }
   catch (error) { if (existsSync(dest) && readdirSync(dest).length === 0) rmSync(dest); throw error; }
 }
-export async function createSnapshot({ dataDir, destination, fault }: { dataDir: string; destination: string; fault?: Fault }) {
+export async function createSnapshot({ dataDir, destination, fault, signal }: { dataDir: string; destination: string; fault?: Fault; signal?: AbortSignal }) {
   const source = privatePath(dataDir), dest = privatePath(destination, false);
   if (dest.startsWith(source + '/')) throw Error('Snapshot deve ficar fora do perfil fonte');
   const lock = acquireServiceLock(source), databases: Database.Database[] = []; let staging: string | undefined;
   try {
+    signal?.throwIfAborted();
     const archive = openDb(join(source, 'archive.sqlite')); databases.push(archive);
     const auth = openDb(join(source, 'auth.sqlite')); databases.push(auth);
     const manifest: Manifest = { version: 1, profile: profileReadonly(auth), createdAt: new Date().toISOString(), databases: { 'archive.sqlite': evidence(archive), 'auth.sqlite': evidence(auth) }, files: [] };
@@ -110,13 +112,13 @@ export async function createSnapshot({ dataDir, destination, fault }: { dataDir:
     checkSpace(dirname(dest), dbBytes + paths.reduce((n, f) => n + BigInt(f.size), 0n));
     staging = stage(dest).staging;
     for (const [index, name] of ['archive.sqlite','auth.sqlite'].entries()) {
-      await databases[index].backup(join(staging, name), { progress: () => { lock.assert(); checkSpace(dirname(dest), 0n); return 100; } });
+      signal?.throwIfAborted(); await databases[index].backup(join(staging, name), { progress: () => { signal?.throwIfAborted(); lock.assert(); checkSpace(dirname(dest), 0n); return 100; } });
       const copy = new Database(join(staging, name)); try { copy.pragma('journal_mode=DELETE'); } finally { copy.close(); }
       chmodSync(join(staging, name), 0o600); sync(join(staging, name)); manifest.files.push({ path: name, ...fileDigest(join(staging, name)) }); await fault?.('database');
     }
-    for (const file of paths) { checkSpace(dirname(dest), BigInt(file.size)); const copy = fileDigest(join(source, file.path), join(staging, file.path)); if (JSON.stringify(copy) !== JSON.stringify({ size: file.size, sha256: file.sha256 })) throw Error('Cópia divergente'); manifest.files.push(file); await fault?.('file'); }
+    for (const file of paths) { signal?.throwIfAborted(); checkSpace(dirname(dest), BigInt(file.size)); const copy = fileDigest(join(source, file.path), join(staging, file.path)); if (JSON.stringify(copy) !== JSON.stringify({ size: file.size, sha256: file.sha256 })) throw Error('Cópia divergente'); manifest.files.push(file); await fault?.('file'); }
     writeFileSync(join(staging, 'manifest.json'), JSON.stringify(manifest), { mode: 0o600, flag: 'wx' }); sync(join(staging, 'manifest.json'));
-    validateSnapshot(staging); await fault?.('verified'); lock.assert(); publish(staging, dest); staging = undefined;
+    validateSnapshot(staging); await fault?.('verified'); signal?.throwIfAborted(); lock.assert(); publish(staging, dest); staging = undefined;
     return { files: manifest.files.length, messages: manifest.databases['archive.sqlite'].counts.messages };
   } finally { for (const db of databases) db.close(); if (staging) rmSync(staging, { recursive: true }); lock.release(); }
 }
@@ -154,8 +156,9 @@ function signingSecret(db: Database.Database) {
 }
 export function assertCollectorReady(dataDir: string, authDb: Database.Database) {
   const source = privatePath(dataDir);
-  if (existsSync(join(source, 'restored.json'))) throw Error('Perfil restaurado é somente consulta offline');
   if (dirname(resolve(authDb.name)) !== source) throw Error('Perfil fora da trava');
+  if (isRestoredProfile(source, authDb)) { assertPromotionAuthorization(source, authDb); return; }
+  if (authDb.prepare("SELECT value FROM web_config WHERE key='collector-fenced'").get()) throw Error('Source cercada; coleta revogada por handoff');
   const receipt = JSON.parse(readPrivate(join(source, 'backup-receipt.json'))) as { proof: string; mac: string };
   if (Object.keys(receipt).sort().join(',') !== 'mac,proof' || typeof receipt.proof !== 'string' || typeof receipt.mac !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.mac)) throw Error('Recibo de restore inválido');
   const expected = createHmac('sha256', signingSecret(authDb)).update(receipt.proof).digest();
@@ -165,6 +168,7 @@ export function assertCollectorReady(dataDir: string, authDb: Database.Database)
   const snapshot = validateSnapshot(proof.snapshotDir);
   if (snapshot.digest !== proof.manifestHash || snapshot.manifest.profile !== proof.profile) throw Error('Snapshot do recibo divergente');
 }
+export function isRestoredProfile(dataDir: string, db: Database.Database) { return existsSync(join(dataDir, 'restored.json')) || existsSync(join(dataDir, 'manifest.json')) || Boolean(db.prepare("SELECT value FROM web_config WHERE key='restore-generation'").get()); }
 async function verifyOffline(dataDir: string, manifest: Manifest) {
   const { createService } = await import('./main.js'); const s = createService({ dataDir });
   const server = s.app.listen(0, '127.0.0.1');
@@ -203,8 +207,8 @@ export async function verifyBackup({ dataDir, snapshotDir, destination, fault }:
   const source = privatePath(dataDir), lock = acquireServiceLock(source); let auth: Database.Database | undefined;
   let temp: string | undefined;
   try {
-    if (existsSync(join(source, 'restored.json'))) throw Error('Perfil restaurado é somente consulta offline');
-    auth = openDb(join(source, 'auth.sqlite')); const snapshot = validateSnapshot(snapshotDir);
+    auth = openDb(join(source, 'auth.sqlite')); if (isRestoredProfile(source, auth)) throw Error('Perfil restaurado é somente consulta offline');
+    const snapshot = validateSnapshot(snapshotDir);
     if (profileReadonly(auth) !== snapshot.manifest.profile) throw Error('Snapshot de outro perfil');
     await restoreSnapshot({ snapshotDir, destination }); await verifyOffline(destination, snapshot.manifest);
     // Receipt is minted only after offline HTTP/download checks and a final snapshot recheck.
@@ -227,7 +231,7 @@ export function preflight(dataDir: string) {
   return { ready: true, accountValidated: false };
 }
 export async function restoreSnapshot({ snapshotDir, destination, fault }: { snapshotDir: string; destination: string; fault?: Fault }) {
-  const { manifest } = validateSnapshot(snapshotDir), dest = privatePath(destination, false);
+  const { manifest, digest } = validateSnapshot(snapshotDir), dest = privatePath(destination, false);
   if (dest.startsWith(resolve(snapshotDir) + '/')) throw Error('Restore deve ficar fora do snapshot');
   checkSpace(dirname(dest), manifest.files.reduce((n, f) => n + BigInt(f.size), 0n));
   const { staging } = stage(dest);
@@ -235,8 +239,45 @@ export async function restoreSnapshot({ snapshotDir, destination, fault }: { sna
     for (const f of manifest.files) { checkSpace(dirname(dest), BigInt(f.size)); const digest = fileDigest(join(resolve(snapshotDir), f.path), join(staging, f.path)); if (digest.size !== f.size || digest.sha256 !== f.sha256) throw Error('Cópia divergente'); await fault?.('file'); }
     fileDigest(join(resolve(snapshotDir), 'manifest.json'), join(staging, 'manifest.json'));
     validateSnapshot(staging);
+    const auth = new Database(join(staging, 'auth.sqlite'));
+    try { auth.pragma('synchronous=FULL'); auth.transaction(() => {
+      for (const [key, value] of [['restore-generation', randomUUID()], ['restore-manifest', digest], ['restore-target', createHash('sha256').update(dest).digest('hex')]]) auth.prepare('INSERT OR REPLACE INTO web_config(key,value) VALUES(?,?)').run(key, value);
+    })(); } finally { auth.close(); }
+    sync(join(staging, 'auth.sqlite'));
     writeFileSync(join(staging, 'restored.json'), JSON.stringify({ offlineOnly: true }), { mode: 0o600, flag: 'wx' }); sync(join(staging, 'restored.json'));
     await fault?.('verified'); publish(staging, dest);
     return { files: manifest.files.length, messages: manifest.databases['archive.sqlite'].counts.messages };
   } finally { if (existsSync(staging)) rmSync(staging, { recursive: true }); }
+}
+
+export function checkPromotionTarget(dataDir: string, snapshotDir: string) {
+  const target = privatePath(dataDir), snapshot = validateSnapshot(snapshotDir);
+  const dbs: Database.Database[] = [];
+  try {
+    const auth = openDb(join(target, 'auth.sqlite')); dbs.push(auth);
+    if (!isRestoredProfile(target, auth) || profileReadonly(auth) !== snapshot.manifest.profile) throw Error('Destino não é restore deste perfil');
+    const originalAuth = openDb(join(snapshotDir, 'auth.sqlite')); dbs.push(originalAuth);
+    for (const table of ['web_owner', 'whatsapp_profile', 'whatsapp_keys']) {
+      const rows = (db: Database.Database) => db.prepare('SELECT * FROM ' + table).all().map(r => JSON.stringify(r)).sort();
+      if (JSON.stringify(rows(auth)) !== JSON.stringify(rows(originalAuth))) throw Error('Owner ou sessão divergente');
+    }
+    const targetArchive = openDb(join(target, 'archive.sqlite')), sourceArchive = openDb(join(snapshotDir, 'archive.sqlite')); dbs.push(targetArchive, sourceArchive);
+    if (JSON.stringify(evidence(targetArchive)) !== JSON.stringify(evidence(sourceArchive))) throw Error('SQL do destino divergente');
+    for (const { name } of sourceArchive.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]) {
+      const rows = (db: Database.Database) => db.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all().map(r => JSON.stringify(r)).sort();
+      if (JSON.stringify(rows(targetArchive)) !== JSON.stringify(rows(sourceArchive))) throw Error('Conteúdo do destino divergente');
+    }
+    for (const f of snapshot.manifest.files.filter(f => f.path.startsWith('media/'))) { const actual = fileDigest(join(target, f.path)); if (actual.size !== f.size || actual.sha256 !== f.sha256) throw Error('Original do destino divergente'); }
+    const generation = (auth.prepare("SELECT value FROM web_config WHERE key='restore-generation'").get() as { value: string } | undefined)?.value;
+    if (!generation) throw Error('Restore legado requer nova restauração offline');
+    return { manifestHash: snapshot.digest, profile: snapshot.manifest.profile, generation };
+  } finally { for (const db of dbs) db.close(); }
+}
+export async function verifyPromotionBackup({ dataDir, snapshotDir, destination }: { dataDir: string; snapshotDir: string; destination: string }) {
+  const lock = acquireServiceLock(privatePath(dataDir));
+  try {
+    const verified = checkPromotionTarget(dataDir, snapshotDir), snapshot = validateSnapshot(snapshotDir);
+    await restoreSnapshot({ snapshotDir, destination }); await verifyOffline(destination, snapshot.manifest);
+    lock.assert(); if (JSON.stringify(checkPromotionTarget(dataDir, snapshotDir)) !== JSON.stringify(verified)) throw Error('Destino mudou durante verificação'); return verified;
+  } finally { lock.release(); }
 }

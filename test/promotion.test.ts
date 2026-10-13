@@ -86,3 +86,29 @@ test('revogação persistida da source impede coletor mesmo com recibo válido',
   const f = await fixture(t); await verifyBackup({ dataDir: f.source, snapshotDir: f.config.snapshotDir, destination: join(f.base, 'source-check') });
   const s = createService({ dataDir: f.source }); try { s.authDb.prepare('INSERT INTO web_config(key,value) VALUES(?,?)').run('collector-fenced', JSON.stringify({ version: 1, generation: 'fixture' })); assert.throws(() => assertCollectorReady(f.source, s.authDb), /cercada|fenced/); } finally { await s.close(); }
 });
+
+test('handoff durável permite reboot do target sem notebook e bloqueia source e clones', async t => {
+  const m = await promotion(), f = await fixture(t), sourceOps = join(f.base, 'source-ops'); mkdirSync(sourceOps, { mode: 0o700 });
+  const targetDataDir = join(f.base, 'durable-target'), machineId = readFileSync('/etc/machine-id', 'utf8').trim();
+  const fence = await m.createSourceFence({ ...f.config, dataDir: f.source, operationDir: sourceOps, supervisor: f.config.source, targetDataDir, targetMachineId: machineId }, f.controller);
+  const snapshotDir = join(f.base, 'durable-snapshot'); await createSnapshot({ dataDir: f.source, destination: snapshotDir }); await restoreSnapshot({ snapshotDir, destination: targetDataDir });
+  const config = { ...f.config, dataDir: targetDataDir, snapshotDir, destination: snapshotDir, verificationDir: join(f.base, 'durable-verify'), supervisor: { ...f.config.supervisor, dataDir: targetDataDir, machineId }, source: { ...f.config.source, ssh: { host: 'unreachable.example', user: 'fixture', identityFile: '/does-not-exist', knownHostsFile: '/does-not-exist' } }, sourceFenceFile: fence.fenceFile, sourceFencePublicKey: fence.publicKey };
+  await m.promoteProfile(config, { targetController: f.controller });
+  const source = createService({ dataDir: f.source }); try { assert.deepEqual(source.authDb.prepare('SELECT * FROM web_owner').all(), f.owner); assert.throws(() => assertCollectorReady(f.source, source.authDb), /cercada/); } finally { await source.close(); }
+  const script = `import{mock}from'node:test';import{EventEmitter}from'node:events';import assert from'node:assert/strict';const b=await import('@whiskeysockets/baileys');const exports=Object.fromEntries(Object.entries(b).filter(([k])=>k!=='default'));let sockets=0;mock.module('@whiskeysockets/baileys',{namedExports:{...exports,makeWASocket:()=>{sockets++;return{ev:new EventEmitter(),end(){}}}},defaultExport:b.default});const{createService}=await import('./dist/src/main.js');for(let i=0;i<2;i++){const s=createService({dataDir:process.env.TARGET});assert.equal(await s.enableCollector(),true);assert.equal(sockets,i+1);assert.throws(()=>s.startCollector());await s.close()}console.log('independent restart');`;
+  const child = spawn(process.execPath, ['--experimental-test-module-mocks', '--input-type=module', '-e', script], { env: { ...process.env, TARGET: targetDataDir }, stdio: ['ignore', 'pipe', 'pipe'] }); let error = ''; child.stderr.on('data', b => error += b); assert.equal((await once(child, 'exit'))[0], 0, error);
+  const cloneDir = join(f.base, 'durable-clone'); await restoreSnapshot({ snapshotDir, destination: cloneDir }); writeFileSync(join(cloneDir, 'promotion.json'), readFileSync(join(targetDataDir, 'promotion.json')), { mode: 0o600 }); const clone = createService({ dataDir: cloneDir }); try { assert.throws(() => assertCollectorReady(cloneDir, clone.authDb), /path/); } finally { await clone.close(); }
+  const altered = JSON.parse(readFileSync(fence.fenceFile, 'utf8')); altered.signature = 'A'.repeat(86); writeFileSync(fence.fenceFile, JSON.stringify(altered)); config.verificationDir = join(f.base, 'wrong-fence'); await assert.rejects(m.promoteProfile(config, { targetController: f.controller }), /adulterado/);
+});
+
+test('SIGKILL no fence persistido permite retomar emissão sem religar source', async t => {
+  const m = await promotion();
+  for (const point of ['key', 'source-fenced', 'published', 'committed']) {
+    const f = await fixture(t), sourceOps = join(f.base, 'source-ops'); mkdirSync(sourceOps, { mode: 0o700 }); const config = { ...f.config, dataDir: f.source, operationDir: sourceOps, supervisor: f.config.source, targetDataDir: join(f.base, 'future-target'), targetMachineId: readFileSync('/etc/machine-id', 'utf8').trim() };
+    const script = `import{createSourceFence}from'./dist/src/promotion.js';const controller={async inspect(){return{running:false,autostart:false,pid:0,startTime:null,profileProcesses:0,mode:'offline',machineId:'0'.repeat(32)}}};await createSourceFence(JSON.parse(process.env.CONFIG),controller,async p=>{if(p===process.env.POINT){console.log('ready');await new Promise(()=>{setInterval(()=>{},1000)})}});`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, CONFIG: JSON.stringify(config), POINT: point }, stdio: ['ignore', 'pipe', 'pipe'] }); t.after(() => child.kill('SIGKILL'));
+    await new Promise<void>((accept, reject) => { const timer = setTimeout(() => reject(Error('source fence timeout')), 5000); child.stdout.on('data', b => { if (String(b).includes('ready')) { clearTimeout(timer); accept(); } }); child.once('exit', c => { clearTimeout(timer); reject(Error('source fence exited ' + c)); }); }); const exit = once(child, 'exit'); child.kill('SIGKILL'); await exit;
+    assert.equal((await m.createSourceFence(config, f.controller)).fenced, true);
+    const source = createService({ dataDir: f.source }); try { assert.deepEqual(source.authDb.prepare('SELECT * FROM web_owner').all(), f.owner); assert.throws(() => assertCollectorReady(f.source, source.authDb), /cercada/); } finally { await source.close(); }
+  }
+});
