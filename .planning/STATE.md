@@ -4,10 +4,10 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: 5
 status: executing
-stopped_at: 04-05-01 verified; 04-05-02 awaits temporary SSH confirmation and real gates
-last_updated: "2026-10-13T03:57:30.888Z"
+stopped_at: 04-05-02 executing: source fenced; final snapshot transfer in progress
+last_updated: "2026-10-13T13:54:38.626Z"
 last_activity: 2026-10-13
-last_activity_desc: Local deployment verified and reviewed; real migration awaits SSH confirmation
+last_activity_desc: Real deployment prepared; source fenced and final snapshot transfer in progress
 state_head: 083366e667c543558ebb32750ff879bcd975fab7
 progress:
   total_phases: 4
@@ -30,13 +30,13 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 
 ## Current Position
 
-Phase: 4 (Operação e restauração na VPS) — AGUARDANDO IMPLANTAÇÃO REAL
+Phase: 4 (Operação e restauração na VPS) — MIGRAÇÃO REAL EM ANDAMENTO
 Current Plan: 5
 Total Plans in Phase: 6
 Status: Executing
-Last activity: 2026-10-13 — Local deployment verified and reviewed; real migration awaits SSH confirmation
+Last activity: 2026-10-13 — Real deployment prepared; source fenced and final snapshot transfer in progress
 
-Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem apenas uma de duas tarefas e permanece em checkpoint; 04-06 não foi iniciado.
+Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem uma de duas tarefas concluída; a tarefa real está em execução, com snapshot final sendo transferido. 04-06 não foi iniciado.
 
 ## Performance Metrics
 
@@ -140,7 +140,7 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
 - Phase 4: resolver HTTPS/proxy/login web (Origin403/WINDOWS13) e revalidar consulta/download no endpoint permanente; piloto MCP local temporário encerrado.
-- 04-05-02: painel e dominio preparados; confirmacao especifica para cadastrar SSH temporario pendente por politica Computer Use. Configs privadas, transferencia e backup/restauracao reais ainda nao executados; nenhum OPS concluido.
+- 04-05-02: acesso operacional restrito e permanente funcionando; concessão temporária de root revogada. Runtime nativo, proxy/HTTPS/login e backup externo pré-migração com restauração verificados. Fonte finalmente fenced/parada; transferência do snapshot final em andamento. Consulta no acervo migrado, backup da VPS, restart/update, agenda e aceite final continuam pendentes; nenhum OPS concluído.
 
 ### Roadmap Evolution
 
@@ -154,10 +154,13 @@ Nenhum impedimento para iniciar o planejamento.
 | Cliente | Claude e eventual autenticação específica | v2 | 2026-10-10 | v1 |
 | Importação | Importador apenas se o piloto demonstrar lacuna essencial | v2 | 2026-10-10 | v1 |
 
+- [Phase 04]: Migração real em andamento: CI remoto aprovado no commit3d4ad72; runtime/dependências nativas verificados na VPS. SSH usa conexão compartilhada privada e host fixado; inventário filtra processos por UID antes de ler argumentos. Auth SQLite real maior que256KiB aceita após validar privacidade. Backup externo pré-migração recuperado/restaurado; chave independente permanece fora da VPS.
+- [Phase 04]: Proprietário informou não possuir a senha antiga. Novo segredo privado preparado exclusivamente para o site de destino, a ser aplicado após restore/promoção com target quieto e comparação do restante do perfil. Senha da fonte, sessão WhatsApp e acervo preservados.
+
 ## Session Continuity
 
 Last session: 2026-10-13T02:53:01.342Z
-Stopped at: 04-05-01 verified; 04-05-02 awaits temporary SSH confirmation and real gates
+Stopped at: 04-05-02 executing: source fenced; final snapshot transfer in progress
 Resume file: .planning/phases/04-opera-o-e-restaura-o-na-vps/04-05-SUMMARY.md
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
