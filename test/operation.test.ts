@@ -9,6 +9,8 @@ import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
 import { createService, bindHost } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
+import { createSnapshot, verifyBackup } from '../src/backup.js';
+import { createHash } from 'node:crypto';
 
 const operationPath = '../src/operation.js';
 async function operations() { const m = await import(operationPath).catch(() => null); assert.ok(m?.shutdownService, 'shutdown bounded must exist'); return m; }
@@ -120,4 +122,38 @@ test('SIGKILL em cada estágio de snapshot exige recovery com mutex órfão', as
     assert.equal((await m.recoverOperation(f.config, { controller })).recovered, true); assert.equal(readFileSync(state, 'utf8'), 'true');
     const reopened = createService({ dataDir: f.config.dataDir }); assert.equal((reopened.authDb.prepare('SELECT count(*) n FROM web_owner').get() as { n: number }).n, 1); await reopened.close();
   }
+});
+
+test('backup após A→B e recovery interrompido retomam release B inclusive collect', async t => {
+  const m = await operations();
+  for (const mode of ['offline', 'collect']) {
+    const f = await operationFixture(t), releaseA = 'a'.repeat(40), releaseB = 'b'.repeat(40);
+    if (mode === 'collect') {
+      const gate = join(f.base, 'gate'); await createSnapshot({ dataDir: f.config.dataDir, destination: gate });
+      await verifyBackup({ dataDir: f.config.dataDir, snapshotDir: gate, destination: join(f.base, 'gate-restored') });
+    }
+    let running = true, active = releaseB, activeMode = mode;
+    const starts: string[] = [];
+    const controller: any = { async stop() { running = false; }, async start(wantedMode: string, _: unknown, release: string = releaseA) { active = release; activeMode = wantedMode; starts.push(release); running = true; }, async inspect() { return { running, pid: running ? process.pid : 0, profileProcesses: running ? 1 : 0, autostart: false, startTime: running ? 'fixture' : null, machineId: 'fixture', mode: activeMode, release: running ? active : null }; } };
+    const config = { ...f.config, priorRelease: releaseA };
+    await m.coordinatedSnapshot(config, { controller });
+    assert.equal(active, releaseB); assert.equal(activeMode, mode); assert.deepEqual(starts, [releaseB]);
+    const journalFile = join(config.operationDir, 'journal.json'), journal = JSON.parse(readFileSync(journalFile, 'utf8'));
+    assert.equal(journal.priorRelease, releaseB);
+    journal.stage = 'stopped'; writeFileSync(journalFile, JSON.stringify(journal)); running = false;
+    await m.recoverOperation(config, { controller }); assert.equal(active, releaseB); assert.equal(activeMode, mode); assert.deepEqual(starts, [releaseB, releaseB]);
+    journal.stage = 'resumed'; writeFileSync(journalFile, JSON.stringify(journal)); active = releaseA;
+    await assert.rejects(m.recoverOperation(config, { controller }), /release/i);
+  }
+});
+
+test('supervisor helper inicia release explícita B e recusa retomada de A já ativa', async () => {
+  const m = await operations(), A = 'a'.repeat(40), B = 'b'.repeat(40), dataDir = '/srv/private/fixture';
+  let active: string | null = null; const requests: string[][] = [];
+  const facts = () => ({ running: !!active, autostart: false, pid: active ? 123 : 0, startTime: active ? 'fixture' : null, machineId: 'a'.repeat(32), profilePathHash: createHash('sha256').update(dataDir).digest('hex'), profileProcesses: active ? 1 : 0, mode: 'offline', release: active });
+  const controller = m.createSupervisor({ kind: 'docker', name: 'fixture', helperPath: '/usr/local/libexec/fixture', release: A, machineId: 'a'.repeat(32), dataDir }, { runner: async (_file: string, args: string[]) => {
+    requests.push(args); if (args[2] === 'start') active = args[3]; return { stdout: JSON.stringify(facts()) };
+  } });
+  await controller.start('offline', undefined, B); assert.equal(active, B); assert.deepEqual(requests.find(a => a[2] === 'start'), ['-n', '/usr/local/libexec/fixture', 'start', B, 'offline']);
+  await assert.rejects(controller.start('offline', undefined, A), /release/); assert.equal(active, B);
 });

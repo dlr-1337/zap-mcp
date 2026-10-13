@@ -19,6 +19,7 @@ import { createSourceFence } from '../dist/src/promotion.js';
 import { readOffsiteConfig, runOffsiteBackup, produceOffsiteCopy, acknowledgeOffsiteCopy } from '../dist/src/offsite.js';
 import { assertReady } from './phase4-environment.mjs';
 import { Readable } from 'node:stream';
+import { createRequire } from 'node:module';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), exec = promisify(execFile);
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -51,7 +52,7 @@ export async function swapRelease(config, { controller, ready, backup, state = (
   // All preconditions are live effects, never a boolean or a persisted readiness JSON.
   await ready(); await backup(); await ready();
   const previous = await controller.inspect(); assert.ok(previous.running && previous.profileProcesses === 1);
-  const journal = { version: 1, kind: 'release', priorRelease: config.priorRelease, candidateRelease: config.candidateRelease, priorMode: previous.mode, stage: 'prepared', startedAt: new Date().toISOString() };
+  const journal = { version: 1, kind: 'release', priorRelease: previous.release ?? config.priorRelease, candidateRelease: config.candidateRelease, priorMode: previous.mode, stage: 'prepared', startedAt: new Date().toISOString() };
   const stage = async value => { journal.stage = value; atomicPrivateJson(join(journalDir, 'deploy-journal.json'), journal); await fault?.(value); };
   await stage('prepared');
   let baseline;
@@ -70,7 +71,7 @@ export async function swapRelease(config, { controller, ready, backup, state = (
       await controller.stop(); assertQuiet(await controller.inspect(), true);
       const current = await state();
       assert.equal(current.databases['archive.sqlite'].schema, config.archiveSchema); assert.equal(current.databases['auth.sqlite'].schema, config.authSchema);
-      await controller.activate(config.priorRelease, 'offline');
+      await controller.activate(journal.priorRelease, 'offline');
       if (baseline) assert.deepEqual(await state(), baseline);
       journal.stage = 'recovered-offline'; atomicPrivateJson(join(journalDir, 'deploy-journal.json'), journal);
     } catch { journal.stage = 'blocked-offline'; atomicPrivateJson(join(journalDir, 'deploy-journal.json'), journal); throw Error('release_recovery_required'); }
@@ -242,7 +243,7 @@ export async function selfTest() {
     for (const release of ['a'.repeat(40), 'b'.repeat(40)]) {
       const path = join(dir, 'release-' + release); mkdirSync(join(path, 'dist'), { recursive: true });
       cpSync(join(root, 'dist/src'), join(path, 'dist/src'), { recursive: true }); cpSync(join(root, 'public'), join(path, 'public'), { recursive: true }); cpSync(join(root, 'package.json'), join(path, 'package.json'));
-      symlinkSync(join(root, 'node_modules'), join(path, 'node_modules')); releases.set(release, path);
+      symlinkSync(dirname(dirname(createRequire(import.meta.url).resolve('express/package.json'))), join(path, 'node_modules')); releases.set(release, path);
     }
     const s = createService({ dataDir }); await s.setPassword(password); createAuthState(s.authDb, { newProfile: true }).state.keys.set({ session: { fixture: Buffer.from('session must remain') } });
     s.archive.ingestUpsert({ type: 'notify', messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'old', fromMe: false }, messageTimestamp: 1700000000, message: { documentMessage: { url: 'https://mmg.whatsapp.net/fixture', mediaKey: Buffer.alloc(32), fileLength: bytes.length, fileSha256: createHash('sha256').update(bytes).digest(), fileName: 'fixture.txt' } } }] });
@@ -262,7 +263,7 @@ export async function selfTest() {
       for (let attempt = 0; attempt < 200 && !listening; attempt++) { assert.equal(child.exitCode, null); listening = await tlsCall(origin, '/api/session', { ca }).then(r => r.status === 200, () => false); if (!listening) await new Promise(ok => setTimeout(ok, 20)); }
       assert.ok(listening, 'fixture_startup');
     };
-    const controller = { inspect: async () => ({ running: !!child, autostart: false, pid: child?.pid ?? 0, profileProcesses: child ? 1 : 0, mode: 'offline' }), stop, start: () => start(activeRelease), activate: start };
+    const controller = { inspect: async () => ({ running: !!child, autostart: false, pid: child?.pid ?? 0, profileProcesses: child ? 1 : 0, mode: 'offline', release: child ? activeRelease : null }), stop, start: (_, _signal, release) => start(release ?? activeRelease), activate: start };
     await start(activeRelease); await verifyHttps(origin, password, baseline.originals, ca);
     let n = 0; const snapshotConfig = { dataDir, operationDir, destination: join(dir, 'snapshot-' + n++), priorMode: 'offline', priorRelease: activeRelease, supervisor: { kind: 'systemd', name: 'fixture.service', dataDir, machineId: 'a'.repeat(32) } };
     const backup = async () => { snapshotConfig.destination = join(dir, 'snapshot-' + n++); await coordinatedSnapshot(snapshotConfig, { controller }); validateSnapshot(snapshotConfig.destination); };
@@ -270,9 +271,11 @@ export async function selfTest() {
     const current = createService({ dataDir }); current.archive.ingestUpsert({ type: 'notify', messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'after-backup', fromMe: false }, messageTimestamp: 1700000100, message: { conversation: 'registro recebido depois do backup' } }] }); await current.close(); await start(activeRelease);
     const recent = profileState(dataDir), config = { dataDir, operationDir, priorRelease: 'a'.repeat(40), candidateRelease: 'b'.repeat(40), archiveSchema: recent.databases['archive.sqlite'].schema, authSchema: recent.databases['auth.sqlite'].schema, verify: () => verifyHttps(origin, password, recent.originals, ca) };
     await swapRelease(config, { controller, ready: async () => {}, backup }); assert.equal(activeRelease, config.candidateRelease); assert.deepEqual(profileState(dataDir), recent);
+    await backup(); assert.equal(activeRelease, config.candidateRelease, 'backup after update preserves the observed release');
     for (const stage of ['before-swap', 'swapped']) {
+      const beforeRelease = activeRelease;
       await assert.rejects(swapRelease(config, { controller, ready: async () => {}, backup, fault: value => { if (value === stage) throw Error('injected release failure'); } }), /injected/);
-      assert.equal(activeRelease, config.priorRelease); assert.deepEqual(profileState(dataDir), recent); await verifyHttps(origin, password, recent.originals, ca);
+      assert.equal(activeRelease, beforeRelease); assert.deepEqual(profileState(dataDir), recent); await verifyHttps(origin, password, recent.originals, ca);
     }
     await stop(); await start(activeRelease); assert.deepEqual(profileState(dataDir), recent);
     await verifyHttps(origin, password, recent.originals, ca); await stop();

@@ -25,8 +25,8 @@ export function shutdownService({ server, close, controller = new AbortControlle
 
 export type Mode = 'offline' | 'collect';
 export type SupervisorConfig = { kind: 'systemd' | 'docker'; name: string; offlineName?: string; helperPath?: string; release?: string; user?: boolean; dataDir: string; machineId: string; ssh?: { host: string; user: string; port?: number; identityFile: string; knownHostsFile: string } };
-export type SupervisorFacts = { running: boolean; autostart: boolean; pid: number; startTime: string | null; machineId: string; profileProcesses: number; mode: Mode };
-export type Controller = { stop(signal?: AbortSignal): Promise<void>; start(mode: Mode, signal?: AbortSignal): Promise<void>; inspect(signal?: AbortSignal): Promise<SupervisorFacts> };
+export type SupervisorFacts = { running: boolean; autostart: boolean; pid: number; startTime: string | null; machineId: string; profileProcesses: number; mode: Mode; release?: string | null };
+export type Controller = { stop(signal?: AbortSignal): Promise<void>; start(mode: Mode, signal?: AbortSignal, release?: string): Promise<void>; inspect(signal?: AbortSignal): Promise<SupervisorFacts> };
 export type OperationConfig = { dataDir: string; operationDir: string; destination: string; priorMode: Mode; priorRelease: string; supervisor: SupervisorConfig };
 export type Journal = { version: 1; operationId: string; kind: 'backup' | 'update' | 'handoff' | 'promotion'; source: string; priorMode: Mode; priorRelease: string; stage: string; destination: string; startedAt: string; resumedMode?: Mode; diagnostic?: string };
 export function privateFile(path: string, directory = false) {
@@ -100,7 +100,8 @@ async function supervisorProbe(config: SupervisorConfig): Promise<SupervisorFact
   if (pid && !startTime) { const stat = fs.readFileSync('/proc/' + pid + '/stat', 'utf8'); startTime = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]; }
   return { running, autostart, pid, startTime, machineId, profileProcesses, mode };
 }
-export function createSupervisor(config: SupervisorConfig): Controller {
+type SupervisorRunner = (file: string, args: string[], options: { signal?: AbortSignal; timeout: number; killSignal: 'SIGKILL'; maxBuffer: number; shell: false }) => Promise<{ stdout: string }>;
+export function createSupervisor(config: SupervisorConfig, { runner = promisify(execFile) }: { runner?: SupervisorRunner } = {}): Controller {
   const naming = config.kind === 'systemd' ? /^[A-Za-z0-9_.@-]+\.service$/ : /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
   if (!['systemd', 'docker'].includes(config.kind) || !naming.test(config.name) || config.offlineName && !naming.test(config.offlineName) || !/^[a-f0-9]{32}$/.test(config.machineId) || !/^\/[A-Za-z0-9_./ -]+$/.test(config.dataDir) || config.dataDir.split('/').includes('..')) throw Error('Supervisor inválido');
   const remote = config.ssh;
@@ -111,17 +112,17 @@ export function createSupervisor(config: SupervisorConfig): Controller {
   }
   const run = async (file: string, args: string[], signal?: AbortSignal) => {
     const timeout = config.helperPath ? 75_000 : 10_000;
-    if (!remote) return (await promisify(execFile)(file, args, { signal, timeout, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
+    if (!remote) return (await runner(file, args, { signal, timeout, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
     const source = `const{promisify}=require('node:util');const{execFile}=require('node:child_process');promisify(execFile)(${JSON.stringify(file)},${JSON.stringify(args)},{timeout:${timeout - 1000},killSignal:'SIGKILL',maxBuffer:262144,shell:false}).then(r=>process.stdout.write(r.stdout)).catch(()=>process.exit(1));`;
     return remoteNode(source, signal, timeout);
   };
   const remoteNode = async (source: string, signal?: AbortSignal, timeout = 10_000) => {
     const encoded = Buffer.from(source).toString('base64');
-    return (await promisify(execFile)('/usr/bin/ssh', ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'IdentitiesOnly=yes', '-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1', '-o', 'UserKnownHostsFile=' + remote!.knownHostsFile, '-i', remote!.identityFile, '-p', String(remote!.port ?? 22), '-l', remote!.user, '--', remote!.host, `node -e 'eval(Buffer.from("${encoded}","base64").toString())'`], { signal, timeout, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
+    return (await runner('/usr/bin/ssh', ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'IdentitiesOnly=yes', '-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1', '-o', 'UserKnownHostsFile=' + remote!.knownHostsFile, '-i', remote!.identityFile, '-p', String(remote!.port ?? 22), '-l', remote!.user, '--', remote!.host, `node -e 'eval(Buffer.from("${encoded}","base64").toString())'`], { signal, timeout, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
   };
   return {
     async stop(signal) { await this.inspect(signal); if (config.helperPath) { await run('/usr/bin/sudo', ['-n', config.helperPath, 'stop'], signal); return; } for (const name of [...new Set([config.name, config.offlineName ?? config.name])]) await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', config.kind === 'systemd' ? [...(config.user ? ['--user'] : []), 'stop', name] : ['stop', '--time', '30', name], signal); },
-    async start(mode, signal) { const prior = await this.inspect(signal); if (prior.running && prior.mode !== mode) throw Error('Outro modo de serviço já ativo'); if (config.helperPath) { if (prior.running) return; await run('/usr/bin/sudo', ['-n', config.helperPath, 'start', config.release!, mode], signal); } else { const name = mode === 'offline' ? config.offlineName : config.name; if (!name) throw Error('Supervisor de consulta offline não configurado'); await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', [...(config.kind === 'systemd' && config.user ? ['--user'] : []), 'start', name], signal); } const facts = await this.inspect(signal); if (!facts.running || facts.mode !== mode) throw Error('Modo retomado divergente'); },
+    async start(mode, signal, release = config.release) { const prior = await this.inspect(signal); if (prior.running && (prior.mode !== mode || config.helperPath && prior.release !== release)) throw Error('Modo ou release de serviço já ativo divergente'); if (config.helperPath) { if (!/^[a-f0-9]{40}$/.test(release ?? '')) throw Error('Release inválida'); if (prior.running) return; await run('/usr/bin/sudo', ['-n', config.helperPath, 'start', release!, mode], signal); } else { const name = mode === 'offline' ? config.offlineName : config.name; if (!name) throw Error('Supervisor de consulta offline não configurado'); await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', [...(config.kind === 'systemd' && config.user ? ['--user'] : []), 'start', name], signal); } const facts = await this.inspect(signal); if (!facts.running || facts.mode !== mode || config.helperPath && facts.release !== release) throw Error('Modo ou release retomado divergente'); },
     async inspect(signal) { if (config.helperPath) { const facts = JSON.parse(await run('/usr/bin/sudo', ['-n', config.helperPath, 'inspect'], signal)); if (facts.machineId !== config.machineId || facts.profilePathHash !== createHash('sha256').update(resolve(config.dataDir)).digest('hex') || !Number.isInteger(facts.profileProcesses) || facts.profileProcesses < 0 || facts.profileProcesses > 1) throw Error('Helper de outro perfil'); return facts; } if (!remote) return supervisorProbe(config); const source = `(${supervisorProbe.toString()})(${JSON.stringify(config)}).then(v=>console.log(JSON.stringify(v))).catch(()=>process.exit(1));`; return JSON.parse(await remoteNode(source, signal)); }
   };
 }
@@ -129,16 +130,20 @@ export function assertQuiet(facts: SupervisorFacts, fenced = false) { if (facts.
 async function resume(config: OperationConfig, controller: Controller, journal: Journal) {
   let mode = journal.priorMode;
   if (mode === 'collect') { try { preflight(config.dataDir); } catch { mode = 'offline'; journal.diagnostic = 'Coleta não autorizada; retomada offline'; } }
-  try { await controller.start(mode); }
-  catch { if (mode === 'offline') throw Error('Falha ao retomar consulta'); mode = 'offline'; journal.diagnostic = 'Coleta falhou; retomada offline'; await controller.stop(); await controller.start(mode); }
+  try { await controller.start(mode, undefined, journal.priorRelease); }
+  catch { if (mode === 'offline') throw Error('Falha ao retomar consulta'); mode = 'offline'; journal.diagnostic = 'Coleta falhou; retomada offline'; await controller.stop(); await controller.start(mode, undefined, journal.priorRelease); }
+  const facts = await controller.inspect();
+  if (!facts.running || facts.release !== undefined && facts.release !== journal.priorRelease) throw Error('Release retomada divergente');
   journal.resumedMode = mode;
 }
 export async function coordinatedSnapshot(config: OperationConfig, { controller = createSupervisor(config.supervisor), kind = 'backup', fault, transfer }: { controller?: Controller; kind?: 'backup' | 'update'; fault?: (stage: string) => unknown; transfer?: (snapshot: string) => Promise<void> } = {}) {
   const operation = acquireOperation(config), journal = newJournal(config, kind), signal = AbortSignal.timeout(60_000); const started = Date.now(); let snapshotReady = false, failed: unknown;
   const stage = async (name: string) => { journal.stage = name; operation.save(journal); await fault?.(name); };
   try { operation.save(journal);
+  const prior = await controller.inspect(signal); journal.priorMode = prior.running ? prior.mode : 'offline';
+  if (prior.running && prior.release !== undefined) { if (!/^[a-f0-9]{40}$/.test(prior.release ?? '')) throw Error('Release observada inválida'); journal.priorRelease = prior.release!; }
+  operation.save(journal);
   try {
-    const prior = await controller.inspect(signal); journal.priorMode = prior.running ? prior.mode : 'offline'; operation.save(journal);
     await fault?.('intended'); await controller.stop(signal); assertQuiet(await controller.inspect(signal)); await stage('stopped');
     signal.throwIfAborted(); await createSnapshot({ dataDir: config.dataDir, destination: config.destination, signal }); signal.throwIfAborted(); validateSnapshot(config.destination); snapshotReady = true; await stage('snapshotted');
   } catch (error) { failed = error; }
@@ -160,6 +165,7 @@ export async function recoverOperation(config: OperationConfig, { controller = c
     if (['promotion', 'handoff'].includes(journal.kind)) { assertQuiet(await controller.inspect(), true); return { recovered: false, mode: 'offline', reason: 'Handoff exige reconciliação explícita; origem permanece parada' }; }
     const facts = await controller.inspect();
     if (!facts.running) { assertQuiet(facts); await resume(config, controller, journal); }
+    else if (facts.release !== undefined && facts.release !== journal.priorRelease) throw Error('Release ativa diverge do journal');
     else if (facts.mode === 'collect' && journal.priorMode !== 'collect' || facts.profileProcesses > 1) throw Error('Recuperação ambígua');
     journal.stage = 'recovered'; operation.save(journal); return { recovered: true, mode: journal.resumedMode ?? facts.mode };
   } finally { operation.release(); }
