@@ -3,7 +3,7 @@ phase: "04"
 slug: "opera-o-e-restaura-o-na-vps"
 status: draft
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-10-12"
 ---
 
@@ -19,7 +19,7 @@ Contrato de validação: testes locais sustentam implementação; OPS só é con
 | Config file | package.json / tsconfig.json |
 | Quick run command | `mise exec node@24.21.0 -- npm run build && mise exec node@24.21.0 -- node --test dist/test/auth.test.js dist/test/backup.test.js` |
 | Full suite command | `mise exec node@24.21.0 -- npm test` |
-| Estimated runtime | Foco existente medido 9,26s após build; novos focos e suíte completa a medir |
+| Estimated runtime | Suíte311/311 em92,203s; foco deploy+aceite34/34 verde; pausa IPC adversarial250ms verde |
 
 ## Sampling Rate
 
@@ -34,32 +34,32 @@ IDs alinhados aos seis PLANs. Wave0 de cada arquivo acontece no início RED da p
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| 04-01-01 | 04-01 | 1 | OPS-01/02 | T-04-01/02 | Descoberta read-only, identidade/probes atuais, blocked explícito | integration | `mise exec node@24.21.0 -- node --test dist/test/environment.test.js` | Não — W0 | pending |
-| 04-01-02 | 04-01 | 1 | OPS-01/02 | T-04-01/02 | Capacidade/key/destino não presumidos e recibo sanitizado | integration | `mise exec node@24.21.0 -- node scripts/phase4-environment.mjs --mode self-test` | Não — W0 | pending |
-| 04-02-01 | 04-02 | 2 | OPS-01 | T-04-03/04 | TLS/proxy/Host/Origin, Secure, login e original | integration | `mise exec node@24.21.0 -- node --test dist/test/transport.test.js dist/test/auth.test.js` | Transport não — W0; auth sim | pending |
-| 04-02-02 | 04-02 | 2 | OPS-01/04 | T-04-04/05 | MCP/Range/ZIP e revogação sem cookie bypass | integration | `mise exec node@24.21.0 -- node --test dist/test/transport.test.js dist/test/mcp.test.js dist/test/auth.test.js` | Transport não — W0; demais sim | pending |
-| 04-03-01 | 04-03 | 3 | OPS-01 | T-04-06 | Shutdown bounded, streams/drain e consulta preservada | integration | `mise exec node@24.21.0 -- node --test dist/test/operation.test.js dist/test/recovery.test.js` | Operation não — W0; recovery sim | pending |
-| 04-03-02 | 04-03 | 3 | OPS-01/02 | T-04-06/07 | Mutex/journal/stop/snapshot/resume antes da rede; crash recovery | integration | `mise exec node@24.21.0 -- node --test dist/test/operation.test.js dist/test/backup.test.js` | Operation não — W0; backup sim | pending |
-| 04-03-03 | 04-03 | 3 | OPS-03 | T-04-07/08 | Promoção fail-closed com fence, clones e marker preservados | integration | `mise exec node@24.21.0 -- node --test dist/test/promotion.test.js dist/test/backup.test.js dist/test/collector.test.js` | Promotion não — W0; demais sim | pending |
-| 04-04-01 | 04-04 | 4 | OPS-02/03 | T-04-09/10 | Cipher/readback/key independente e restore completo | integration | `mise exec node@24.21.0 -- node --test dist/test/offsite.test.js dist/test/backup.test.js` | Offsite não — W0; backup sim | pending |
-| 04-04-02 | 04-04 | 4 | OPS-02 | T-04-09/10/11 | Last good/crash/ENOSPC/atraso e status autenticado | integration | `mise exec node@24.21.0 -- node --test dist/test/offsite.test.js dist/test/operation.test.js` | Não — W0 | pending |
-| 04-05-01 | 04-05 | 5 | OPS-01 | T-04-12/13/14 | Release/volume/TLS/update/fence e rollback sem perda | integration | `mise exec node@24.21.0 -- node --test dist/test/deploy.test.js` | Não — W0 | pending |
-| 04-05-02 | 04-05 | 5 | OPS-01/02/03 | T-04-12/13/14 | VPS/migrate/update/agenda/offsite reais e origem parada | real acceptance | `mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode migrate && mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode update` | Não — W0 + ambiente real | pending |
-| 04-06-01 | 04-06 | 6 | OPS-01/02/03/04 | T-04-15/16/17 | Live run/gates individuais, stale/synthetic/loopback recusados | verifier integration | `mise exec node@24.21.0 -- node --test dist/test/operation-acceptance.test.js` | Não — W0 | pending |
-| 04-06-02 | 04-06 | 6 | OPS-01/02/03/04 | T-04-15/16/17 | Site/Codex permanente e restore por key independente, config/cleanup | real acceptance | `mise exec node@24.21.0 -- node scripts/phase4-acceptance.mjs --mode real-operation` | Não — W0 + implantação04-05 | pending |
+| 04-01-01 | 04-01 | 1 | OPS-01/02 | T-04-01/02 | Descoberta read-only, identidade/probes atuais, blocked explícito | integration | `mise exec node@24.21.0 -- node --test dist/test/environment.test.js` | Sim | green |
+| 04-01-02 | 04-01 | 1 | OPS-01/02 | T-04-01/02 | Capacidade/key/destino não presumidos e recibo sanitizado | integration | `mise exec node@24.21.0 -- node scripts/phase4-environment.mjs --mode self-test` | Sim | green |
+| 04-02-01 | 04-02 | 2 | OPS-01 | T-04-03/04 | TLS/proxy/Host/Origin, Secure, login e original | integration | `mise exec node@24.21.0 -- node --test dist/test/transport.test.js dist/test/auth.test.js` | Sim | green |
+| 04-02-02 | 04-02 | 2 | OPS-01/04 | T-04-04/05 | MCP/Range/ZIP e revogação sem cookie bypass | integration | `mise exec node@24.21.0 -- node --test dist/test/transport.test.js dist/test/mcp.test.js dist/test/auth.test.js` | Sim | green |
+| 04-03-01 | 04-03 | 3 | OPS-01 | T-04-06 | Shutdown bounded, streams/drain e consulta preservada | integration | `mise exec node@24.21.0 -- node --test dist/test/operation.test.js dist/test/recovery.test.js` | Sim | green |
+| 04-03-02 | 04-03 | 3 | OPS-01/02 | T-04-06/07 | Mutex/journal/stop/snapshot/resume antes da rede; crash recovery | integration | `mise exec node@24.21.0 -- node --test dist/test/operation.test.js dist/test/backup.test.js` | Sim | green |
+| 04-03-03 | 04-03 | 3 | OPS-03 | T-04-07/08 | Promoção fail-closed com fence, clones e marker preservados | integration | `mise exec node@24.21.0 -- node --test dist/test/promotion.test.js dist/test/backup.test.js dist/test/collector.test.js` | Sim | green |
+| 04-04-01 | 04-04 | 4 | OPS-02/03 | T-04-09/10 | Cipher/readback/key independente e restore completo | integration | `mise exec node@24.21.0 -- node --test dist/test/offsite.test.js dist/test/backup.test.js` | Sim | green |
+| 04-04-02 | 04-04 | 4 | OPS-02 | T-04-09/10/11 | Last good/crash/ENOSPC/atraso e status autenticado | integration | `mise exec node@24.21.0 -- node --test dist/test/offsite.test.js dist/test/operation.test.js` | Sim | green |
+| 04-05-01 | 04-05 | 5 | OPS-01 | T-04-12/13/14 | Release/volume/TLS/update/fence e rollback sem perda | integration | `mise exec node@24.21.0 -- node --test dist/test/deploy.test.js dist/test/boot-control.test.js` | Sim | green |
+| 04-05-02 | 04-05 | 5 | OPS-01/02/03 | T-04-12/13/14 | VPS/migrate/update/agenda/offsite reais e origem parada | real acceptance | `mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode migrate && mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode update` | Sim | green |
+| 04-06-01 | 04-06 | 6 | OPS-01/02/03/04 | T-04-15/16/17 | Live run/gates individuais, stale/synthetic/loopback recusados | verifier integration | `mise exec node@24.21.0 -- node --test dist/test/operation-acceptance.test.js` | Sim | green |
+| 04-06-02 | 04-06 | 6 | OPS-01/02/03/04 | T-04-15/16/17 | Site/Codex permanente e restore por key independente, config/cleanup | real acceptance | Invocador operacional privado executado com Node24 → `runAcceptance({configFile,caseFile,withRestoredBackend})` | Sim | pending-real |
 
 Comandos de arquivos novos somente depois de criar/compilar as dependências Wave0; cada PLAN inclui fails_when observável. Os nomes propostos podem ser ajustados pelo planejador a um contrato menor e completo.
 
 ## Wave 0 Requirements
 
-- [ ] test/environment.test.ts — inventário/probes/capacidade/key, stale receipt e sanitização; 04-01-01.
-- [ ] test/transport.test.ts — regressão Origin403, Secure/CSRF, links HTTPS e spoofing.
-- [ ] test/operation.test.ts — mutex/stop/restart/update/retomada e conexões abertas.
-- [ ] test/offsite.test.ts — readback, criptografia/chave/parcial/reserva e último bom.
-- [ ] test/promotion.test.ts — gate fail-closed/handoff/clones offline e interrupções.
-- [ ] test/operation-acceptance.test.ts — driver/recibos e sanitização.
-- [ ] test/deploy.test.ts — dados fora do release, TLS/update/fence/rollback; 04-05-01.
-- [ ] Driver fase4 com modo self-test e modo real falhando quando ambiente/acesso faltar.
+- [x] test/environment.test.ts — inventário/probes/capacidade/key, stale receipt e sanitização; 04-01-01.
+- [x] test/transport.test.ts — regressão Origin403, Secure/CSRF, links HTTPS e spoofing.
+- [x] test/operation.test.ts — mutex/stop/restart/update/retomada e conexões abertas.
+- [x] test/offsite.test.ts — readback, criptografia/chave/parcial/reserva e último bom.
+- [x] test/promotion.test.ts — gate fail-closed/handoff/clones offline e interrupções.
+- [x] test/operation-acceptance.test.ts — driver/recibos e sanitização.
+- [x] test/deploy.test.ts — dados fora do release, TLS/update/fence/rollback; 04-05-01.
+- [x] Driver fase4 com modo self-test e modo real falhando quando ambiente/acesso faltar.
 - Framework adicional: nenhum.
 
 ## Verifications on Real Environment
@@ -75,12 +75,29 @@ Execução autônoma nos acessos disponíveis; intervenção humana só para dep
 
 ## Validation Sign-Off
 
-- [ ] Mapear cada tarefa real e Threat Ref aos PLANs.
-- [ ] Todas tarefas com automated verify/fails_when ou dependência Wave0.
-- [ ] Sem três tarefas consecutivas sem verificação automatizada.
-- [ ] Wave0 cobre arquivos faltantes; nenhum skip/watch no aceite real.
-- [ ] Foco com duração medida; suíte verde.
+- [x] Mapear cada tarefa real e Threat Ref aos PLANs.
+- [x] Todas tarefas com automated verify/fails_when ou dependência Wave0.
+- [x] Sem três tarefas consecutivas sem verificação automatizada.
+- [x] Wave0 cobre arquivos faltantes; nenhum skip/watch no aceite real.
+- [x] Foco com duração medida; suíte verde.
 - [ ] Evidência permanente/offsite/restore/Codex real concluída.
 - [ ] nyquist_compliant true somente após auditoria/evidência.
 
 **Approval:** pending
+
+## Auditoria Nyquist técnica atual
+
+Auditor especializado conferiu13 tarefas:12 cobertas,04-06-02 parcial por aceite real em execução, zero lacunas novas de teste. Os sete arquivos Wave0 existem; a suíte311/311 não tem skips/falhas/cancelamentos/todo. Os negativos exercitam comportamento, incluindo publicação IPC sob pausa, GETs autenticados, testemunhas e bytes completos. Nenhuma operação real foi reexecutada pelo auditor.
+
+O CLI `phase4-acceptance.mjs --mode real-operation` sozinho recusa sem callback operacional. O invocador privado prepara/configura um callback bounded para clone offline temporário pelo mesmo HTTPS, coordenando locks/timer e restauração do backend. A localização e configuração ficam no handoff privado, fora do Git. Existência do invocador não produz gate. A tarefa04-06-02 só fica green com seu recibo vivo final e cleanup observado.
+
+OPS-01–04 permanecem Pending; nyquist_compliant continua false até esse resultado obrigatório. Revisão clean e18/18 mitigações ASVS1 verificadas são evidências independentes, sem substituir o cliente real.
+
+## Validation Audit 2026-10-13
+
+| Metric | Count |
+|---|---|
+| Tasks total | 13 |
+| Covered | 12 |
+| Real acceptance pending | 1 |
+| New test gaps | 0 |
