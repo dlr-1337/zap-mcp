@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, statSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, symlinkSync, readFileSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 const modulePath = '../../scripts/phase4-environment.mjs';
 // Missing implementation is an explicit behavior failure, never an import/fixture crash.
 const api: any = existsSync(new URL(modulePath, import.meta.url)) ? await import(modulePath) : { discover: async () => ({ status: 'unimplemented' }) };
@@ -103,4 +105,52 @@ test('inventário confere hash canônico do helper e recusa PID/contagem inconsi
   await assert.doesNotReject(api.probeHost(host, scope, { runner: runner(facts) }));
   for (const mutation of [{ profilePathHash: 'f'.repeat(64) }, { pid: 0 }, { profileProcesses: 0 }, { mode: 'invalid' }, { release: null }]) await assert.rejects(api.probeHost(host, scope, { runner: runner({ ...facts, ...mutation }) }));
   await assert.rejects(api.probeHost(host, { ...scope, dataDir: dataDir + '/./' }, { runner: runner(facts) }));
+});
+
+async function serializedHelperProbe(t: { after(fn: () => unknown): void }, firstProxy: unknown, secondProxy: unknown, calls: number, recovery = false, wrongBinding = false) {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-environment-helper-')); t.after(() => rmSync(dir, { recursive: true }));
+  const appRoot = join(dir, 'app'), dataDir = join(dir, 'data'), configFile = join(dir, 'proxy.json');
+  for (const path of [appRoot, dataDir, join(appRoot, 'dist')]) mkdirSync(path, { mode: 0o700 });
+  writeFileSync(join(appRoot, 'package.json'), '{"type":"module"}', { mode: 0o600 }); writeFileSync(configFile, 'fixture proxy settings', { mode: 0o600 });
+  symlinkSync(join(process.cwd(), 'node_modules'), join(appRoot, 'node_modules')); symlinkSync(join(process.cwd(), 'dist/src'), join(appRoot, 'dist/src'));
+  const machineId = readFileSync('/etc/machine-id', 'utf8').trim(), helperPath = '/usr/local/libexec/fixture';
+  const facts = { running: false, autostart: false, pid: 0, startTime: null, machineId, profilePathHash: wrongBinding ? 'f'.repeat(64) : createHash('sha256').update(dataDir).digest('hex'), profileProcesses: 0, mode: 'offline', release: null };
+  const scope = { dataDir, appRoot, supervisor: { kind: 'docker', helperPath }, ...(recovery ? { recovery: true } : { proxy: { kind: 'traefik', configFile } }) };
+  const [, argv] = api.probeCommand({ kind: 'local', machineId }, scope);
+  const source = `
+    import assert from 'node:assert/strict'; import { mock } from 'node:test'; import { promisify } from 'node:util';
+    let calls=0; const helper=()=>{}, replies=${JSON.stringify([firstProxy, secondProxy])};
+    helper[promisify.custom]=async(program,argv,options)=>{
+      assert.equal(program,'/usr/bin/sudo'); assert.deepEqual(argv,['-n','/usr/local/libexec/fixture',${JSON.stringify(recovery ? 'inspect-runtime' : 'inspect')}]);
+      assert.equal(options.timeout,8000); assert.equal(options.shell,false); calls++;
+      const facts=${JSON.stringify(facts)}; if(replies[calls-1]!==null) facts.proxy=replies[calls-1]; return {stdout:JSON.stringify(facts),stderr:''};
+    };
+    mock.module('node:child_process',{exports:{...await import('node:child_process'),execFile:helper}});
+    await eval(${JSON.stringify(argv[1])}); assert.equal(calls,${calls},'helper inspections must be bounded to fresh observations');
+  `;
+  const child = spawn(process.execPath, ['--experimental-test-module-mocks', '--input-type=module', '-e', source], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '', stderr = ''; child.stdout.on('data', bytes => stdout += bytes); child.stderr.on('data', bytes => stderr += bytes);
+  const [code] = await once(child, 'exit'); return { code, stdout, stderr, configFile };
+}
+
+test('probe serializado reutiliza única inspeção válida Docker para proxy Traefik', async t => {
+  const proxy = { verified: true, version: 'v3.6.25', peer: '172.18.0.2' }, result = await serializedHelperProbe(t, proxy, proxy, 1);
+  assert.equal(result.code, 0, result.stderr);
+  const facts = JSON.parse(result.stdout); assert.equal(facts.supervisor.version, 'bounded-docker-helper');
+  assert.deepEqual(facts.proxy, { ...proxy, digest: createHash('sha256').update('fixture proxy settings').digest('hex') });
+});
+
+test('probe serializado exige nova inspeção para proxy ausente incompleto ou não verificado', async t => {
+  const valid = { verified: true, version: 'v3.6.25', peer: '172.18.0.2' };
+  for (const proxy of [null, { ...valid, verified: false }, { verified: true }]) {
+    const result = await serializedHelperProbe(t, proxy, valid, 2); assert.equal(result.code, 0, result.stderr); assert.deepEqual(JSON.parse(result.stdout).proxy, { ...valid, digest: createHash('sha256').update('fixture proxy settings').digest('hex') });
+  }
+  const invalid = { ...valid, verified: false }, result = await serializedHelperProbe(t, invalid, invalid, 2);
+  assert.equal(result.code, 0, result.stderr); assert.equal(JSON.parse(result.stdout).proxy.verified, false);
+});
+
+test('probe serializado recovery dispensa proxy e vínculo estático inválido continua recusado', async t => {
+  const recovered = await serializedHelperProbe(t, null, null, 1, true); assert.equal(recovered.code, 0, recovered.stderr); assert.equal(JSON.parse(recovered.stdout).proxy, undefined);
+  const invalid = await serializedHelperProbe(t, { verified: true, version: 'v3.6.25', peer: '172.18.0.2' }, null, 1, false, true);
+  assert.equal(invalid.code, 1); assert.equal(invalid.stdout, '');
 });

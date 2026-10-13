@@ -123,7 +123,8 @@ async function hostProbe(scope) {
     // nginx reports its version on stderr; execFile still captures it privately.
     if (scope.proxy.kind === 'traefik') {
       // The root-owned helper checks the existing proxy container/network and returns only version/peer.
-      const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, 'inspect']));
+      const current = scope.supervisor?.kind === 'docker' && out.supervisor?.proxy;
+      const facts = current?.verified === true && current.version && current.peer ? out.supervisor : JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, 'inspect']));
       const { pathToFileURL } = await import('node:url');
       const operation = await import(pathToFileURL(path.join(scope.appRoot, 'dist/src/operation.js')).href);
       operation.assertSupervisorFacts({ machineId: out.machineId, dataDir: scope.dataDir }, facts);
