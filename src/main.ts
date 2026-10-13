@@ -13,6 +13,7 @@ import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './back
 import { createExportManager } from './export.js';
 import { createMcpAdapter, rotateMcpToken } from './mcp.js';
 import { createTransport, transportFromEnv, type TransportConfig } from './transport.js';
+import { shutdownService } from './operation.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -32,6 +33,8 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
   }
   const lock = acquireServiceLock(dataDir);
   let collector: Collector | undefined;
+  let collectorFailure: string | undefined, closing: Promise<void> | undefined, closed = false;
+  const streams = new Set<import('node:stream').Readable>();
   let mediaWorker: ReturnType<typeof startMediaWorker> | undefined;
   const mediaDir = join(dataDir, 'media');
   let archiveDb: Database.Database, authDb: Database.Database, archive: Archive;
@@ -51,6 +54,7 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
   app.disable('x-powered-by');
   app.set('trust proxy', transport.trustProxy);
   app.use(transport.guard);
+  app.use((_req, res, next) => { if (closed || closing) { res.status(503).end(); return; } next(); });
   app.use((_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
@@ -90,9 +94,10 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
     res.set({ 'Content-Type': mime, 'Content-Disposition': `${preview ? 'inline' : 'attachment'}; filename="original"; filename*=UTF-8''${encoded}`, 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
     if (req.method === 'HEAD' || file.size === 0) { closeSync(file.fd); res.end(); return; }
     const stream = streamVerifiedAttachment(archive, file, start, end);
+    streams.add(stream); stream.once('close', () => streams.delete(stream));
     res.on('close', () => stream.destroy()); stream.on('error', error => { if (res.headersSent) res.destroy(); else next(error); }); stream.pipe(res);
   });
-  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });
+  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: collectorFailure ?? 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });
   app.get('/api/qr', async (req, res) => {
     const pairing = await collector?.pairing();
     requireOwner(req, res, error => {
@@ -227,16 +232,23 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
     }),
     async setPassword(password: string) { const sessions = authDb.prepare('SELECT id,data FROM web_sessions').all() as { id: string; data: string }[]; await setOwnerPassword(authDb, password); for (const row of sessions) exports.dropSession(createHmac('sha256', signingKey).update(JSON.stringify([row.id, JSON.parse(row.data).ownerGeneration])).digest('hex')); archiveDb.exec('DELETE FROM query_snapshots'); },
     startCollector(options: { socketFactory?: SocketFactory; newProfile?: boolean; clock?: Clock } = {}) {
+      if (closing || closed) throw Error('Serviço encerrando');
       lock.assert(); if (collector) throw Error('Coletor já ativo');
       collector = createCollector({ authDb, archive, lock, ...options });
       try { mediaWorker = startMediaWorker({ archive, mediaDir, online: () => collector?.snapshot().connection === 'connected', downloadOriginal: (job, signal) => collector!.downloadOriginal(job, signal) }); }
       catch (error) { void collector.stop(); collector = undefined; throw error; }
       return collector;
     },
+    async enableCollector() {
+      try { this.startCollector(); return true; }
+      catch { collectorFailure = 'Coleta indisponível; confira backup, exclusividade e sessão. Consulta offline preservada'; return false; }
+    },
     close() {
-      const finish = () => { clearInterval(querySweep); archiveDb.close(); authDb.close(); lock.release(); };
-      if (collector) return collector.stop().then(() => mediaWorker!.stop()).then(() => collector!.drain()).then(() => exports.close()).then(finish);
-      const closing = exports.close(); if (closing) return closing.then(finish); finish();
+      if (closing || closed) return closing;
+      clearInterval(querySweep); for (const stream of streams) stream.destroy();
+      const finish = () => { archiveDb.close(); authDb.close(); lock.release(); closed = true; };
+      if (collector) { closing = (async () => { await collector!.stop(); await mediaWorker?.stop(); await collector!.drain(); await exports.close(); finish(); })(); return closing; }
+      const exporting = exports.close(); if (exporting) { closing = exporting.then(finish); return closing; } finish();
     }
   };
 }
@@ -268,12 +280,21 @@ async function cli() {
       await service.setPassword(input.replace(/\r?\n$/, ''));
     } finally { service.close(); }
   } else if (process.argv[2] === 'serve') {
-    if (collect) { try { service.startCollector(); } catch (error) { await service.close(); throw error; } }
+    if (collect) await service.enableCollector();
     const port = Number(process.env.ZAP_PORT ?? 3000);
     if (!Number.isInteger(port) || port < 1 || port > 65535) { await service.close(); throw Error('ZAP_PORT inválido'); }
-    const server = service.app.listen(port, '127.0.0.1');
-    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => server.close(() => { void service.close(); }));
+    const host = bindHost(process.env.ZAP_BIND_HOST, transport);
+    const timeoutMs = Number(process.env.ZAP_SHUTDOWN_MS ?? 30_000);
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120_000) { await service.close(); throw Error('Prazo inválido'); }
+    const server = service.app.listen(port, host);
+    const shutdown = () => { void shutdownService({ server, close: () => service.close(), timeoutMs }).catch(() => { console.error('Shutdown incompleto; recovery obrigatório'); process.exit(1); }); };
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, shutdown);
   } else { service.close(); throw Error('Comando inválido'); }
+}
+export function bindHost(host: string | undefined, transport: TransportConfig) {
+  host ??= '127.0.0.1';
+  if (!['127.0.0.1', '0.0.0.0'].includes(host) || host === '0.0.0.0' && transport.mode !== 'proxy') throw Error('Bind privado exige proxy HTTPS validado');
+  createTransport(transport); return host;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   void cli().catch(error => { console.error(error instanceof Error && error.message === 'Serviço já ativo' ? 'Serviço já ativo. Pare com SIGTERM e aguarde o encerramento antes de backup/reset.' : 'Operação recusada. Confira comando, diretórios privados, integridade e espaço. Para --collect, prepare backup e verify-backup do mesmo perfil. Pare o serviço com SIGTERM e aguarde seu encerramento antes de backup/reset.'); process.exitCode = 1; });
