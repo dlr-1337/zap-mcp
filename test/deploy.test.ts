@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
+import { tmpdir, homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:https';
 import { createServer as portProbe } from 'node:net';
 import { once } from 'node:events';
@@ -15,6 +15,7 @@ import { startMediaWorker } from '../src/media.js';
 import { createSnapshot, restoreSnapshot } from '../src/backup.js';
 import { promoteProfile, assertPromotionAuthorization } from '../src/promotion.js';
 import { assertSupervisorFacts } from '../src/operation.js';
+import { acquireServiceLock } from '../src/whatsapp.js';
 
 const driver = '../../scripts/phase4-deploy.mjs';
 async function load() {
@@ -255,6 +256,67 @@ test('driver exige mesmas referências de host volume runtime e helper que inven
     writeFileSync(f.config.environmentFile, JSON.stringify(env)); let probes = 0;
     await assert.rejects(f.m.runDeployment('recover', { ...f, runner: async (program: string, args: string[]) => { probes++; return f.runner(program, args); } }));
     assert.equal(probes, 0, key); assert.deepEqual(f.actions, []);
+  }
+});
+
+test('SSH multiplex aplica configuração efetiva privada e recusa controle inseguro', async t => {
+  const f = await recoveryFixture(t); assert.equal(typeof f.m.sshArguments, 'function');
+  const effective = (config: unknown) => Object.fromEntries(execFileSync('/usr/bin/ssh', ['-G', ...f.m.sshArguments(config, 'true')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\n').map(line => { const first = line.indexOf(' '); return [line.slice(0, first), line.slice(first + 1)]; }));
+  const parsed = effective(f.config), path = parsed.controlpath;
+  assert.equal(parsed.controlmaster, 'auto'); assert.equal(parsed.controlpersist, '60'); assert.equal(parsed.clearallforwardings, 'yes'); assert.equal(parsed.batchmode, 'yes'); assert.equal(parsed.stricthostkeychecking, 'true');
+  assert.equal(parsed.userknownhostsfile, f.config.target.knownHostsFile); assert.ok(path.startsWith(f.config.operationDir + '/'));
+  assert.notEqual(effective({ ...f.config, target: { ...f.config.target, host: 'other.invalid' } }).controlpath, path);
+  chmodSync(f.config.operationDir, 0o755); assert.throws(() => f.m.sshArguments(f.config, 'true')); chmodSync(f.config.operationDir, 0o700);
+  symlinkSync(f.config.ownerPasswordFile, path); assert.throws(() => f.m.sshArguments(f.config, 'true')); rmSync(path);
+  symlinkSync(join(f.config.operationDir, 'missing'), path); assert.throws(() => f.m.sshArguments(f.config, 'true')); rmSync(path);
+  writeFileSync(path, 'not a socket', { mode: 0o600 }); assert.throws(() => f.m.sshArguments(f.config, 'true')); rmSync(path);
+  const socket = portProbe(); socket.listen(path); await once(socket, 'listening');
+  try {
+    chmodSync(path, 0o644); assert.throws(() => f.m.sshArguments(f.config, 'true')); chmodSync(path, 0o600);
+    if (process.getuid!() === 0 || spawnSync('/usr/bin/sudo', ['-n', 'true'], { stdio: 'ignore' }).status === 0) {
+      const root = process.getuid!() === 0; execFileSync(root ? '/usr/bin/chown' : '/usr/bin/sudo', root ? ['65534', path] : ['-n', '/usr/bin/chown', '65534', path], { stdio: 'ignore' });
+      assert.throws(() => f.m.sshArguments(f.config, 'true'));
+    }
+  } finally { await new Promise<void>(yes => socket.close(() => yes())); }
+  const long = join(f.config.operationDir, 'long-control-'.repeat(8)); mkdirSync(long, { mode: 0o700 }); assert.throws(() => f.m.sshArguments({ ...f.config, operationDir: long }, 'true'));
+});
+
+test('RPCs JSON e binários reutilizam conexão OpenSSH real e fecham master privado', async t => {
+  const m = await load(); for (const name of ['sshArguments', 'rpc', 'closeSshMaster']) assert.equal(typeof m[name], 'function');
+  const sshd = ['/usr/bin/sshd', '/usr/sbin/sshd'].find(existsSync), root = process.getuid!() === 0;
+  if (!sshd || !root && spawnSync('/usr/bin/sudo', ['-n', 'true'], { stdio: 'ignore' }).status !== 0) { t.skip('OpenSSH server isolado requer sshd e privilégio disponível'); return; }
+  const state = join(homedir(), '.local/state'); mkdirSync(state, { recursive: true, mode: 0o700 });
+  const base = mkdtempSync(join(state, 'zap-ssh-test-')), operationDir = join(base, 'ops'), dataDir = join(base, 'data'), appRoot = join(base, 'app');
+  for (const dir of [operationDir, dataDir, appRoot, join(appRoot, 'dist')]) mkdirSync(dir, { mode: 0o700 });
+  writeFileSync(join(appRoot, 'package.json'), '{"type":"module"}', { mode: 0o600 });
+  symlinkSync(join(process.cwd(), 'node_modules'), join(appRoot, 'node_modules')); symlinkSync(join(process.cwd(), 'dist/src'), join(appRoot, 'dist/src'));
+  const key = join(base, 'client'), hostKey = join(base, 'host'); for (const path of [key, hostKey]) execFileSync('/usr/bin/ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', path], { stdio: 'ignore' });
+  const authorized = join(base, 'authorized'); writeFileSync(authorized, readFileSync(key + '.pub'), { mode: 0o600 });
+  const probe = portProbe(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening'); const port = (probe.address() as any).port; await new Promise<void>(yes => probe.close(() => yes()));
+  const known = join(base, 'known'); writeFileSync(known, '[127.0.0.1]:' + port + ' ' + readFileSync(hostKey + '.pub', 'utf8'), { mode: 0o600 });
+  const configPath = join(base, 'sshd.conf'), pidFile = join(base, 'sshd.pid'), user = userInfo().username;
+  writeFileSync(configPath, ['Port ' + port, 'ListenAddress 127.0.0.1', 'HostKey ' + hostKey, 'PidFile ' + pidFile, 'AuthorizedKeysFile ' + authorized, 'PubkeyAuthentication yes', 'PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'UsePAM no', 'AllowUsers ' + user, 'PermitRootLogin ' + (root ? 'prohibit-password' : 'no'), 'AllowTcpForwarding no', 'AllowAgentForwarding no', 'X11Forwarding no', 'StrictModes yes', 'LogLevel VERBOSE'].join('\n') + '\n', { mode: 0o600 });
+  const daemon = spawn(root ? sshd : '/usr/bin/sudo', root ? ['-D', '-e', '-f', configPath] : ['-n', sshd, '-D', '-e', '-f', configPath], { stdio: ['ignore', 'ignore', 'pipe'] }); let logs = '';
+  daemon.stderr.on('data', bytes => logs += bytes);
+  const config = { operationDir, target: { host: '127.0.0.1', user, port, identityFile: key, knownHostsFile: known, nodePath: process.execPath, machineId: readFileSync('/etc/machine-id', 'utf8').trim(), dataDir, appRoot, helperPath: '/usr/local/libexec/fixture', snapshotDir: join(base, 'snapshot'), promotionConfigFile: join(base, 'promotion') } };
+  let lock: ReturnType<typeof acquireServiceLock> | undefined;
+  try {
+    await new Promise<void>((yes, no) => { const timer = setTimeout(() => no(Error('sshd startup timeout: ' + logs)), 5000); daemon.stderr.on('data', () => { if (logs.includes('Server listening on')) { clearTimeout(timer); yes(); } }); daemon.once('exit', () => { clearTimeout(timer); no(Error('sshd exited: ' + logs)); }); });
+    lock = acquireServiceLock(operationDir);
+    assert.equal((await m.rpc(config, 'receive', { destination: config.target.snapshotDir, name: null })).created, true);
+    const content = Buffer.alloc(128 * 1024, 0x61), destination = join(config.target.snapshotDir, 'manifest.json');
+    await m.rpc(config, 'receive', { destination: config.target.snapshotDir, name: 'manifest.json' }, Readable.from([content])); assert.deepEqual(readFileSync(destination), content);
+    await assert.rejects(m.rpc(config, 'receive', { destination: config.target.snapshotDir, name: 'manifest.json' }, Readable.from([Buffer.from('overwrite rejected')]))); assert.deepEqual(readFileSync(destination), content);
+    assert.equal((logs.match(/Accepted publickey for /g) ?? []).length, 1);
+    const argv = m.sshArguments(config, 'true'), controlPath = argv.find((arg: string) => arg.startsWith('ControlPath=')).slice('ControlPath='.length); assert.equal(existsSync(controlPath), true);
+    await m.closeSshMaster(config); assert.equal(existsSync(controlPath), false);
+  } finally {
+    try { await m.closeSshMaster(config); } finally {
+      lock?.release();
+      if (daemon.exitCode === null && daemon.signalCode === null && existsSync(pidFile)) { const ended = once(daemon, 'exit'), pid = (root ? readFileSync(pidFile, 'utf8') : execFileSync('/usr/bin/sudo', ['-n', '/usr/bin/cat', pidFile], { encoding: 'utf8' })).trim(); execFileSync(root ? '/usr/bin/kill' : '/usr/bin/sudo', root ? ['-TERM', pid] : ['-n', '/usr/bin/kill', '-TERM', pid], { stdio: 'ignore' }); await ended; }
+      else if (daemon.exitCode === null) { daemon.kill(); await once(daemon, 'exit'); }
+      rmSync(base, { recursive: true });
+    }
   }
 });
 

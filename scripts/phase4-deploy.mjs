@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, createReadStream } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, createReadStream, lstatSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -218,10 +218,31 @@ function validateConfig(config, recovery = false) {
   assert.equal(env.publicOrigin, config.publicOrigin); assert.equal(new URL(config.publicOrigin).origin, config.publicOrigin);
   return config;
 }
-async function rpc(config, task, extra = {}, input, runner = exec) {
+function sshControlPath(config) {
+  const directory = privateFile(config.operationDir, true); absolute(directory);
+  const r = config.target, socket = join(directory, 'ssh-' + digest(JSON.stringify([r.host, r.user, r.port ?? 22, r.identityFile, r.knownHostsFile, targetBinding(config)])).slice(0, 16));
+  assert.ok(Buffer.byteLength(socket) < 104, 'ssh_control_path_too_long');
+  let st; try { st = lstatSync(socket); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (st) assert.ok(st.isSocket() && !st.isSymbolicLink() && st.uid === process.getuid() && !(st.mode & 0o077), 'ssh_control_socket_invalid');
+  return socket;
+}
+export function sshArguments(config, command, control) {
+  const r = config.target; assert.match(r.host, /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/); assert.match(r.user, /^[a-z_][a-z0-9_-]*$/);
+  assert.ok(Number.isInteger(r.port ?? 22) && (r.port ?? 22) > 0 && (r.port ?? 22) <= 65535); privateFile(r.identityFile); privateFile(r.knownHostsFile);
+  assert.ok(control === undefined && typeof command === 'string' || control === 'exit' && command === undefined);
+  return ['-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ClearAllForwardings=yes', '-o', 'IdentitiesOnly=yes', '-o', 'UserKnownHostsFile=' + r.knownHostsFile, '-o', 'ControlMaster=auto', '-o', 'ControlPersist=60', '-o', 'ControlPath=' + sshControlPath(config), '-i', r.identityFile, '-p', String(r.port ?? 22), '-l', r.user, ...(control ? ['-O', control] : []), '--', r.host, ...(command === undefined ? [] : [command])];
+}
+export async function closeSshMaster(config) {
+  const socket = sshControlPath(config); if (!existsSync(socket)) return { closed: true };
+  let failed = false;
+  try { await exec('/usr/bin/ssh', sshArguments(config, undefined, 'exit'), { timeout: 5000, killSignal: 'SIGKILL', maxBuffer: 4096, shell: false }); } catch { failed = true; }
+  if (existsSync(sshControlPath(config))) unlinkSync(socket);
+  if (failed) throw Error('ssh_control_close_failed'); return { closed: true };
+}
+export async function rpc(config, task, extra = {}, input, runner = exec) {
   const r = config.target, payload = { ...r, ...extra }, source = '(' + remoteTask.toString() + ')(' + JSON.stringify(task) + ',' + JSON.stringify(payload) + ').then(r=>process.stdout.write(JSON.stringify(r))).catch(()=>process.exitCode=1)';
   const command = r.nodePath + " -e 'eval(Buffer.from(\"" + Buffer.from(source).toString('base64') + "\",\"base64\").toString())'";
-  const argv = ['-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ClearAllForwardings=yes', '-o', 'IdentitiesOnly=yes', '-o', 'UserKnownHostsFile=' + r.knownHostsFile, '-i', r.identityFile, '-p', String(r.port ?? 22), '-l', r.user, '--', r.host, command];
+  const argv = sshArguments(config, command);
   if (!input) return JSON.parse((await runner('/usr/bin/ssh', argv, { timeout: 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false })).stdout);
   const child = spawn('/usr/bin/ssh', argv, { stdio: ['pipe', 'pipe', 'ignore'], signal: AbortSignal.timeout(120_000), killSignal: 'SIGKILL' });
   const { pipeline } = await import('node:stream/promises'); const done = new Promise((yes, no) => { child.on('error', no); child.on('exit', code => code === 0 ? yes() : no(Error('transfer_failed'))); });
@@ -241,11 +262,11 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
     stop: async () => { await controller.inspect(); const facts = await checkedControl({ action: 'stop' }); assertQuiet(facts, true); },
     activate: async (release, mode) => { const before = await controller.inspect(); assertQuiet(before, true); commit(release); assert.ok(before.preparedReleases?.some(p => p.release === release && p.mode === mode), 'prepared_release_missing'); const facts = await checkedControl({ action: 'start', release, mode }); assert.ok(facts.running && facts.release === release && facts.mode === mode, 'started_release_mismatch'); }
   };
-  const facts = await controller.inspect();
-  if (mode !== 'recover') for (const release of [config.priorRelease, config.candidateRelease]) assert.ok(facts.preparedReleases?.some(p => p.release === release && p.mode === 'offline'), 'prepared_release_missing');
-  if (mode === 'preflight') { return { ready: true, operationalAcceptance: false }; }
-  const lock = (await import('../dist/src/whatsapp.js')).acquireServiceLock(config.operationDir);
+  const lock = acquireServiceLock(config.operationDir);
   try {
+    const facts = await controller.inspect();
+    if (mode !== 'recover') for (const release of [config.priorRelease, config.candidateRelease]) assert.ok(facts.preparedReleases?.some(p => p.release === release && p.mode === 'offline'), 'prepared_release_missing');
+    if (mode === 'preflight') { return { ready: true, operationalAcceptance: false }; }
     const journalPath = join(config.operationDir, 'deploy-journal.json');
     if (mode === 'recover') {
       const journal = readPrivateJson(journalPath); assert.equal(journal.version, 1); assert.equal(journal.kind, 'release');
@@ -298,7 +319,7 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
     await runOffsiteBackup(pull); // actual VPS -> notebook copy and current decrypt/readback ACK
     atomicPrivateJson(journalPath, { version: 1, kind: 'migration', stage: 'migration-offline', snapshot, startedAt: new Date().toISOString() });
     return { migrated: true, mode: 'offline', collectorRequiresSeparateValidityCheck: true };
-  } finally { lock.release(); }
+  } finally { try { await closeSshMaster(config); } finally { lock.release(); } }
 }
 
 export async function selfTest() {
