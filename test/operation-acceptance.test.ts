@@ -1,0 +1,63 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+const modulePath = '../../scripts/phase4-acceptance.mjs';
+const acceptance = await import(modulePath);
+test('tracer operacional percorre HTTPS site ZIP MCP e restore com oráculos reais', async () => {
+  const receipt = await acceptance.selfTest();
+  assert.equal(receipt.flowComplete, true, 'driver must observe HTTPS login/search/context/original/ZIP/MCP and clean SQL/bytes restore');
+  assert.equal(receipt.synthetic, true);
+  assert.equal(receipt.accepted, false, 'synthetic flow never closes OPS');
+  assert.equal(receipt.counts.messages, 130); assert.equal(receipt.counts.pages, 2);
+  assert.ok(Object.values(receipt.checks).every(value => value === true));
+});
+
+test('cada gate operacional removido bloqueia o predicado positivo controlado', async () => {
+  const result = await acceptance.selfTest();
+  assert.equal(result.predicateControls.positive, true);
+  assert.equal(result.predicateControls.stale, false, 'one-hour-old run is stale');
+  assert.deepEqual(Object.keys(result.predicateControls.removed).sort(), [...acceptance.requiredGates].sort());
+  for (const gate of acceptance.requiredGates) assert.equal(result.predicateControls.removed[gate], false, gate + ' must be mandatory');
+  assert.equal(result.receipt.accepted, false);
+  assert.ok(Object.values(result.receipt.criteria).every(value => value === 'pending'));
+});
+test('JSON replay e booleans fabricados nunca produzem observação viva', () => {
+  const live = acceptance.beginRun();
+  const proof = { runId: live.runId, synthetic: false, status: 'passed', gates: Object.fromEntries(acceptance.requiredGates.map((name: string) => [name, true])) };
+  assert.deepEqual(acceptance.validateOperationAcceptance(proof, live), { accepted: false });
+  assert.deepEqual(acceptance.validateOperationAcceptance(proof, JSON.parse(JSON.stringify(live))), { accepted: false });
+  assert.deepEqual(acceptance.validateOperationAcceptance(proof, { ...live, gates: proof.gates, endedAt: Date.now(), startedAt: 0 }), { accepted: false });
+});
+test('recibo allowlisted não expõe sentinel de caso host path token hash ou transcript', () => {
+  const sentinel = 'PRIVATE_SENTINEL', live = acceptance.beginRun();
+  const receipt = acceptance.publicReceipt({ runId: live.runId, synthetic: false, status: 'passed', contact: sentinel, host: sentinel, path: sentinel, token: sentinel, sha256: sentinel, transcript: sentinel }, live);
+  assert.equal(receipt.accepted, false);
+  assert.equal(JSON.stringify(receipt).includes(sentinel), false);
+  assert.deepEqual(Object.keys(receipt).sort(), ['accepted', 'criteria', 'edgeProbes', 'gates', 'node', 'queryBudget', 'synthetic']);
+});
+test('case privado descreve seleção e rejeita prova serializada ou permissão pública', async t => {
+  const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
+  const { join } = await import('node:path'), { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(join(tmpdir(), 'zap-operation-case-')); t.after(() => rmSync(dir, { recursive: true }));
+  const file = join(dir, 'case.json'), c = { synthetic: false, conversationId: 'synthetic-selection', contact: 'contact', term: 'testword', anchorReference: 'anchor', from: '2023-11-14', to: '2023-11-15', media: [{ id: 'attachment' }] };
+  writeFileSync(file, JSON.stringify(c), { mode: 0o600 }); assert.deepEqual(acceptance.readCase(file), c);
+  writeFileSync(file, JSON.stringify({ ...c, gates: { permanent: true } })); assert.throws(() => acceptance.readCase(file), /case_evidence_refused/);
+  writeFileSync(file, JSON.stringify(c)); chmodSync(file, 0o644); assert.throws(() => acceptance.readCase(file), /privada/);
+});
+test('negociação nativa aceita somente zap-archive atual e não presume protocolo pedido', () => {
+  const startedAt = Date.now() - 1000, now = Date.now();
+  const line = (name: string, at: number) => `${new Date(at).toISOString()} INFO rmcp::service: Service initialized as client peer_info=Some(ServerPeerInfo { protocol_version: ProtocolVersion("2025-06-18"), server_info: Implementation { name: "${name}" } })`;
+  const proof = acceptance.parseNativeNegotiation(line('other-plugin', now) + '\n' + line('zap-archive', now), startedAt, now + 1);
+  assert.equal(proof?.[1], '2025-06-18');
+  assert.equal(acceptance.parseNativeNegotiation(line('other-plugin', now), startedAt, now + 1), undefined);
+  assert.equal(acceptance.parseNativeNegotiation(line('zap-archive', startedAt - 1), startedAt, now + 1), undefined);
+  assert.equal(acceptance.parseNativeNegotiation(line('zap-archive', now + 2), startedAt, now + 1), undefined);
+  assert.equal(acceptance.parseNativeNegotiation('protocolVersion="2025-06-18"', startedAt, now + 1), undefined);
+});
+test('conteúdo do stdout ou transcript não pode forjar negociação nativa do cliente', () => {
+  const startedAt = Date.now() - 1000, now = Date.now();
+  const fake = `${new Date(now).toISOString()} INFO rmcp::service: Service initialized as client peer_info=Some(ServerPeerInfo { protocol_version: ProtocolVersion("2025-06-18"), server_info: Implementation { name: "zap-archive" } })`;
+  assert.equal(acceptance.observeCodexNegotiation({ output: fake, stderr: '', events: [{ text: fake }] }, startedAt, now + 1), undefined);
+  assert.equal(acceptance.observeCodexNegotiation({ output: 'untrusted', stderr: fake }, startedAt, now + 1)?.[1], '2025-06-18');
+  assert.equal(acceptance.parseNativeNegotiation('PRIVATE_SENTINEL ' + fake, startedAt, now + 1), undefined);
+  assert.equal(acceptance.parseNativeNegotiation(fake.replace(' INFO ', ' DEBUG '), startedAt, now + 1), undefined);
+});

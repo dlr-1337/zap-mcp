@@ -73,7 +73,7 @@ export function runCodex(executable, args, env, cwd, transcript, prompt) {
       appendFileSync(transcript, '\n' + stderr);
       if (failure) { reject(failure); return; }
       const events = output.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
-      accept({ pid: child.pid, code, output: output + stderr, events });
+      accept({ pid: child.pid, code, output: output + stderr, stderr, events });
       } catch (error) { reject(error); }
     }); child.stdin.end(prompt);
   });
@@ -89,7 +89,7 @@ function http(origin, ca, path, options = {}) {
 }
 const day = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
 const ascending = (a, b) => (a.original_timestamp === null) - (b.original_timestamp === null) || (Date.parse(a.original_timestamp) - Date.parse(b.original_timestamp) || 0) || Buffer.compare(Buffer.from(a.reference), Buffer.from(b.reference));
-function messageOracle(db, reference) {
+export function messageOracle(db, reference) {
   const m = db.prepare('SELECT * FROM messages WHERE reference=?').get(reference); check(m, 'SQL reference');
   const e = JSON.parse(m.evidence ?? '{}'), origins = db.prepare('SELECT key_json FROM origins WHERE reference=? ORDER BY rowid').all(reference).map(r => JSON.parse(r.key_json));
   const revisions = db.prepare('SELECT id,kind,source_time,observed_at,evidence FROM revisions WHERE reference=? ORDER BY id').all(reference).map(r => ({ ...JSON.parse(r.evidence), text: JSON.parse(r.evidence).text || null, revisionId: r.id, fingerprint: hash(JSON.stringify([r.kind, r.source_time, JSON.parse(r.evidence)])), kind: r.kind, sourceTimestamp: r.source_time, observedAt: r.observed_at }));

@@ -15,10 +15,10 @@ import { createService } from '../dist/src/main.js';
 const check = (value, name) => assert.equal(Boolean(value), true, name);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const same = (a, b) => isDeepStrictEqual(a, b);
-export function auditEvidence(p) {
+export function auditEvidence(p, minimumMessages = 101) {
   try {
     const accepted = p.synthetic === false && p.originVerified === true && p.isolated === true && p.collectorEnabled === false
-      && Array.isArray(p.expectedReferences) && p.expectedReferences.length > 100
+      && Array.isArray(p.expectedReferences) && Number.isSafeInteger(minimumMessages) && minimumMessages >= 1 && p.expectedReferences.length >= minimumMessages
       && same(p.references, p.expectedReferences) && new Set(p.references).size === p.references.length
       && p.metadataEqual === true && Number.isSafeInteger(p.expectedFileCount) && p.expectedFileCount >= 0
       && Array.isArray(p.files) && p.files.length === p.expectedFileCount && p.files.every(f => Number.isSafeInteger(f.size) && f.size >= 0
@@ -54,7 +54,7 @@ function rowsFor(db, c, period) {
   return rows.filter(m => Number.isFinite(Date.parse(m.original_timestamp)) && Date.parse(m.original_timestamp) >= period.start && Date.parse(m.original_timestamp) < period.end)
     .sort((a, b) => Date.parse(a.original_timestamp) - Date.parse(b.original_timestamp) || Buffer.compare(Buffer.from(a.reference), Buffer.from(b.reference)));
 }
-function matchesMetadata(db, row, m) {
+export function matchesMetadata(db, row, m) {
   const evidence = JSON.parse(row.evidence ?? '{}');
   const revisions = db.prepare('SELECT id,kind,source_time,observed_at,evidence FROM revisions WHERE reference=? ORDER BY id').all(row.reference);
   const origins = db.prepare('SELECT key_json FROM origins WHERE reference=? ORDER BY rowid').all(row.reference).map(r => JSON.parse(r.key_json));
@@ -73,7 +73,7 @@ function matchesMetadata(db, row, m) {
   const mappings = db.prepare('SELECT jid,alternate FROM identity_evidence').all().filter(r => identities.has(r.jid) || identities.has(r.alternate));
   return same(m.identityMappings, mappings);
 }
-function zipOracle(path, db, c, period, snapshot) {
+export function zipOracle(path, db, c, period, snapshot, minimumMessages = 101) {
   const run = args => spawnSync('unzip', args, { maxBuffer: 100 * 1024 ** 2 });
   check(run(['-t', path]).status === 0, 'ZIP integrity');
   const read = name => { const p = run(['-p', path, name]); check(p.status === 0, 'ZIP entry'); return p.stdout; };
@@ -103,7 +103,7 @@ function zipOracle(path, db, c, period, snapshot) {
   check(rows.every(row => text.includes(row.reference)) && text.includes('America/Sao_Paulo'), 'readable references');
   const proof = { synthetic: false, originVerified: true, isolated: true, collectorEnabled: false, expectedReferences: rows.map(r => r.reference),
     references: m.messages.map(r => r.reference), metadataEqual, expectedFileCount: entries.length - 2, files, missingExpected: expectedMissing, missing };
-  check(auditEvidence(proof).accepted, 'independent ZIP acceptance');
+  check(auditEvidence(proof, minimumMessages).accepted, 'independent ZIP acceptance');
   return { proof, counts: m.counts, revisions: m.messages.reduce((n, r) => n + r.revisions.length, 0), quotes: m.messages.filter(r => r.quote).length };
 }
 export async function runAcceptance({ mode, snapshotDir, caseFile }) {
