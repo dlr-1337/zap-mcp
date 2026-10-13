@@ -442,6 +442,33 @@ function helperFixture(running = true) {
   return { config, container, runner, mutations, reads };
 }
 
+test('inventário refaz só leitura após contêiner removido e conserva bloqueio de writer estrangeiro', async () => {
+  const modulePath = '../../ops/zap-container-control.mjs', m = await import(modulePath), missing = 'd'.repeat(12);
+  const absent = Object.assign(Error('removed during inventory'), { code: 1, stderr: 'Error response from daemon: No such container: ' + missing + '\n' });
+  for (const scenario of ['unrelated', 'owned', 'foreign-writer', 'repeated', 'permission']) {
+    const f = helperFixture(), foreign = { ...structuredClone(f.container), Id: 'e'.repeat(64), Config: { ...structuredClone(f.container.Config), Labels: {} } };
+    let lists = 0, inspections = 0;
+    const runner = async (program: string, args: string[]) => {
+      if (args[0] === 'ps') { lists++; return { stdout: lists === 1 ? f.container.Id + '\n' + missing : scenario === 'owned' ? '' : f.container.Id + (scenario === 'foreign-writer' ? '\n' + foreign.Id : '') }; }
+      if (args[0] === 'inspect') {
+        inspections++;
+        if (scenario === 'permission') throw Object.assign(Error('permission denied'), { code: 1, stderr: 'permission denied\n' });
+        if (inspections === 1 || scenario === 'repeated') throw absent;
+        return { stdout: JSON.stringify(scenario === 'foreign-writer' ? [f.container, foreign] : [f.container]) };
+      }
+      return f.runner(program, args);
+    };
+    if (scenario === 'unrelated') {
+      const outcome = await m.control(f.config, 'inspect-runtime', undefined, undefined, { runner }).then((facts: any) => facts.running, () => false);
+      assert.equal(outcome, true, 'remoção de outro contêiner não invalida o inventário atual'); assert.equal(lists, 2); assert.equal(inspections, 2);
+    } else {
+      await assert.rejects(m.control(f.config, 'inspect-runtime', undefined, undefined, { runner }));
+      assert.equal(lists, scenario === 'permission' ? 1 : 2); assert.ok(inspections <= 2);
+    }
+    assert.deepEqual(f.mutations, []);
+  }
+});
+
 test('CR-05 Env A e mounts A/B nunca anunciam perfil B nem autorizam controles', async () => {
   const path = '../../ops/zap-container-control.mjs', m = await import(path);
   for (const action of ['inspect-runtime', 'inspect', 'stop', 'start']) {
