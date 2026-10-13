@@ -87,11 +87,24 @@ export async function control(config, action, release, mode, { runner = exec, pr
   assert.ok(['inspect', 'inspect-runtime', 'stop', 'start', 'start-boot'].includes(action));
   assert.ok(config.bootUnit === undefined || config.bootUnit === bootUnit, 'boot_unit_scope');
   const systemctl = async args => (await runner('/usr/bin/systemctl', args, { shell: false, timeout: 70_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } })).stdout;
-  const bootAutostart = async () => {
-    if (!config.bootUnit) return false;
-    const state = (await systemctl(['show', '--property=UnitFileState', '--value', bootUnit])).trim();
-    assert.ok(['enabled', 'enabled-runtime', 'disabled', 'masked', 'masked-runtime'].includes(state), 'boot_unit_state');
-    return state === 'enabled' || state === 'enabled-runtime';
+  const bootStatus = async () => {
+    if (!config.bootUnit) return { enabled: false, busy: false, mainPID: 0 };
+    const state = Object.fromEntries((await systemctl(['show', '--property=UnitFileState,ActiveState,MainPID,Job', '--', bootUnit])).trim().split('\n').map(line => line.split('=')));
+    assert.ok(['enabled', 'enabled-runtime', 'disabled', 'masked', 'masked-runtime'].includes(state.UnitFileState), 'boot_unit_state');
+    assert.ok(['active', 'inactive', 'failed', 'activating', 'deactivating', 'reloading', 'maintenance', 'refreshing'].includes(state.ActiveState), 'boot_active_state');
+    const mainPID = Number(state.MainPID); assert.ok(Number.isSafeInteger(mainPID) && mainPID >= 0 && typeof state.Job === 'string', 'boot_job_state');
+    return { enabled: state.UnitFileState === 'enabled' || state.UnitFileState === 'enabled-runtime', busy: mainPID > 0 || state.Job !== '' && state.Job !== '0' || ['activating', 'deactivating', 'reloading', 'refreshing'].includes(state.ActiveState), mainPID };
+  };
+  const ownBootCaller = mainPID => {
+    if (!mainPID) return false;
+    let pid = process.pid;
+    for (let depth = 0; pid > 0 && depth < 16; depth++) {
+      let stat; try { stat = readFileSync('/proc/' + pid + '/stat', 'utf8'); } catch { return false; }
+      if (pid === mainPID) return true;
+      const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+      if (!Number.isSafeInteger(parent) || parent < 0 || parent === pid) return false; pid = parent;
+    }
+    return false;
   };
   const run = async args => (await runner('/usr/bin/docker', args, { shell: false, timeout: 70_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } })).stdout;
   const inventory = async () => {
@@ -100,17 +113,31 @@ export async function control(config, action, release, mode, { runner = exec, pr
     return ids.length ? JSON.parse(await run(['inspect', '--type=container', ...ids])) : [];
   };
   const processes = () => typeof procPids === 'function' ? procPids() : procPids;
-  let all = await inventory(), facts = inspectContainers(config, all, processes());
-  facts.autostart = await bootAutostart() || facts.autostart;
+  let all, facts, boot, ownBoot = false;
+  const refresh = async (stopped = false) => {
+    all = await inventory(); facts = inspectContainers(config, all, typeof procPids === 'function' ? processes() : stopped ? [] : procPids); boot = await bootStatus();
+    facts.autostart = boot.enabled || boot.busy && !(ownBoot && ownBootCaller(boot.mainPID)) || facts.autostart;
+  };
+  const candidates = () => all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel && c.Config.Labels['zap.release'] === release && c.Config.Cmd.includes('--collect') === (mode === 'collect'));
+  const stopOwned = async () => {
+    await refresh(); assert.ok(!boot.busy || ownBoot && ownBootCaller(boot.mainPID), 'boot_job_busy');
+    if (config.bootUnit) await systemctl(['disable', '--', bootUnit]);
+    for (const c of all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel)) {
+      await run(['update', '--restart=no', c.Id]); if (c.State.Running) await run(['stop', '--time', '60', c.Id]);
+    }
+    await refresh(true); assert.ok(!facts.running && !facts.autostart && facts.profileProcesses === 0);
+  };
+  await refresh();
   if (action === 'start-boot') {
     assert.equal(config.bootUnit, bootUnit, 'boot_unit_missing');
     const state = await bootState.read();
     assert.ok(state && typeof state === 'object' && Object.keys(state).sort().join(',') === 'machineId,mode,profilePathHash,release,version', 'boot_state_shape');
     assert.equal(state.version, 1); assert.equal(state.machineId, facts.machineId); assert.equal(state.profilePathHash, facts.profilePathHash);
     assert.ok(config.releases.includes(state.release) && ['offline', 'collect'].includes(state.mode), 'boot_state_scope');
+    release = state.release; mode = state.mode; assert.equal(candidates().length, 1, 'prepared_release_missing');
+    assert.ok(!boot.busy || ownBootCaller(boot.mainPID), 'boot_job_busy'); ownBoot = true;
     // A daemon restart retains Docker's policy; clear only our own triggers before the normal start gate.
-    await control(config, 'stop', undefined, undefined, { runner, procPids, bootState });
-    return control(config, 'start', state.release, state.mode, { runner, procPids, bootState });
+    await stopOwned();
   }
   if (action === 'inspect' || action === 'inspect-runtime') {
     if (config.proxy && action === 'inspect') {
@@ -125,28 +152,22 @@ export async function control(config, action, release, mode, { runner = exec, pr
     return facts;
   }
   if (action === 'stop') {
-    if (config.bootUnit) await systemctl(['disable', '--', bootUnit]);
-    for (const c of all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel)) {
-      await run(['update', '--restart=no', c.Id]);
-      if (c.State.Running) await run(['stop', '--time', '60', c.Id]);
-    }
+    await stopOwned();
   } else {
     assert.ok(!facts.running && facts.profileProcesses === 0 && !facts.autostart);
     assert.ok(config.releases.includes(release) && ['offline', 'collect'].includes(mode));
-    const candidates = all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel && c.Config.Labels['zap.release'] === release && c.Config.Cmd.includes('--collect') === (mode === 'collect'));
-    assert.equal(candidates.length, 1, 'prepared_release_missing');
+    const selected = candidates(); assert.equal(selected.length, 1, 'prepared_release_missing');
     if (config.bootUnit) await bootState.prepare?.();
-    await run(['start', candidates[0].Id]);
+    await run(['start', selected[0].Id]);
     // Docker supports bounded count, not a five-minute window/delay. Three restarts then offline failure.
-    await run(['update', '--restart=on-failure:3', candidates[0].Id]);
+    await run(['update', '--restart=on-failure:3', selected[0].Id]);
   }
-  all = await inventory(); facts = inspectContainers(config, all, typeof procPids === 'function' ? processes() : action === 'stop' ? [] : procPids);
-  facts.autostart = await bootAutostart() || facts.autostart;
+  await refresh(action === 'stop');
   assert.ok(action === 'stop' ? !facts.running && !facts.autostart && facts.profileProcesses === 0 : facts.running && facts.release === release && facts.mode === mode);
-  if (action === 'start' && config.bootUnit) {
+  if (['start', 'start-boot'].includes(action) && config.bootUnit) {
     await bootState.write({ version: 1, machineId: facts.machineId, profilePathHash: facts.profilePathHash, release: facts.release, mode: facts.mode });
     await systemctl(['enable', '--', bootUnit]);
-    assert.equal(await bootAutostart(), true); facts.autostart = true;
+    assert.equal((await bootStatus()).enabled, true); facts.autostart = true;
   }
   return facts;
 }

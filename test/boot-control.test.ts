@@ -13,10 +13,15 @@ function fixture() {
     HostConfig: { PidMode: 'host', Privileged: false, RestartPolicy: { Name: 'no', MaximumRetryCount: 0 }, PortBindings: {} }, Mounts: [{ Type: 'bind', Source: config.dataDir, Destination: config.dataDir, RW: true }], State: { Running: false, Status: 'exited', Pid: 0, StartedAt: 'fixture' }
   })));
   let enabled = false, state: any = null;
+  const boot = { activeState: 'inactive', mainPID: 0, job: '' };
   const effects: string[] = [];
   const runner = async (file: string, args: string[]) => {
     if (file === '/usr/bin/systemctl') {
-      if (args[0] === 'show') { assert.deepEqual(args, ['show', '--property=UnitFileState', '--value', unit]); return { stdout: enabled ? 'enabled\n' : 'disabled\n' }; }
+      if (args[0] === 'show') {
+        if (args[1] === '--property=UnitFileState') { assert.deepEqual(args, ['show', '--property=UnitFileState', '--value', unit]); return { stdout: enabled ? 'enabled\n' : 'disabled\n' }; }
+        assert.deepEqual(args, ['show', '--property=UnitFileState,ActiveState,MainPID,Job', '--', unit]);
+        return { stdout: `UnitFileState=${enabled ? 'enabled' : 'disabled'}\nActiveState=${boot.activeState}\nMainPID=${boot.mainPID}\nJob=${boot.job}\n` };
+      }
       assert.deepEqual(args, [args[0], '--', unit]); assert.ok(['enable', 'disable'].includes(args[0]));
       enabled = args[0] === 'enable'; effects.push(args[0]); return { stdout: '' };
     }
@@ -31,7 +36,7 @@ function fixture() {
   };
   const bootState = { read: () => structuredClone(state), write: (value: any) => { state = structuredClone(value); effects.push('persist'); } };
   const opts = { runner, bootState };
-  return { config, containers, effects, opts, bootState, get state() { return state; }, set state(value: any) { state = value; }, get enabled() { return enabled; }, set enabled(value: boolean) { enabled = value; } };
+  return { config, containers, effects, opts, bootState, boot, get state() { return state; }, set state(value: any) { state = value; }, get enabled() { return enabled; }, set enabled(value: boolean) { enabled = value; } };
 }
 
 test('boot enabled participa de autostart mesmo com todas políticas Docker desligadas', async () => {
@@ -120,4 +125,57 @@ test('configuração antiga continua sem systemd nem estado de boot', async () =
   const stopped = await control(f.config, 'stop', undefined, undefined, f.opts); assert.equal(stopped.autostart, false);
   assert.equal(f.state, null); assert.ok(!f.effects.some(effect => ['enable', 'disable', 'persist'].includes(effect)));
   await assert.rejects(control(f.config, 'start-boot', undefined, undefined, f.opts));
+});
+
+const pendingBoots = [
+  { activeState: 'active', mainPID: process.pid, job: '' },
+  { activeState: 'activating', mainPID: 0, job: '' },
+  { activeState: 'inactive', mainPID: 0, job: '218' },
+  { activeState: 'deactivating', mainPID: 0, job: '' }
+];
+
+test('inspect anuncia gatilho pendente mesmo quando unidade de boot está disabled', async () => {
+  for (const boot of pendingBoots) for (const action of ['inspect', 'inspect-runtime']) {
+    const f = fixture(); Object.assign(f.boot, boot);
+    assert.equal((await control(f.config, action, undefined, undefined, f.opts)).autostart, true);
+    assert.deepEqual(f.effects, []);
+  }
+});
+
+test('stop e start externos recusam boot pendente antes de disable ou mutação Docker', async () => {
+  for (const boot of pendingBoots) for (const action of ['stop', 'start']) {
+    const f = fixture(); Object.assign(f.boot, boot);
+    await assert.rejects(control(f.config, action, f.config.releases[0], 'offline', f.opts)); assert.deepEqual(f.effects, []);
+  }
+});
+
+test('start-boot próprio com sudo ancestral real conclui ciclo sem matar sua unidade', async () => {
+  const f = fixture(); f.enabled = true; Object.assign(f.boot, { activeState: 'activating', mainPID: process.ppid, job: '218' });
+  f.state = { version: 1, machineId: 'a'.repeat(32), profilePathHash: profileHash, release: f.config.releases[1], mode: 'collect' };
+  const facts = await control(f.config, 'start-boot', undefined, undefined, f.opts);
+  assert.equal(facts.running, true); assert.equal(facts.release, f.config.releases[1]); assert.equal(facts.mode, 'collect');
+  assert.equal(f.containers.filter(c => c.State.Running).length, 1); assert.equal(f.effects[0], 'disable'); assert.deepEqual(f.effects.slice(-4), ['start', 'update', 'persist', 'enable']);
+});
+
+test('start-boot externo não usa exceção de job queued ou de outra unidade em execução', async () => {
+  for (const boot of [{ activeState: 'activating', mainPID: 0, job: '218' }, { activeState: 'active', mainPID: 4194304, job: '218' }]) {
+    const f = fixture(); f.enabled = true; Object.assign(f.boot, boot);
+    f.state = { version: 1, machineId: 'a'.repeat(32), profilePathHash: profileHash, release: f.config.releases[0], mode: 'offline' };
+    await assert.rejects(control(f.config, 'start-boot', undefined, undefined, f.opts)); assert.deepEqual(f.effects, []);
+  }
+});
+
+test('start-boot próprio valida estado e candidato antes de conceder exceção interna', async () => {
+  for (const kind of ['state', 'candidate']) {
+    const f = fixture(); f.enabled = true; Object.assign(f.boot, { activeState: 'activating', mainPID: process.ppid, job: '218' });
+    f.state = { version: 1, machineId: kind === 'state' ? 'e'.repeat(32) : 'a'.repeat(32), profilePathHash: profileHash, release: f.config.releases[1], mode: 'collect' };
+    if (kind === 'candidate') f.containers.splice(3, 1);
+    await assert.rejects(control(f.config, 'start-boot', undefined, undefined, f.opts)); assert.deepEqual(f.effects, []);
+  }
+});
+
+test('unidade oneshot concluída sem PID ou job pendente continua permitindo stop normal', async () => {
+  const f = fixture(); f.boot.activeState = 'active';
+  assert.equal((await control(f.config, 'inspect-runtime', undefined, undefined, f.opts)).autostart, false);
+  assert.equal((await control(f.config, 'stop', undefined, undefined, f.opts)).autostart, false);
 });
