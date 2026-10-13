@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { request } from 'node:https';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { assertSupervisorFacts } from '../dist/src/operation.js';
 
 const runFile = promisify(execFile);
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
@@ -44,6 +45,8 @@ export function validateConfig(config) {
   if (config.proxy) { assert.ok(['nginx', 'caddy', 'traefik'].includes(config.proxy.kind)); safePath(config.proxy.configFile); assert.ok(typeof config.proxy.expectedConfigDigest === 'string' && /^[a-f0-9]{64}$/.test(config.proxy.expectedConfigDigest)); }
   if (config.supervisor) { assert.ok(['systemd', 'docker'].includes(config.supervisor.kind)); if (config.supervisor.kind === 'systemd') assert.match(config.supervisor.unit, /^[A-Za-z0-9_.@-]+\.service$/); else { assert.match(config.supervisor.helperPath, /^\/usr\/local\/libexec\/[A-Za-z0-9_.-]+$/); assert.match(config.supervisor.name, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/); } }
   if (config.persistentVolume) { safePath(config.persistentVolume.path); safePath(config.persistentVolume.releaseRoot); }
+  if (config.target && config.persistentVolume) assert.equal(config.target.dataDir, config.persistentVolume.path);
+  for (const host of [config.source, config.target].filter(Boolean)) { assert.equal(host.dataDir, resolve(host.dataDir)); assert.equal(host.appRoot, resolve(host.appRoot)); }
   if (config.offsite) { safePath(config.offsite.storagePath); if (config.offsite.kind === 'local') requirePrivate(config.offsite.configFile); }
   if (config.recoveryKeyReference) { safePath(config.recoveryKeyReference.path); assert.ok(config.recoveryKeyReference.host === 'offsite'); }
   if (config.capacity) assert.ok(Object.values(config.capacity).every(v => Number.isSafeInteger(v) && v >= 0));
@@ -101,7 +104,9 @@ async function hostProbe(scope) {
   if (scope.supervisor) {
     if (scope.supervisor.kind === 'docker') {
       const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, scope.recovery ? 'inspect-runtime' : 'inspect']));
-      if (facts.machineId !== out.machineId) throw Error('supervisor_host');
+      const { pathToFileURL } = await import('node:url');
+      const operation = await import(pathToFileURL(path.join(scope.appRoot, 'dist/src/operation.js')).href);
+      operation.assertSupervisorFacts({ machineId: out.machineId, dataDir: scope.dataDir }, facts);
       out.supervisor = facts; out.supervisor.version = 'bounded-docker-helper';
     } else {
     const text = await sub('systemctl', ['show', scope.supervisor.unit, '--no-pager', '--property=LoadState,ActiveState,UnitFileState,MainPID,User']);
@@ -118,6 +123,9 @@ async function hostProbe(scope) {
     if (scope.proxy.kind === 'traefik') {
       // The root-owned helper checks the existing proxy container/network and returns only version/peer.
       const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, 'inspect']));
+      const { pathToFileURL } = await import('node:url');
+      const operation = await import(pathToFileURL(path.join(scope.appRoot, 'dist/src/operation.js')).href);
+      operation.assertSupervisorFacts({ machineId: out.machineId, dataDir: scope.dataDir }, facts);
       out.proxy.version = facts.proxy?.version; out.proxy.peer = facts.proxy?.peer; out.proxy.verified = facts.proxy?.verified === true;
     } else { const result = await exec(scope.proxy.kind, scope.proxy.kind === 'nginx' ? ['-v'] : ['version'], { timeout: 8000, killSignal: 'SIGKILL', maxBuffer: 65536, shell: false }); out.proxy.version = (result.stdout || result.stderr).trim(); }
   }
@@ -145,7 +153,9 @@ export function probeCommand(host, scope) {
 export async function probeHost(host, scope, { signal, runner = runFile } = {}) {
   const [command, argv] = probeCommand(host, scope);
   const { stdout } = await runner(command, argv, { timeout: 10000, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false, signal });
-  const facts = JSON.parse(stdout); assert.equal(facts.machineId, host.machineId); return facts;
+  const facts = JSON.parse(stdout); assert.equal(facts.machineId, host.machineId);
+  if (scope.supervisor?.kind === 'docker') assertSupervisorFacts({ machineId: host.machineId, dataDir: scope.dataDir }, facts.supervisor);
+  return facts;
 }
 async function tlsProbe(origin, signal) {
   return new Promise((yes, no) => {

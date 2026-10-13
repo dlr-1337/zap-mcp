@@ -13,7 +13,7 @@ import Database from 'better-sqlite3';
 import { createService } from '../dist/src/main.js';
 import { createAuthState } from '../dist/src/whatsapp.js';
 import { startMediaWorker } from '../dist/src/media.js';
-import { privateFile, readPrivateJson, atomicPrivateJson, acquireOperation, newJournal, createSupervisor, assertQuiet, coordinatedSnapshot } from '../dist/src/operation.js';
+import { privateFile, readPrivateJson, atomicPrivateJson, acquireOperation, newJournal, createSupervisor, assertQuiet, assertSupervisorFacts, coordinatedSnapshot } from '../dist/src/operation.js';
 import { createSnapshot, validateSnapshot } from '../dist/src/backup.js';
 import { createSourceFence } from '../dist/src/promotion.js';
 import { readOffsiteConfig, runOffsiteBackup, produceOffsiteCopy, acknowledgeOffsiteCopy } from '../dist/src/offsite.js';
@@ -161,6 +161,10 @@ function validateConfig(config, recovery = false) {
   assert.ok(Number.isInteger(r.port ?? 22) && (r.port ?? 22) > 0 && (r.port ?? 22) <= 65535);
   commit(config.priorRelease); commit(config.candidateRelease); assert.match(config.archiveSchema, /^[a-f0-9]{64}$/); assert.match(config.authSchema, /^[a-f0-9]{64}$/);
   const env = readPrivateJson(config.environmentFile); assert.equal(env.target.host, r.host); assert.equal(env.target.machineId, r.machineId); assert.equal(env.persistentVolume.path, r.dataDir);
+  assert.equal(env.target.kind, 'ssh'); assert.equal(env.supervisor.kind, 'docker'); assert.equal(env.supervisor.helperPath, r.helperPath);
+  for (const key of ['dataDir', 'appRoot', 'nodePath', 'user', 'identityFile', 'knownHostsFile']) assert.equal(env.target[key], r[key]);
+  assert.equal(env.target.port ?? 22, r.port ?? 22); assert.match(r.machineId, /^[a-f0-9]{32}$/);
+  assert.equal(r.dataDir, resolve(r.dataDir)); assert.equal(r.appRoot, resolve(r.appRoot));
   assert.equal(env.publicOrigin, config.publicOrigin); assert.equal(new URL(config.publicOrigin).origin, config.publicOrigin);
   return config;
 }
@@ -180,10 +184,11 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
   if (mode === 'recover') await assertRecoveryReady({ configFile: config.environmentFile, runner });
   else await ready(); // full gates remain mandatory before migrate/update
   const call = (task, extra = {}, input) => rpc(config, task, extra, input, runner);
+  const checkedControl = async extra => { const facts = await call('control', extra); assertSupervisorFacts(config.target, facts); return facts; };
   const controller = {
-    inspect: () => call('control', { action: mode === 'recover' ? 'inspect-runtime' : 'inspect' }),
-    stop: () => call('control', { action: 'stop' }),
-    activate: (release, mode) => call('control', { action: 'start', release, mode })
+    inspect: () => checkedControl({ action: mode === 'recover' ? 'inspect-runtime' : 'inspect' }),
+    stop: async () => { await controller.inspect(); const facts = await checkedControl({ action: 'stop' }); assertQuiet(facts, true); },
+    activate: async (release, mode) => { const before = await controller.inspect(); assertQuiet(before, true); commit(release); assert.ok(before.preparedReleases?.some(p => p.release === release && p.mode === mode), 'prepared_release_missing'); const facts = await checkedControl({ action: 'start', release, mode }); assert.ok(facts.running && facts.release === release && facts.mode === mode, 'started_release_mismatch'); }
   };
   const facts = await controller.inspect();
   if (mode !== 'recover') for (const release of [config.priorRelease, config.candidateRelease]) assert.ok(facts.preparedReleases?.some(p => p.release === release && p.mode === 'offline'), 'prepared_release_missing');

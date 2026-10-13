@@ -120,3 +120,32 @@ test('recover recusa journal de outro target e schema incompatível antes de sto
     await assert.rejects(f.m.runDeployment('recover', f)); assert.ok(!f.actions.includes('stop')); assert.ok(!f.actions.includes('start'));
   }
 });
+
+test('deployment recusa helper de outro volume e fatos PID divergentes antes de stop', async t => {
+  for (const mutate of [
+    (f: any) => { f.profilePathHash = 'f'.repeat(64); },
+    (f: any) => { f.machineId = 'f'.repeat(32); },
+    (f: any) => { f.pid = 91; },
+    (f: any) => { f.profileProcesses = 1; },
+    (f: any) => { f.running = true; f.release = null; }
+  ]) {
+    const f = await recoveryFixture(t); const runner = async (program: string, argv: string[]) => {
+      const result = await f.runner(program, argv), value = JSON.parse(result.stdout);
+      if (value.preparedReleases) mutate(value); return { stdout: JSON.stringify(value) };
+    };
+    await assert.rejects(f.m.runDeployment('recover', { ...f, runner })); assert.ok(!f.actions.includes('stop')); assert.ok(!f.actions.includes('start'));
+    assert.deepEqual(f.m.profileState(f.dataDir), f.baseline);
+  }
+});
+
+test('driver exige mesmas referências de host volume runtime e helper que inventário', async t => {
+  for (const key of ['dataDir', 'appRoot', 'nodePath', 'user', 'helperPath', 'volume']) {
+    const f = await recoveryFixture(t), env = JSON.parse(readFileSync(f.config.environmentFile, 'utf8'));
+    if (key === 'helperPath') env.supervisor.helperPath = '/usr/local/libexec/other';
+    else if (key === 'volume') env.persistentVolume.path = '/srv/private/other';
+    else env.target[key] = key === 'user' ? 'other' : '/srv/private/other';
+    writeFileSync(f.config.environmentFile, JSON.stringify(env)); let probes = 0;
+    await assert.rejects(f.m.runDeployment('recover', { ...f, runner: async (program: string, args: string[]) => { probes++; return f.runner(program, args); } }));
+    assert.equal(probes, 0, key); assert.deepEqual(f.actions, []);
+  }
+});

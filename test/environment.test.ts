@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 const modulePath = '../../scripts/phase4-environment.mjs';
 // Missing implementation is an explicit behavior failure, never an import/fixture crash.
 const api: any = existsSync(new URL(modulePath, import.meta.url)) ? await import(modulePath) : { discover: async () => ({ status: 'unimplemented' }) };
@@ -82,4 +83,13 @@ test('Docker Traefik e pull local exigem config privada e cópia real decriptáv
   const result = await api.discover({ configFile: file });
   assert.equal(result.status, 'blocked'); assert.equal(result.dependencies.offsite.status, 'unverified'); assert.equal(result.dependencies.recoveryKeyReference.status, 'unverified');
   assert.throws(() => api.validateConfig({ ...config, supervisor: { ...config.supervisor, helperPath: '/tmp/untrusted' } }));
+});
+
+test('inventário confere hash canônico do helper e recusa PID/contagem inconsistentes', async () => {
+  const dataDir = '/srv/private/fixture', host = { kind: 'local', machineId: 'a'.repeat(32) }, scope = { dataDir, appRoot: '/srv/releases/fixture', supervisor: { kind: 'docker', helperPath: '/usr/local/libexec/fixture' } };
+  const facts = { running: true, autostart: false, pid: 123, startTime: 'fixture', machineId: host.machineId, profilePathHash: createHash('sha256').update(dataDir).digest('hex'), profileProcesses: 1, mode: 'offline', release: 'b'.repeat(40) };
+  const runner = (supervisor: any) => async () => ({ stdout: JSON.stringify({ machineId: host.machineId, supervisor }) });
+  await assert.doesNotReject(api.probeHost(host, scope, { runner: runner(facts) }));
+  for (const mutation of [{ profilePathHash: 'f'.repeat(64) }, { pid: 0 }, { profileProcesses: 0 }, { mode: 'invalid' }, { release: null }]) await assert.rejects(api.probeHost(host, scope, { runner: runner({ ...facts, ...mutation }) }));
+  await assert.rejects(api.probeHost(host, { ...scope, dataDir: dataDir + '/./' }, { runner: runner(facts) }));
 });
