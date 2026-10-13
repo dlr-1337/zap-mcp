@@ -40,11 +40,12 @@ export function publicReceipt(p, live) {
   return { accepted: true, synthetic: false, codex: live.process.version, node: process.version, sdk: { server: '2.3.1', node: '2.1.1' },
     protocol: live.negotiation.selected, tls: { verified: true, hostname: 'localhost', untrustedRejected: true },
     toolCalls: Object.fromEntries(tools.map(name => [name, live.calls.filter(c => c.name === name).length])),
-    oracle: Object.fromEntries(['sql', 'site', 'bytes', 'fields', 'filters', 'coverage', 'searchPages', 'contextBefore', 'contextAfter', 'searchedMessages', 'contextMessages', 'revisions', 'quotes', 'maxQueryEnvelope', 'realQuoteAnchors', 'realEditedAnchors', 'realUnknownTimeAnchors', 'contextQuotes', 'contextEdits', 'smallDelivery', 'largeDelivery'].filter(k => live.oracle[k] !== undefined).map(k => [k, live.oracle[k]])), originals: live.files.map(f => ({ bytes: f.size, sha256: f.sha256 })),
+    oracle: Object.fromEntries(['sql', 'site', 'bytes', 'fields', 'filters', 'coverage', 'searchPages', 'contextBefore', 'contextAfter', 'searchedMessages', 'contextMessages', 'revisions', 'quotes', 'maxQueryEnvelope', 'realQuoteAnchors', 'realEditedAnchors', 'realUnknownTimeAnchors', 'contextQuotes', 'contextEdits', 'smallDelivery', 'largeDelivery'].filter(k => live.oracle[k] !== undefined).map(k => [k, live.oracle[k]])), originals: live.files.map(f => ({ bytes: f.size, integrityVerified: true })),
     queryBudget: 32768, queryBudgetMeaning: 'server operational policy, not a measured Codex ceiling',
     configPreserved: true, collectorEnabled: false, environment: 'local native HTTPS; offline linked-account clone; VPS not verified',
     delivery: 'Codex calls then explicit authenticated original GET; destination size and SHA independently checked', at: new Date(live.endedAt).toISOString() };
 }
+export function restoreWebConfig(db, rows) { db.transaction(() => { db.prepare('DELETE FROM web_config').run(); for (const row of rows) db.prepare('INSERT INTO web_config(key,value) VALUES (@key,@value)').run(row); })(); }
 export function runCodex(executable, args, env, cwd, transcript, prompt) {
   return new Promise((accept, reject) => {
     writeFileSync(transcript, '', { mode: 0o600, flag: 'wx' });
@@ -143,7 +144,7 @@ export async function runAcceptance(caseFile) {
   writeFileSync(join(directory, 'selected.json'), JSON.stringify(selected), { mode: 0o600 });
   s = createService({ dataDir: c.dataDir });
   originalOwner = s.authDb.prepare('SELECT * FROM web_owner').all(); originalSessions = s.authDb.prepare('SELECT * FROM web_sessions').all();
-  originalRevocations = s.authDb.prepare('SELECT * FROM web_revocations').all(); originalConfig = s.authDb.prepare("SELECT * FROM web_config WHERE key NOT LIKE 'mcp-%'").all();
+  originalRevocations = s.authDb.prepare('SELECT * FROM web_revocations').all(); originalConfig = s.authDb.prepare('SELECT * FROM web_config').all();
   const primary = () => hash(JSON.stringify(['conversations', 'messages', 'revisions', 'origins', 'identity_evidence', 'attachments'].map(t => db.prepare('SELECT * FROM ' + t + ' ORDER BY rowid').all())));
   const primaryBefore = primary();
   server = createServer({ key: privateFile(c.keyFile), cert: readFileSync(c.certFile) }, (req, res) => {
@@ -271,8 +272,7 @@ export async function runAcceptance(caseFile) {
       () => { if (restoreState) s.authDb.transaction(() => { s.authDb.prepare('DELETE FROM web_owner').run(); for (const row of originalOwner) s.authDb.prepare('INSERT INTO web_owner(id,salt,hash) VALUES (@id,@salt,@hash)').run(row);
       s.authDb.prepare('DELETE FROM web_sessions').run(); for (const row of originalSessions) s.authDb.prepare('INSERT INTO web_sessions(id,data,touched_at) VALUES (@id,@data,@touched_at)').run(row);
       s.authDb.prepare('DELETE FROM web_revocations').run(); for (const row of originalRevocations) s.authDb.prepare('INSERT INTO web_revocations(id,revoked_at) VALUES (@id,@revoked_at)').run(row);
-      s.authDb.prepare("DELETE FROM web_config WHERE key LIKE 'mcp-%'").run();
-      s.authDb.prepare("DELETE FROM web_config WHERE key NOT LIKE 'mcp-%'").run(); for (const row of originalConfig) s.authDb.prepare('INSERT INTO web_config(key,value) VALUES (@key,@value)').run(row); })(); },
+      restoreWebConfig(s.authDb, originalConfig); })(); },
       () => s?.close(), () => db?.close(),
       () => { if (existsSync(tokenPath)) unlinkSync(tokenPath); },
       () => { if (existsSync(downloaderPath(directory))) unlinkSync(downloaderPath(directory)); },
@@ -284,8 +284,8 @@ export async function runAcceptance(caseFile) {
 const downloaderPath = directory => join(directory, 'download-case.json');
 export function selfTest() {
   const run = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'dist/test/mcp-acceptance.test.js'], { encoding: 'utf8' });
-  check(run.status === 0 && /# tests 11\b/.test(run.stdout) && /# fail 0\b/.test(run.stdout) && /# skipped 0\b/.test(run.stdout), 'non-vacuous verifier controls');
-  return { accepted: true, mode: 'self-test', synthetic: true, controls: 11 };
+  check(run.status === 0 && /# tests 13\b/.test(run.stdout) && /# fail 0\b/.test(run.stdout) && /# skipped 0\b/.test(run.stdout), 'non-vacuous verifier controls');
+  return { accepted: true, mode: 'self-test', synthetic: true, controls: 13 };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const mode = process.argv[process.argv.indexOf('--mode') + 1];
