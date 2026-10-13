@@ -67,7 +67,7 @@ export function offsiteIndependent(offsite, target) {
 
 // This function is serialized into a fixed node probe; it never imports application startup.
 async function hostProbe(scope) {
-  const deadline = setTimeout(() => process.exit(1), 9500); deadline.unref();
+  const deadline = setTimeout(() => process.exit(1), 20000); deadline.unref();
   const fs = await import('node:fs/promises'), cp = await import('node:child_process'), util = await import('node:util');
   const exec = util.promisify(cp.execFile), os = await import('node:os'), path = await import('node:path');
   const out = { machineId: (await fs.readFile('/etc/machine-id', 'utf8')).trim(), os: os.platform(), node: process.version };
@@ -154,7 +154,7 @@ export function probeCommand(host, scope) {
 }
 export async function probeHost(host, scope, { signal, runner = runFile } = {}) {
   const [command, argv] = probeCommand(host, scope);
-  const { stdout } = await runner(command, argv, { timeout: 10000, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false, signal });
+  const { stdout } = await runner(command, argv, { timeout: 30000, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false, signal });
   const facts = JSON.parse(stdout); assert.equal(facts.machineId, host.machineId);
   if (scope.supervisor?.kind === 'docker') assertSupervisorFacts({ machineId: host.machineId, dataDir: scope.dataDir }, facts.supervisor);
   return facts;
