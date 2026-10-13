@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
+import { rotateMcpToken, createMcpAccess } from '../src/mcp.js';
 
 // Dynamic loading makes a missing verifier an assertion failure, not a test-load error.
 const modulePath = '../../scripts/phase3-acceptance.mjs';
@@ -41,6 +42,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
   mkdirSync(join(executable, '..'), { recursive: true, mode: 0o700 }); writeFileSync(executable, Buffer.from([127, 69, 76, 70]), { mode: 0o600 });
   const seed = createService({ dataDir });
   try {
+    rotateMcpToken(seed.authDb, join(dir, 'original-token'));
     if (!fault.endsWith('cleanup')) seed.authDb.prepare('INSERT INTO web_config(key,value) VALUES (?,?)').run('mcp-token-generation', 'synthetic-existing-generation');
     const auth = createAuthState(seed.authDb, { newProfile: true }); auth.saveCreds({ me: { id: 'synthetic@lid', name: 'fixture' }, account: {} as any, signalIdentities: [{}] as any });
     for (let i = 0; i < 130; i++) seed.writeMessage({ reference: 'synthetic-' + i, conversationId: 'fixture@lid', conversationName: 'fixture', text: 'testword', originalTimestamp: new Date(1700000000000 + i * 1000).toISOString() });
@@ -67,7 +69,7 @@ for (const fault of ['key permissions', 'invalid PEM', 'initial SQL', 'state cap
       if (fault === 'restore cleanup') service.authDb.transaction = (() => { throw Error('restore cleanup fault'); }) as typeof service.authDb.transaction;
       return service;
     }, calendarStart: phase2.calendarStart,
-    ...(fault.endsWith('cleanup') ? { createServer: (_options: any, listener: any) => { const server = https.createServer({}, listener); if (fault === 'listener cleanup') server.closeAllConnections = () => { throw Error('listener cleanup fault'); }; return server; }, rotateMcpToken: () => { throw Error('transport fault'); } } : {}) };
+    ...(fault.endsWith('cleanup') ? { createServer: (_options: any, listener: any) => { const server = https.createServer({}, listener); if (fault === 'listener cleanup') server.closeAllConnections = () => { throw Error('listener cleanup fault'); }; return server; }, rotateMcpToken: (db: Database.Database, path: string) => { rotateMcpToken(db, path); throw Error('transport fault'); } } : {}) };
   // Evaluate the unchanged acceptance flow with real resources; capture ownership for assertions/RED cleanup.
   const body = source.slice(0, source.indexOf('if (process.argv[1]')).replace(/^import .*;\n/gm, '').replace(/\bexport /g, '').replaceAll('import.meta.url', JSON.stringify(new URL(modulePath, import.meta.url).href));
   const names = Object.keys(deps).filter(name => name !== 'default');
@@ -162,4 +164,16 @@ test('WR-01 timeout espera close e encerra filho e descendente que ignoram TERM'
     }
   }
   }
+});
+
+test('CR-03 public receipt never exposes original fingerprints', t => { const {proof,live}=control(t);const receipt=acceptance!.publicReceipt(proof,live); for(const file of live.files) assert.equal(JSON.stringify(receipt).includes(file.sha256),false,'public SHA fingerprint'); assert.ok(receipt.originals.every((f:any)=>f.integrityVerified===true&&!('sha256' in f))); });
+test('CR-04 successful and failed temporary credential runs restore every original MCP key', async t => {
+ const dir=mkdtempSync(join(tmpdir(),'zap-config-restore-'));
+ const s=createService({dataDir:join(dir,'data')});t.after(async()=>{await s.close();rmSync(dir,{recursive:true});});
+ rotateMcpToken(s.authDb,join(dir,'original'));s.authDb.prepare('INSERT INTO web_config(key,value) VALUES (?,?)').run('unrelated-config','PRIVATE_SENTINEL');
+ const original=readFileSync(join(dir,'original'),'utf8').trim(),rows=s.authDb.prepare('SELECT * FROM web_config').all();
+ for(const failed of [false,true]){const path=join(dir,'temporary-'+failed);rotateMcpToken(s.authDb,path);const temporary=readFileSync(path,'utf8').trim();assert.ok(createMcpAccess(s.authDb).authenticate('Bearer '+temporary));assert.equal(createMcpAccess(s.authDb).authenticate('Bearer '+original),null);
+  try{if(failed)throw Error('after-rotation failure');s.authDb.prepare("DELETE FROM web_config WHERE key LIKE 'mcp-%'").run();}catch{}finally{acceptance!.restoreWebConfig(s.authDb,rows);}
+  assert.deepEqual(s.authDb.prepare('SELECT * FROM web_config').all(),rows);assert.ok(createMcpAccess(s.authDb).authenticate('Bearer '+original));assert.equal(createMcpAccess(s.authDb).authenticate('Bearer '+temporary),null);
+ }
 });
