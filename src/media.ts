@@ -228,9 +228,10 @@ export function startMediaWorker({ archive, mediaDir, downloadOriginal, online =
     const { free, total } = space();
     if (typeof free !== 'bigint' || typeof total !== 'bigint' || free < 0n || total <= 0n || free > total) throw Error('Medição de espaço inválida');
     const floor = 256n * 1024n * 1024n, reserve = total / 20n > floor ? total / 20n : floor;
-    // Unknown length claims only current spare capacity, after known commitments and block allocation.
-    let spare = free - reserve - [...reserved].reduce((sum, [id, n]) => sum + (unknownSize.has(id) ? 0n : n), 0n);
-    for (const id of unknownSize) { const prior = reserved.get(id) ?? 0n, current = spare <= 0n ? 0n : prior < spare ? prior : spare; reserved.set(id, current); spare -= current; }
+    // Shrink speculative unknown lengths proportionally so disk variation cannot starve later writers.
+    const spare = free - reserve - [...reserved].reduce((sum, [id, n]) => sum + (unknownSize.has(id) ? 0n : n), 0n);
+    const unknownReserved = [...unknownSize].reduce((sum, id) => sum + (reserved.get(id) ?? 0n), 0n);
+    for (const id of unknownSize) { const prior = reserved.get(id) ?? 0n; reserved.set(id, spare <= 0n ? 0n : unknownReserved > spare ? prior * spare / unknownReserved : prior); }
     return free - reserve - [...reserved].reduce((sum, [id, n]) => sum + (id === except ? 0n : n), 0n);
   }
   const noSpace = () => Object.assign(Error('Espaço insuficiente; downloads pausados'), { code: 'ENOSPC' });

@@ -166,13 +166,15 @@ test('PN/LID preserva bytes distintos e usa locator de cada attachment nas novas
   const pn = media('distinct', 'documentMessage', { fileLength: undefined, fileSha256: undefined }), lid = { ...pn, key: { ...pn.key, remoteJid: '9@lid' } };
   archive.ingestHistory({ messages: [pn, lid] });
   const ids = [archive.readStoredMessage(pn.key)!.attachments[0]!.id, archive.readStoredMessage(lid.key)!.attachments[0]!.id];
-  let started!: () => void, release!: () => void, calls = 0;
+  let started!: () => void, release!: () => void, calls = 0, free = 1n << 30n;
   const both = new Promise<void>(resolve => { started = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
   const originals = [bytes, Buffer.from('outro original sem hash de origem')];
-  let worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async (job: MediaJob) => {
-    calls++; if (calls === 2) started(); await held; return Readable.from([originals[ids.indexOf(job.id)]]);
+  const diskSpace = () => ({ free, total: 2n << 30n });
+  let worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), diskSpace, downloadOriginal: async (job: MediaJob) => {
+    calls++; if (calls === 1) free += 4096n; if (calls === 2) started(); await held; return Readable.from([originals[ids.indexOf(job.id)]]);
   } });
   t.after(() => worker.stop()); await both;
+  assert.equal(worker.snapshot().active, 2);
   archive.ingestContacts({ lid: lid.key.remoteJid, pn: pn.key.remoteJid }); release(); await worker.drain(); await worker.stop();
   assert.equal(archive.getCoverage().uniqueMessages, 1); assert.equal(archive.readStoredMessage(pn.key)!.revisions.length, 1);
   for (const [index, id] of ids.entries()) {
@@ -180,14 +182,37 @@ test('PN/LID preserva bytes distintos e usa locator de cada attachment nas novas
     rmSync(join(dir, 'media', id + '.bin'));
   }
   const { reconcileMedia } = await moduleMedia(); reconcileMedia(archive, join(dir, 'media'));
-  worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), downloadOriginal: async (job: MediaJob) => {
+  worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), diskSpace, downloadOriginal: async (job: MediaJob) => {
     const index = ids.indexOf(job.id); assert.equal(job.message.key.remoteJid, index === 0 ? pn.key.remoteJid : lid.key.remoteJid);
-    calls++; return Readable.from([originals[index]]);
+    calls++; free += calls === 3 ? 4096n : -4096n; return Readable.from([originals[index]]);
   } });
-  await worker.drain(); await worker.stop(); assert.equal(calls, 4);
-  for (const [index, id] of ids.entries()) assert.deepEqual(readFileSync(join(dir, 'media', id + '.bin')), originals[index]);
+  await worker.drain(); const status = worker.snapshot(); await worker.stop(); assert.equal(calls, 4);
+  assert.equal(status.paused, false); assert.equal(status.diagnostic, null);
+  for (const [index, id] of ids.entries()) {
+    assert.equal(archive.getAttachment(id)!.state, 'available');
+    assert.equal(archive.getAttachment(id)!.attempts, 2);
+    assert.deepEqual(readFileSync(join(dir, 'media', id + '.bin')), originals[index]);
+  }
   assert.deepEqual(service.archiveDb.pragma('foreign_key_check'), []);
 });
+
+for (const { count, drop } of [{ count: 1, drop: 4096n }, { count: 2, drop: 0n }, { count: 2, drop: 4095n }, { count: 2, drop: 4096n }, { count: 2, drop: 4097n }]) {
+  test(`orçamento sem tamanho: ${count} arquivo(s), queda de ${drop} bytes livres`, async t => {
+    const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia();
+    const messages = ['unknown-first', 'unknown-second'].slice(0, count).map(id => media(id, 'documentMessage', { fileLength: undefined, fileSha256: undefined }));
+    archive.ingestHistory({ messages });
+    let free = 1n << 30n, calls = 0;
+    const worker = startMediaWorker({ archive, mediaDir: join(dir, 'media'), diskSpace: () => ({ free, total: 2n << 30n }),
+      downloadOriginal: async () => { free += ++calls === 1 && count === 2 ? 4096n : -drop; return Readable.from([bytes]); } });
+    t.after(() => worker.stop()); await worker.drain(); const status = worker.snapshot(); await worker.stop();
+    assert.equal(calls, count); assert.equal(status.paused, false); assert.equal(status.diagnostic, null);
+    for (const message of messages) {
+      const attachment = archive.readStoredMessage(message.key)!.attachments[0]!;
+      assert.equal(attachment.state, 'available'); assert.equal(attachment.attempts, 1);
+      assert.deepEqual(readFileSync(join(dir, 'media', attachment.id + '.bin')), bytes);
+    }
+  });
+}
 
 test('PN/LID exclui job supersedido e impede publicação do worker realmente descartado', async t => {
   const { archive, dir } = fixture(t), { startMediaWorker } = await moduleMedia();
