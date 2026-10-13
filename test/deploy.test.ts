@@ -282,6 +282,17 @@ test('SSH multiplex aplica configuração efetiva privada e recusa controle inse
   const long = join(f.config.operationDir, 'long-control-'.repeat(8)); mkdirSync(long, { mode: 0o700 }); assert.throws(() => f.m.sshArguments({ ...f.config, operationDir: long }, 'true'));
 });
 
+function sshFixtureDiagnostic(logs: string, base: string) {
+  const lines = logs.split(/\r?\n/).filter(line => /Server listening|User .*not allowed|Authentication refused|Could not open|Failed publickey|Accepted publickey|PAM:|error:|fatal:/i.test(line));
+  return lines.slice(-12).map(line => line.replaceAll(base, '<fixture>').replace(/SHA256:[A-Za-z0-9+/=]+/g, '<fingerprint>').replace(/[A-Za-z0-9+/=]{80,}/g, '<encoded>').slice(0, 300)).join('\n') || 'No SSH server diagnostic recorded';
+}
+
+test('diagnóstico de fixture SSH conserva causa sem paths privados nem comandos ou chaves', () => {
+  const base = '/private/fixture', key = 'A'.repeat(120), command = 'B'.repeat(200), diagnostic = sshFixtureDiagnostic(['User runner not allowed because account is locked', 'Could not open ' + base + '/authorized: Permission denied', 'error: encoded ' + command, 'Accepted publickey for runner SHA256:somefingerprint', 'ssh-ed25519 ' + key].join('\n'), base);
+  assert.match(diagnostic, /account is locked/); assert.match(diagnostic, /<fixture>\/authorized/);
+  for (const value of [base, key, command, 'somefingerprint']) assert.ok(!diagnostic.includes(value));
+});
+
 test('RPCs JSON e binários reutilizam conexão OpenSSH real e fecham master privado', async t => {
   const m = await load(); for (const name of ['sshArguments', 'rpc', 'closeSshMaster']) assert.equal(typeof m[name], 'function');
   const sshd = ['/usr/bin/sshd', '/usr/sbin/sshd'].find(existsSync), root = process.getuid!() === 0;
@@ -296,7 +307,7 @@ test('RPCs JSON e binários reutilizam conexão OpenSSH real e fecham master pri
   const probe = portProbe(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening'); const port = (probe.address() as any).port; await new Promise<void>(yes => probe.close(() => yes()));
   const known = join(base, 'known'); writeFileSync(known, '[127.0.0.1]:' + port + ' ' + readFileSync(hostKey + '.pub', 'utf8'), { mode: 0o600 });
   const configPath = join(base, 'sshd.conf'), pidFile = join(base, 'sshd.pid'), user = userInfo().username;
-  writeFileSync(configPath, ['Port ' + port, 'ListenAddress 127.0.0.1', 'HostKey ' + hostKey, 'PidFile ' + pidFile, 'AuthorizedKeysFile ' + authorized, 'PubkeyAuthentication yes', 'PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'UsePAM no', 'AllowUsers ' + user, 'PermitRootLogin ' + (root ? 'prohibit-password' : 'no'), 'AllowTcpForwarding no', 'AllowAgentForwarding no', 'X11Forwarding no', 'StrictModes yes', 'LogLevel VERBOSE'].join('\n') + '\n', { mode: 0o600 });
+  writeFileSync(configPath, ['Port ' + port, 'ListenAddress 127.0.0.1', 'HostKey ' + hostKey, 'PidFile ' + pidFile, 'AuthorizedKeysFile ' + authorized, 'PubkeyAuthentication yes', 'PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'UsePAM ' + (process.env.CI === 'true' ? 'yes' : 'no'), 'AllowUsers ' + user, 'PermitRootLogin ' + (root ? 'prohibit-password' : 'no'), 'AllowTcpForwarding no', 'AllowAgentForwarding no', 'X11Forwarding no', 'StrictModes yes', 'LogLevel VERBOSE'].join('\n') + '\n', { mode: 0o600 });
   const daemon = spawn(root ? sshd : '/usr/bin/sudo', root ? ['-D', '-e', '-f', configPath] : ['-n', sshd, '-D', '-e', '-f', configPath], { stdio: ['ignore', 'ignore', 'pipe'] }); let logs = '';
   daemon.stderr.on('data', bytes => logs += bytes);
   const config = { operationDir, target: { host: '127.0.0.1', user, port, identityFile: key, knownHostsFile: known, nodePath: process.execPath, machineId: readFileSync('/etc/machine-id', 'utf8').trim(), dataDir, appRoot, helperPath: '/usr/local/libexec/fixture', snapshotDir: join(base, 'snapshot'), promotionConfigFile: join(base, 'promotion') } };
@@ -311,10 +322,17 @@ test('RPCs JSON e binários reutilizam conexão OpenSSH real e fecham master pri
     assert.equal((logs.match(/Accepted publickey for /g) ?? []).length, 1);
     const argv = m.sshArguments(config, 'true'), controlPath = argv.find((arg: string) => arg.startsWith('ControlPath=')).slice('ControlPath='.length); assert.equal(existsSync(controlPath), true);
     await m.closeSshMaster(config); assert.equal(existsSync(controlPath), false);
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code ?? error.name : 'unknown';
+    throw Error('isolated SSH fixture failed (' + code + ')\n' + sshFixtureDiagnostic(logs, base));
   } finally {
     try { await m.closeSshMaster(config); } finally {
       lock?.release();
-      if (daemon.exitCode === null && daemon.signalCode === null && existsSync(pidFile)) { const ended = once(daemon, 'exit'), pid = (root ? readFileSync(pidFile, 'utf8') : execFileSync('/usr/bin/sudo', ['-n', '/usr/bin/cat', pidFile], { encoding: 'utf8' })).trim(); execFileSync(root ? '/usr/bin/kill' : '/usr/bin/sudo', root ? ['-TERM', pid] : ['-n', '/usr/bin/kill', '-TERM', pid], { stdio: 'ignore' }); await ended; }
+      if (daemon.exitCode === null && daemon.signalCode === null && existsSync(pidFile)) {
+        const ended = once(daemon, 'exit'), read = (path: string) => root ? readFileSync(path, 'utf8') : execFileSync('/usr/bin/sudo', ['-n', '/usr/bin/cat', path], { encoding: 'utf8' }), pid = read(pidFile).trim();
+        assert.match(pid, /^[1-9]\d*$/); assert.ok(read('/proc/' + pid + '/cmdline').includes(configPath), 'isolated daemon PID must match its private config');
+        execFileSync(root ? '/usr/bin/kill' : '/usr/bin/sudo', root ? ['-TERM', pid] : ['-n', '/usr/bin/kill', '-TERM', pid], { stdio: 'ignore' }); await ended;
+      }
       else if (daemon.exitCode === null) { daemon.kill(); await once(daemon, 'exit'); }
       rmSync(base, { recursive: true });
     }
