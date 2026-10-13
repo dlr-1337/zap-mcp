@@ -68,7 +68,7 @@ function limited(maxBytes: number) { let size = 0; return new Transform({ transf
 async function copy(input: Readable, output: string, maxBytes: number, signal: AbortSignal) {
   await pipeline(input, limited(maxBytes), createWriteStream(output, { flags: 'wx', mode: 0o600 }), { signal }); sync(output);
 }
-async function ageVersion() { const r = await promisify(execFile)('/usr/bin/age', ['--version'], { timeout: 5000, maxBuffer: 1024 }); if (r.stdout.trim() !== '1.3.2') throw Error('age1.3.2 verificado obrigatório'); }
+async function ageVersion() { const r = await promisify(execFile)('/usr/bin/age', ['--version'], { timeout: 5000, maxBuffer: 1024 }); if (!/^v?1\.3\.2$/.test(r.stdout.trim())) throw Error('age1.3.2 verificado obrigatório'); }
 async function processStream(program: string, args: string[], input: Readable, output: Writable, signal: AbortSignal, keyFd?: number, maxBytes = Number.MAX_SAFE_INTEGER) {
   const child = spawn(program, args, { stdio: ['pipe', 'pipe', 'ignore', ...(keyFd === undefined ? [] : [keyFd])], signal, killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent', LANG: 'C' } });
   const done = new Promise<void>((accept, reject) => { child.once('error', reject); child.once('close', code => code === 0 ? accept() : reject(Error('Processo privado falhou'))); });
