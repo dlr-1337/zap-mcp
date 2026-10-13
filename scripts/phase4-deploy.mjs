@@ -244,7 +244,16 @@ export async function rpc(config, task, extra = {}, input, runner = exec) {
   const command = r.nodePath + " -e 'eval(Buffer.from(\"" + Buffer.from(source).toString('base64') + "\",\"base64\").toString())'";
   const argv = sshArguments(config, command);
   // Promotion verifies the full archive; an SSH deadline does not cancel its remote outcome.
-  if (!input) return JSON.parse((await runner('/usr/bin/ssh', argv, { timeout: task === 'promote' ? 900_000 : 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false })).stdout);
+  if (!input) {
+    const read = () => runner('/usr/bin/ssh', argv, { timeout: task === 'promote' ? 900_000 : 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false });
+    let result;
+    try { result = await read(); } catch (error) {
+      if (task !== 'control' || !['inspect', 'inspect-runtime'].includes(extra.action) || error.code !== 255 || error.killed || !/^ssh: connect to host [A-Za-z0-9.-]+ port [0-9]+: Connection refused\r?\n$/.test(error.stderr ?? '')) throw error;
+      // UFW's SSH limit expires after 30 seconds; only a pre-connection read is retried.
+      await new Promise(resolve => setTimeout(resolve, 45_000)); result = await read();
+    }
+    return JSON.parse(result.stdout);
+  }
   const child = spawn('/usr/bin/ssh', argv, { stdio: ['pipe', 'pipe', 'ignore'], signal: AbortSignal.timeout(120_000), killSignal: 'SIGKILL' });
   const { pipeline } = await import('node:stream/promises'); const done = new Promise((yes, no) => { child.on('error', no); child.on('exit', code => code === 0 ? yes() : no(Error('transfer_failed'))); });
   child.stdout.resume(); await Promise.all([pipeline(input, child.stdin), done]); return { received: true };
