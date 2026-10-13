@@ -10,6 +10,7 @@ import { createServer as portProbe } from 'node:net';
 import { once } from 'node:events';
 import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
+import { assertSupervisorFacts } from '../src/operation.js';
 
 const driver = '../../scripts/phase4-deploy.mjs';
 async function load() {
@@ -33,7 +34,7 @@ test('helper conta PID único e recusa root, PID isolado, portas públicas e bin
   const path = '../../ops/zap-container-control.mjs', m = await import(path).catch(() => null);
   assert.equal(typeof m?.inspectContainers, 'function', 'helper restrito e fatos deduplicados devem existir');
   const config = { uid: 12001, machineId: 'a'.repeat(32), dataDir: '/srv/private/zap', appLabel: 'fixture', releases: ['b'.repeat(40)] };
-  const container = { Id: 'c'.repeat(64), Name: '/fixture-current', Config: { User: '12001:12001', Cmd: ['node', 'dist/src/main.js', 'serve'], Labels: { 'zap.archive': 'fixture', 'zap.release': 'b'.repeat(40) } }, HostConfig: { PidMode: 'host', Privileged: false, RestartPolicy: { Name: 'no' }, PortBindings: {}, Binds: [] }, Mounts: [{ Source: config.dataDir, Destination: config.dataDir, RW: true }], State: { Running: true, Status: 'running', Pid: 412, StartedAt: 'now' } };
+  const container = { Id: 'c'.repeat(64), Name: '/fixture-current', Config: { User: '12001:12001', Cmd: ['node', 'dist/src/main.js', 'serve'], Env: ['ZAP_DATA_DIR=' + config.dataDir], Labels: { 'zap.archive': 'fixture', 'zap.release': 'b'.repeat(40) } }, HostConfig: { PidMode: 'host', Privileged: false, RestartPolicy: { Name: 'no' }, PortBindings: {}, Binds: [] }, Mounts: [{ Source: config.dataDir, Destination: config.dataDir, RW: true }], State: { Running: true, Status: 'running', Pid: 412, StartedAt: 'now' } };
   assert.equal(m.inspectContainers(config, [container], [412]).profileProcesses, 1);
   assert.throws(() => m.inspectContainers(config, [container], [412, 413]));
   for (const mutate of [
@@ -148,4 +149,74 @@ test('driver exige mesmas referências de host volume runtime e helper que inven
     await assert.rejects(f.m.runDeployment('recover', { ...f, runner: async (program: string, args: string[]) => { probes++; return f.runner(program, args); } }));
     assert.equal(probes, 0, key); assert.deepEqual(f.actions, []);
   }
+});
+
+function helperFixture(running = true) {
+  const config = { uid: 12001, machineId: 'a'.repeat(32), dataDir: '/srv/private/profile-b', appLabel: 'fixture', releases: ['b'.repeat(40)], proxy: { name: 'proxy', network: 'proxy-net', expectedPeer: '172.18.0.2', publicOrigin: 'https://fixture.invalid' } };
+  const labels: Record<string, string> = { 'zap.archive': config.appLabel, 'zap.release': config.releases[0], 'traefik.http.routers.zap.rule': 'Host(`fixture.invalid`)', 'traefik.http.routers.zap.middlewares': 'zap-forwarding' };
+  const header = 'traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.';
+  for (const name of ['Forwarded', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Port', 'X-Forwarded-Server', 'X-Real-IP']) labels[header + name] = '';
+  labels[header + 'X-Forwarded-Proto'] = 'https';
+  const container: any = { Id: 'c'.repeat(64), Name: '/fixture', Config: { User: '12001:12001', Cmd: ['node', 'dist/src/main.js', 'serve'], Env: ['ZAP_DATA_DIR=' + config.dataDir, 'ZAP_BIND_HOST=0.0.0.0', 'ZAP_PUBLIC_ORIGIN=' + config.proxy.publicOrigin, 'ZAP_TRUSTED_PROXY_PEERS=' + config.proxy.expectedPeer], Labels: labels }, HostConfig: { PidMode: 'host', Privileged: false, RestartPolicy: { Name: 'no' }, PortBindings: {} }, Mounts: [{ Type: 'bind', Source: config.dataDir, Destination: config.dataDir, RW: true }, { Type: 'bind', Source: '/etc/machine-id', Destination: '/etc/machine-id', RW: false }, { Type: 'bind', Source: '/srv/private/operations', Destination: '/srv/private/operations', RW: false }, { Type: 'bind', Source: '/srv/private/snapshots', Destination: '/srv/private/snapshots', RW: false }], NetworkSettings: { Networks: { [config.proxy.network]: {} } }, State: { Running: running, Status: running ? 'running' : 'exited', Pid: running ? 412 : 0, StartedAt: 'fixture' } };
+  const mutations: string[] = [], reads: string[] = [];
+  const runner = async (_file: string, args: string[]) => {
+    if (args[0] === 'ps') { reads.push('ps'); return { stdout: container.Id }; }
+    if (args[0] === 'inspect') { reads.push('inspect'); return { stdout: JSON.stringify([container]) }; }
+    mutations.push(args[0]);
+    if (args[0] === 'start') { container.State.Running = true; container.State.Status = 'running'; container.State.Pid = 412; }
+    if (args[0] === 'stop') { container.State.Running = false; container.State.Status = 'exited'; container.State.Pid = 0; }
+    if (args[0] === 'update') container.HostConfig.RestartPolicy.Name = args[1] === '--restart=no' ? 'no' : 'on-failure';
+    return { stdout: '' };
+  };
+  return { config, container, runner, mutations, reads };
+}
+
+test('CR-05 Env A e mounts A/B nunca anunciam perfil B nem autorizam controles', async () => {
+  const path = '../../ops/zap-container-control.mjs', m = await import(path);
+  for (const action of ['inspect-runtime', 'inspect', 'stop', 'start']) {
+    const f = helperFixture(action !== 'start');
+    f.container.Config.Env[0] = 'ZAP_DATA_DIR=/srv/private/profile-a';
+    f.container.Mounts.push({ Type: 'bind', Source: '/srv/private/profile-a', Destination: '/srv/private/profile-a', RW: true });
+    await assert.rejects(async () => { const facts = await m.control(f.config, action, f.config.releases[0], 'offline', { runner: f.runner }); assertSupervisorFacts(f.config, facts); });
+    assert.deepEqual(f.mutations, [], action + ' deve recusar antes de mutação');
+  }
+});
+
+test('CR-05 invariantes estáticas Env bind origem peers são impostas em todas ações', async () => {
+  const path = '../../ops/zap-container-control.mjs', m = await import(path);
+  for (const mutate of [
+    (c: any) => { delete c.Config.Env; },
+    (c: any) => { c.Config.Env.shift(); },
+    (c: any) => { c.Config.Env.push(c.Config.Env[0]); },
+    (c: any) => { c.Config.Env.push('ZAP_DATA_DIR=/srv/private/profile-a'); },
+    (c: any) => { c.Config.Env.push('ZAP_DATA_DIR'); },
+    (c: any) => { c.Config.Env[0] += '/./'; },
+    (c: any) => { c.Mounts.push({ Type: 'bind', Source: '/srv/private/profile-a', Destination: '/srv/private/profile-a', RW: true }); },
+    (c: any) => { c.Mounts.push(structuredClone(c.Mounts[0])); },
+    (c: any) => { c.Mounts.push({ Type: 'bind', Source: '/srv/private/profile-a', Destination: '/srv/private/profile-b/media', RW: false }); },
+    (c: any) => { c.Config.Env[1] = 'ZAP_BIND_HOST=127.0.0.1'; },
+    (c: any) => { c.Config.Env.splice(1, 1); },
+    (c: any) => { c.Config.Env[2] = 'ZAP_PUBLIC_ORIGIN=https://other.invalid'; },
+    (c: any) => { c.Config.Env.splice(2, 1); },
+    (c: any) => { c.Config.Env.push(c.Config.Env[2]); },
+    (c: any) => { c.Config.Env[3] = 'ZAP_TRUSTED_PROXY_PEERS=172.18.0.3'; },
+    (c: any) => { c.Config.Env.splice(3, 1); },
+    (c: any) => { c.Config.Env.push(c.Config.Env[3]); },
+    (c: any) => { c.Config.Labels['traefik.http.routers.zap.rule'] = 'Host(`other.invalid`)'; }
+  ]) for (const action of ['inspect-runtime', 'inspect', 'stop', 'start']) {
+    const f = helperFixture(action !== 'start'); mutate(f.container);
+    await assert.rejects(m.control(f.config, action, f.config.releases[0], 'offline', { runner: f.runner })); assert.deepEqual(f.mutations, [], action);
+  }
+});
+
+test('CR-05 recovery mantém bind e Env válidos quando somente proxy está indisponível', async () => {
+  const path = '../../ops/zap-container-control.mjs', m = await import(path);
+  const f = helperFixture(false);
+  f.container.Mounts.push({ Type: 'tmpfs', Source: '', Destination: '/tmp', RW: true });
+  await assert.rejects(m.control(f.config, 'inspect', undefined, undefined, { runner: f.runner }), /AssertionError|assert/);
+  const before = await m.control(f.config, 'inspect-runtime', undefined, undefined, { runner: f.runner }); assertSupervisorFacts(f.config, before); assert.equal(before.running, false);
+  const started = await m.control(f.config, 'start', f.config.releases[0], 'offline', { runner: f.runner }); assertSupervisorFacts(f.config, started); assert.equal(started.running, true);
+  const active = await m.control(f.config, 'inspect-runtime', undefined, undefined, { runner: f.runner }); assertSupervisorFacts(f.config, active);
+  const stopped = await m.control(f.config, 'stop', undefined, undefined, { runner: f.runner }); assertSupervisorFacts(f.config, stopped); assert.equal(stopped.running, false);
+  assert.deepEqual(f.mutations, ['start', 'update', 'update', 'stop']); assert.ok(f.reads.length >= 10);
 });

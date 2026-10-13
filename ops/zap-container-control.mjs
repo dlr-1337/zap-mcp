@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 const exec = promisify(execFile);
 
 export function inspectContainers(config, containers, procPids = []) {
   assert.ok(Number.isInteger(config.uid) && config.uid > 0 && /^[a-f0-9]{32}$/.test(config.machineId));
   assert.match(config.dataDir, /^\/[A-Za-z0-9_./-]+$/); assert.ok(!config.dataDir.split('/').includes('..'));
+  assert.equal(config.dataDir, resolve(config.dataDir));
   assert.ok(typeof config.appLabel === 'string' && config.appLabel.length < 129 && Array.isArray(config.releases) && config.releases.every(r => /^[a-f0-9]{40}$/.test(r)));
   const owned = containers.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel);
   assert.ok(owned.length && owned.length <= 8, 'container_inventory');
@@ -18,8 +20,33 @@ export function inspectContainers(config, containers, procPids = []) {
   for (const c of containers) {
     const mounted = c.Mounts?.some(m => m.Source === config.dataDir && m.RW === true);
     if (!owned.includes(c)) { assert.ok(!mounted || !c.State?.Running, 'foreign_writer'); continue; }
-    assert.ok(mounted && c.Mounts.some(m => m.Source === config.dataDir && m.Destination === config.dataDir && m.RW));
+    assert.ok(mounted && c.Mounts.filter(m => m.Source === config.dataDir && m.Destination === config.dataDir && m.RW === true).length === 1);
     assert.ok(!c.Mounts.some(m => /docker\.sock$/.test(m.Source) || m.Source === '/'));
+    // Extra private writers or nested mounts would make the announced profile/binary view ambiguous.
+    for (const mount of c.Mounts) {
+      if (mount.Source === config.dataDir && mount.Destination === config.dataDir && mount.RW === true) continue;
+      assert.ok(mount.Destination !== config.dataDir && !mount.Destination.startsWith(config.dataDir + '/'));
+      assert.ok(mount.RW === false || mount.Type === 'tmpfs' && mount.Destination === '/tmp', 'extra_writable_mount');
+    }
+    const env = c.Config.Env;
+    assert.ok(Array.isArray(env) && env.every(value => typeof value === 'string'), 'app_environment');
+    const configured = (name, expected) => { const values = env.filter(value => value.split('=', 1)[0] === name); assert.equal(values.length, 1, 'app_environment_unique'); assert.equal(values[0], name + '=' + expected, 'app_environment_mismatch'); };
+    configured('ZAP_DATA_DIR', config.dataDir);
+    // These are static app invariants; only live proxy health is optional during recovery.
+    if (config.proxy) {
+      assert.match(config.proxy.name, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/); assert.match(config.proxy.network, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/);
+      assert.ok(isIP(config.proxy.expectedPeer)); assert.ok(c.NetworkSettings?.Networks?.[config.proxy.network]);
+      configured('ZAP_BIND_HOST', '0.0.0.0'); configured('ZAP_TRUSTED_PROXY_PEERS', config.proxy.expectedPeer);
+      const origin = new URL(config.proxy.publicOrigin); assert.equal(origin.protocol, 'https:'); assert.equal(origin.origin, config.proxy.publicOrigin);
+      configured('ZAP_PUBLIC_ORIGIN', origin.origin);
+      const router = config.proxy.router ?? 'zap', middleware = config.proxy.middleware ?? 'zap-forwarding';
+      assert.match(router, /^[A-Za-z0-9_-]+$/); assert.match(middleware, /^[A-Za-z0-9_-]+$/);
+      const labels = c.Config.Labels; assert.equal(labels['traefik.http.routers.' + router + '.rule'], 'Host(`' + origin.host + '`)');
+      assert.equal(labels['traefik.http.routers.' + router + '.middlewares'], middleware);
+      const header = 'traefik.http.middlewares.' + middleware + '.headers.customrequestheaders.';
+      for (const name of ['Forwarded', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Port', 'X-Forwarded-Server', 'X-Real-IP']) assert.equal(labels[header + name], '');
+      assert.equal(labels[header + 'X-Forwarded-Proto'], 'https');
+    }
     assert.equal(c.Config.User, `${config.uid}:${config.uid}`);
     assert.equal(c.HostConfig.PidMode, 'host'); assert.equal(c.HostConfig.Privileged, false);
     assert.ok(!Object.values(c.HostConfig.PortBindings ?? {}).some(v => v?.length));
@@ -53,18 +80,6 @@ export async function control(config, action, release, mode, { runner = exec, pr
       const proxy = all.filter(c => c.Name === '/' + config.proxy.name); assert.equal(proxy.length, 1); assert.equal(proxy[0].State.Running, true);
       const peer = proxy[0].NetworkSettings?.Networks?.[config.proxy.network]?.IPAddress;
       assert.equal(peer, config.proxy.expectedPeer);
-      for (const c of all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel)) {
-        assert.ok(c.NetworkSettings?.Networks?.[config.proxy.network]);
-        const env = c.Config.Env ?? []; assert.ok(env.includes('ZAP_TRUSTED_PROXY_PEERS=' + peer)); assert.ok(env.includes('ZAP_DATA_DIR=' + config.dataDir));
-        const origin = new URL(config.proxy.publicOrigin); assert.equal(origin.protocol, 'https:'); assert.equal(origin.origin, config.proxy.publicOrigin); assert.ok(env.includes('ZAP_PUBLIC_ORIGIN=' + origin.origin));
-        const router = config.proxy.router ?? 'zap', middleware = config.proxy.middleware ?? 'zap-forwarding';
-        assert.match(router, /^[A-Za-z0-9_-]+$/); assert.match(middleware, /^[A-Za-z0-9_-]+$/);
-        const labels = c.Config.Labels; assert.equal(labels['traefik.http.routers.' + router + '.rule'], 'Host(`' + origin.host + '`)');
-        assert.equal(labels['traefik.http.routers.' + router + '.middlewares'], middleware);
-        const header = 'traefik.http.middlewares.' + middleware + '.headers.customrequestheaders.';
-        for (const name of ['Forwarded', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Port', 'X-Forwarded-Server', 'X-Real-IP']) assert.equal(labels[header + name], '');
-        assert.equal(labels[header + 'X-Forwarded-Proto'], 'https');
-      }
       const version = (await run(['exec', proxy[0].Id, 'traefik', 'version'])).trim().split('\n')[0]; assert.match(version, /^Version:\s+[0-9.]+$/);
       facts.proxy = { version, peer, verified: true };
     }
