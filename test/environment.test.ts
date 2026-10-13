@@ -17,3 +17,20 @@ test('configuração ausente produz inventário blocked privado completo', async
   assert.equal(statSync(join(dir, 'environment.json')).mode & 0o777, 0o600);
   assert.equal(JSON.parse(readFileSync(join(dir, 'environment.json'), 'utf8')).version, 1);
 });
+
+test('identidade divergente, timeout e JSON incompleto não comprovam acesso', async () => {
+  const host = { kind: 'local', machineId: 'a'.repeat(32) };
+  await assert.rejects(api.probeHost(host, {}, { runner: async () => ({ stdout: JSON.stringify({ machineId: 'b'.repeat(32) }) }) }));
+  await assert.rejects(api.probeHost(host, {}, { runner: async (_: any, __: any, options: any) => {
+    assert.equal(options.shell, false); assert.equal(options.timeout, 10000); assert.equal(options.killSignal, 'SIGKILL'); throw Error('timeout');
+  } }));
+  await assert.rejects(api.probeHost(host, {}, { runner: async () => ({ stdout: '{}' }) }));
+});
+
+test('SSH usa identidade conhecida, sem aceitar chaves ou executar argv livres', () => {
+  const [cmd, argv] = api.probeCommand({ kind: 'ssh', host: 'fixture.invalid', user: 'owner', identityFile: '/private/id', knownHostsFile: '/private/known' }, {});
+  assert.equal(cmd, 'ssh'); assert.ok(argv.includes('BatchMode=yes')); assert.ok(argv.includes('StrictHostKeyChecking=yes'));
+  assert.ok(argv.includes('UpdateHostKeys=no')); assert.ok(argv.includes('/dev/null'));
+  assert.ok(!argv.includes('accept-new')); assert.match(argv.at(-1), /^node -e 'eval\(Buffer.from\("[A-Za-z0-9+/=]+","base64"\)\.toString\(\)\)'$/);
+  assert.throws(() => api.probeCommand({ kind: 'ssh', host: '-oProxyCommand=bad' }, {}));
+});
