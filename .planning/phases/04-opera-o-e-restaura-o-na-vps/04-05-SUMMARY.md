@@ -48,32 +48,32 @@ coverage:
         ref: .planning/research/.cache/04-05-docker-smoke.log
         status: pass
     human_judgment: false
-  - id: real-operation-pending
+  - id: real-operation-verified
     description: implantação, migração, agenda, backup externo e update no endpoint permanente
     verification:
       - kind: other
-        ref: 04-05-02 precondition/current environment gates
-        status: unknown
-    human_judgment: true
-    rationale: "Acesso host/autorização específica, configs e provas reais ainda pendentes; fixtures não provam OPS."
+        ref: handoff privado do deploy e postchecks nativos
+        status: pass
+    human_judgment: false
+    rationale: "Migração, HTTPS, restart/update, offsite, falhas, agenda e consulta offline observados; cliente/restore final continuam em04-06."
 actuals:
   tokens: 22536
-  tasks: 1
+  tasks: 2
   commits: 2
 plan_head_before: 69a8344fb1c30356c9a4d00a363b0a756e7e6a74
 plan_head_after: 478df8c6a0c34e45bfeb2644191e46eb7876dace
 duration: 25min
 completed: 2026-10-13
-status: halted
+status: complete
 ---
 
-# Phase 4 Plan 5: Preparo de deployment privado e checkpoint real Summary
+# Phase 4 Plan 5: Implantação e operação real Summary
 
-**Imagem Node24/SQLite nativa, helper Docker restrito e tracer de releases/TLS preservam o acervo; migração real permanece em checkpoint antes de qualquer corte da origem.**
+**Acervo real migrado para a VPS, com HTTPS autenticado, persistência após restart/update, cópia externa recuperada e agenda diária executada. A sessão WhatsApp conectou no destino; o ensaio final do cliente/restauração permanece em04-06.**
 
 ## Performance
 
-- Uma de duas tarefas concluída:04-05-01.04-05-02 permanece pending por precondition.
+- As duas tarefas estão concluídas. As métricas abaixo registram a implementação local inicial; a operação real foi continuada pelo orquestrador, sem duração/token total consolidado.
 - Duas commits medidos no ledger antes desta documentação; tokens=ceil(chars/4) do diff realizado90141chars, não tokens do harness. Duração aproximada25min da preparação à conclusão local; o primeiro RED possui timestamp próprio no cache.
 - Execução sequencial main, autorizada pelo config existente; nenhuma mudança de isolamento/config, worktree, push ou arquivo compartilhado STATE/ROADMAP/REQUIREMENTS/WINDOWS. Esses artefatos e a operação real pertencem ao orquestrador.
 
@@ -92,7 +92,7 @@ status: halted
 | Tarefa | RED | GREEN | Situação |
 |---|---|---|---|
 |04-05-01 — release offline e recuperação|132eed5|478df8c|Concluída localmente|
-|04-05-02 — implantação/migração/update reais|—|—|Pending; precondition não satisfeita|
+|04-05-02 — implantação/migração/update reais|Gates reais, sem fixture substituta|Correções e handoff em main; locators privados|Concluída operacionalmente; OPS aguardam04-06|
 
 ## Verification
 
@@ -124,16 +124,23 @@ Evidência integral ignorada em `.planning/research/.cache/04-05-{red.json,red.l
 | threat_flag: bounded-host-root-control | ops/zap-container-control.mjs | Helper root novo: instalação/config/sudoers root-owned, callerUID e allowlist devem ser conferidos na VPS antes de uso; app não recebe sudo/socket |
 | threat_flag: host-pid-and-identity | ops/compose.example.yml | PID/machine-id do host e snapshot/operation RO são necessários aos gates herdados; UID exclusivo e caminhos/perms/peer precisam de prova real |
 
-## Checkpoint04-05-02 e continuidade
+## Operação real continuada
 
-**Gate blocking-human / precondition:** ZAP_OPERATION_CONFIG_FILE ainda não aponta à configuração privada válida; acesso SSH específico/pin autorizados, probes atuais e cópia real independente ainda não comprovados. Login do painel e preparo de app/domínio são fatos intermediários, não prova de acesso host/serviço/acervo.
+- VPS, proxy e supervisor existentes foram inventariados. Runtime nativo Node24/SQLite FTS5, UID dedicado, backend privado, volumes independentes do código, helper e permissões foram conferidos no destino.
+- Fonte original foi parada/cercada e seu autostart desativado. Snapshot final foi transferido privadamente, restaurado e promovido com fence/MAC/identidade atuais. A origem permanece preservada para recuperação e não foi retomada.
+- Como o proprietário não possui a senha anterior, a recuperação de acesso alterou somente o owner do destino. Owner original, sessão e arquivo fonte foram preservados; a nova senha está em arquivo privado, nunca no Git ou recibo.
+- Os **895 originais** disponíveis na migração passaram GET/HEAD anônimos recusados, login/cookie Secure, GET autenticado por stream com tamanho/SHA e Range no HTTPS permanente. Cópia externa cifrada foi recuperada por identidade independente fora da VPS, decifrada, restaurada e reconhecida pelo produtor.
+- Reinício real do serviço exigiu uma retentativa automática, concluída com perfil/owner/sessão/originais preservados. Não houve reboot completo da VPS. Atualização real entre releases distintos passou com backup externo prévio, schema compatível, mesmo volume e conferência integral dos895 originais.
+- Falhas reais controladas de capacidade, rede e chave foram observadas sem alterar configurações/chave de produção ou último bom. Cada uma foi recuperada e seguida de comparação integral. Uma interrupção SIGTERM do receptor foi reconciliada pelo journal/cipher já preparado e retomada nativamente com o mesmo ID; não houve remoção manual de travas nem edição de datas/provas.
+- Agenda diária do notebook às **03h, America/Sao_Paulo**, enabled/active/Persistent, foi observada. A própria unidade systemd executou um backup real com readback/decriptação/restore/ACK; o site autenticado confirmou a cópia mais recente. O evento automático futuro das03h ainda não ocorreu.
+- Consulta no browser permanente passou: login novo, contato/termo/período, contexto, original baixado e ZIP conferidos contra SQL/disco independentes. O ZIP do recorte contém140 mensagens,13 arquivos e3 faltantes explícitos; não afirma histórico integral.
+- Transporte MCP permanente inicializou, recusou bearer descartado e respondeu às quatro ferramentas somente leitura; dois originais autenticados conferiram tamanho/SHA. Isso ainda não é integração no Codex instalado, responsabilidade de04-06.
+- No único coletor do destino, a sessão WhatsApp conectou sem QR e recebeu novos dados: **910 originais** disponíveis depois do teste, mantendo os895 anteriores. A parada precisou retentativa; o serviço foi reconferido no modo offline, com owner e originais preservados, para o ensaio de restauração.
 
-O orquestrador possui os locators privados de inventário/deployment em .git. Completar configuração/UID/runtime/age, helper/sudoers limitado, volumes/identidade/path/read-only e middleware exclusivos; preparar releases exatos/schemas/config source/pull/promotion/SourceSigner pinado. ops/README.md descreve campos, comandos fixos, paths **contratuais**, sequência, rollback e timer notebook com Persistent/horário/fuso a verificar na versão instalada. Não publicar referências reais no SUMMARY.
+Evidências integrais, credenciais, origens, identidades, paths e hashes pessoais ficam nos locators privados e nos postchecks, fora do Git. O resumo público descreve somente critérios, limites e contagens. A suíte integrada atual passou **311/311**, sem fail/cancel/skip; revisão do driver de aceite final ficou clean.
 
-Após autorização específica de acesso host, executar preflight atual. Sem destino/capacidade/fallback/backup/key/config completos, manter source/autostart intactos. Depois migrate e update reais, comparação atual de owner/sessão/SQL/todos originais/novos registros, pull/restore do kit, agenda real medida, consulta sem WhatsApp e cliente Codex04-06. Migração retorna offline; confirmar único modo autorizado/validade remota separadamente, QR só se invalidade real. Falha/ambiguidade exige reconciliação target parado/revogado; não remover marker/lock/proof nem restaurar banco antigo.
-
-**OPS-01/02/03 não concluídos.** Não criar timer, alterar fonte, WhatsApp, TOML Codex, VPS ou painel por este executor. Registrar o verify real não executado em WINDOWS pelo orquestrador, proprietário desses arquivos compartilhados. Nenhum stub local impede04-05-01; os gates reais permanecem explícitos e não foram marcados skip/pass.
+**OPS-01/02/03/04 permanecem Pending até04-06 e verificação independente.** O notebook precisa estar ligado/conectado para cumprir a janela diária; Persistent recupera execução perdida, e o atraso é exposto pelo estado de backup.
 
 ## Self-Check: PASSED
 
-Treze arquivos de implementação/teste/config/documentação e este SUMMARY existem.132eed5 e478df8c são ancestrais de HEAD; ledger mede dois commits com base/final explícitos. Diff sem whitespace/deleções; árvore sem gerados untracked. Esta checagem confirma somente os artefatos e evidências locais, não as tarefas/requisitos reais pendentes.
+Treze arquivos de implementação/teste/config/documentação e este SUMMARY existem.132eed5 e478df8c são ancestrais de HEAD; ledger mede dois commits com base/final explícitos. Diff sem whitespace/deleções; árvore sem gerados untracked. A checagem local original foi ampliada pelos efeitos reais descritos acima. A operação04-05 está concluída; os requisitos OPS aguardam o cliente/restauração e o verificador de04-06.
