@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Operação e restauração na VPS
-current_plan: 4
+current_plan: 5
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-10-13T01:35:07.901Z"
+last_updated: "2026-10-13T02:20:48.802Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 4 planning complete
-state_head: 360a4af1e8417e0fa77bd0a49e2f0ad36af97645
+state_head: 1afd8a9a00ef5ce03146ea1ecb02a438025f21b6
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 23
-  completed_plans: 20
+  completed_plans: 21
   percent: 75
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 ## Current Position
 
 Phase: 4 (Operação e restauração na VPS) — READY TO EXECUTE
-Current Plan: 4
+Current Plan: 5
 Total Plans in Phase: 6
 Status: Executing
 Last activity: 2026-10-12 — Phase 4 planning complete
@@ -81,6 +81,7 @@ Progress: [████████░░] 75% — 3/4 fases; 17/17 planos defin
 | Phase 04 P01 | 6min | 2 tasks | 3 files |
 | Phase 04 P02 | 10min | 2 tasks | 6 files |
 | Phase 04 P03 | 30min | 3 tasks | 8 files |
+| Phase 04 P04 | 19min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -123,6 +124,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: Fase 3 publicada no PR #3: https://github.com/dlr-1337/zap-mcp/pull/3; branch codex/phase-3-codex-mcp sobre main. Réplica sanitizada preserva67commits reais e fonte/testes/pins; CI remoto em acompanhamento, sem implantação na VPS.
 - [Phase 03]: CI do PR #3 e do push89d94ec concluído190/190 no Ubuntu/Node24.21.0, zero fail/cancelled/skipped/todo. Correção test-only do preflight de cleanup isolou Codex pessoal; produto/driver/pins/workflow não mudaram. Fase4 continua não iniciada.
 - [Phase 03]: PR #3 integrado por merge commit905028a; CI da main38314994967 aprovado. Checkout main sincronizado, histórico original protegido no backup local; código de execução/pins/serviço/dados privados preservados. Próxima capacidade permanece fase4.
+- [Phase 04]: Plan04-04 implementa pull cifrado com age e ACK apos restore; teste PN/LID corrigido por reserva proporcional, suite padrao239/239. Backup externo e OPS seguem pendentes da implantacao real.
 
 ### Pending Todos
 
