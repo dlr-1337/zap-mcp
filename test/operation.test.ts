@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -68,4 +68,26 @@ test('SIGTERM duplo encerra CLI com conexão incompleta e reabre perfil intacto'
   const socket = connect(port, '127.0.0.1'); socket.on('error', () => {}); await once(socket, 'connect'); socket.write('POST /login HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 999\r\n');
   const exit = once(child, 'exit'); child.kill('SIGTERM'); child.kill('SIGTERM'); const [code] = await Promise.race([exit, new Promise<never>((_, reject) => { const timer = setTimeout(() => reject(Error('shutdown preso')), 2500); timer.unref(); })]); socket.destroy(); assert.equal(code, 0);
   const next = createService({ dataDir }); try { assert.deepEqual(next.authDb.prepare('SELECT * FROM web_owner').all(), before); assert.deepEqual(next.authDb.prepare('SELECT * FROM whatsapp_profile').all(), session); assert.equal(next.archive.getCoverage().uniqueMessages, 1); } finally { await next.close(); }
+});
+
+async function operationFixture(t: { after(fn: () => unknown): void }) {
+  const base = mkdtempSync(join(tmpdir(), 'zap-coordination-')), dataDir = join(base, 'source'), operationDir = join(base, 'operations'); mkdirSync(operationDir, { mode: 0o700 });
+  t.after(() => rmSync(base, { recursive: true })); const s = createService({ dataDir }); createAuthState(s.authDb, { newProfile: true }); await s.setPassword('senha backup fixture'); await s.close();
+  const events: string[] = []; let running = true;
+  const controller = { async stop() { events.push('stop'); running = false; }, async start(mode: string) { events.push('start:' + mode); running = true; }, async inspect() { return { running, autostart: false, pid: running ? process.pid : 0, startTime: running ? 'fixture' : null, machineId: 'fixture', profileProcesses: running ? 1 : 0, mode: 'offline' }; } };
+  return { base, config: { dataDir, operationDir, destination: join(base, 'snapshot'), priorMode: 'offline', priorRelease: 'fixture', supervisor: { kind: 'systemd', unit: 'fixture.service', dataDir } }, controller, events };
+}
+
+test('snapshot coordenado retoma antes da rede e serializa operações', async t => {
+  const m = await operations(), f = await operationFixture(t); assert.equal(typeof m.coordinatedSnapshot, 'function', 'stop snapshot resume must exist');
+  await m.coordinatedSnapshot(f.config, { controller: f.controller, fault: async (stage: string) => { if (stage === 'stopped') await assert.rejects(m.coordinatedSnapshot(f.config, { controller: f.controller }), /ativo|operação/); }, transfer: async () => { f.events.push('network'); assert.equal((await f.controller.inspect()).running, true); } });
+  assert.deepEqual(f.events, ['stop', 'start:offline', 'network']); assert.equal(existsSync(join(f.config.destination, 'manifest.json')), true);
+});
+
+test('snapshot falho ou stop ambíguo retoma consulta sem publicar backup', async t => {
+  const m = await operations(), f = await operationFixture(t); assert.equal(typeof m.coordinatedSnapshot, 'function', 'snapshot failures must resume');
+  await assert.rejects(m.coordinatedSnapshot(f.config, { controller: f.controller, fault: (stage: string) => { if (stage === 'stopped') throw Object.assign(Error('ENOSPC'), { code: 'ENOSPC' }); } }), /ENOSPC/);
+  assert.equal((await f.controller.inspect()).running, true); assert.equal(existsSync(f.config.destination), false);
+  const broken = { ...f.controller, async stop() { throw Error('stop denied'); } };
+  await assert.rejects(m.coordinatedSnapshot(f.config, { controller: broken }), /stop denied/); assert.equal(existsSync(f.config.destination), false);
 });
