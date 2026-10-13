@@ -1,15 +1,17 @@
 #!/usr/bin/node
 import assert from 'node:assert/strict';
-import { lstatSync, readFileSync, realpathSync, readdirSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, readdirSync, statSync, openSync, closeSync, writeFileSync, fsyncSync, renameSync, unlinkSync, constants } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 const exec = promisify(execFile);
+const bootUnit = 'zap-mcp-runtime.service', bootDirectory = '/etc/zap-mcp-control', bootPath = bootDirectory + '/boot-state.json';
 
 export function inspectContainers(config, containers, procPids = []) {
+  assert.ok(config.bootUnit === undefined || config.bootUnit === bootUnit, 'boot_unit_scope');
   assert.ok(Number.isInteger(config.uid) && config.uid > 0 && /^[a-f0-9]{32}$/.test(config.machineId));
   assert.match(config.dataDir, /^\/[A-Za-z0-9_./-]+$/); assert.ok(!config.dataDir.split('/').includes('..'));
   assert.equal(config.dataDir, resolve(config.dataDir));
@@ -64,8 +66,33 @@ function rootFile(path, mode) {
   const s = lstatSync(path); assert.ok(realpathSync(path) === resolve(path) && !s.isSymbolicLink() && s.uid === 0 && (s.mode & 0o777) === mode);
   assert.ok(mode === 0o700 ? s.isDirectory() : s.isFile() && s.nlink === 1 && s.size <= 262144);
 }
-export async function control(config, action, release, mode, { runner = exec, procPids = [] } = {}) {
-  assert.ok(['inspect', 'inspect-runtime', 'stop', 'start'].includes(action));
+const rootBootState = {
+  read() { rootFile(bootDirectory, 0o700); rootFile(bootPath, 0o600); return JSON.parse(readFileSync(bootPath, 'utf8')); },
+  prepare() {
+    rootFile(bootDirectory, 0o700);
+    try { rootFile(bootPath, 0o600); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  },
+  write(state) {
+    this.prepare();
+    const temporary = bootDirectory + '/.boot-state-' + randomUUID(), fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    try {
+      try { writeFileSync(fd, JSON.stringify(state) + '\n'); fsyncSync(fd); } finally { closeSync(fd); }
+      rootFile(temporary, 0o600); renameSync(temporary, bootPath);
+      const directory = openSync(bootDirectory, constants.O_RDONLY | constants.O_DIRECTORY); try { fsyncSync(directory); } finally { closeSync(directory); }
+      rootFile(bootPath, 0o600);
+    } finally { try { unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
+  }
+};
+export async function control(config, action, release, mode, { runner = exec, procPids = [], bootState = rootBootState } = {}) {
+  assert.ok(['inspect', 'inspect-runtime', 'stop', 'start', 'start-boot'].includes(action));
+  assert.ok(config.bootUnit === undefined || config.bootUnit === bootUnit, 'boot_unit_scope');
+  const systemctl = async args => (await runner('/usr/bin/systemctl', args, { shell: false, timeout: 70_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } })).stdout;
+  const bootAutostart = async () => {
+    if (!config.bootUnit) return false;
+    const state = (await systemctl(['show', '--property=UnitFileState', '--value', bootUnit])).trim();
+    assert.ok(['enabled', 'enabled-runtime', 'disabled', 'masked', 'masked-runtime'].includes(state), 'boot_unit_state');
+    return state === 'enabled' || state === 'enabled-runtime';
+  };
   const run = async args => (await runner('/usr/bin/docker', args, { shell: false, timeout: 70_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } })).stdout;
   const inventory = async () => {
     const ids = (await run(['ps', '--all', '--quiet'])).trim().split('\n').filter(Boolean);
@@ -74,6 +101,17 @@ export async function control(config, action, release, mode, { runner = exec, pr
   };
   const processes = () => typeof procPids === 'function' ? procPids() : procPids;
   let all = await inventory(), facts = inspectContainers(config, all, processes());
+  facts.autostart = await bootAutostart() || facts.autostart;
+  if (action === 'start-boot') {
+    assert.equal(config.bootUnit, bootUnit, 'boot_unit_missing');
+    const state = await bootState.read();
+    assert.ok(state && typeof state === 'object' && Object.keys(state).sort().join(',') === 'machineId,mode,profilePathHash,release,version', 'boot_state_shape');
+    assert.equal(state.version, 1); assert.equal(state.machineId, facts.machineId); assert.equal(state.profilePathHash, facts.profilePathHash);
+    assert.ok(config.releases.includes(state.release) && ['offline', 'collect'].includes(state.mode), 'boot_state_scope');
+    // A daemon restart retains Docker's policy; clear only our own triggers before the normal start gate.
+    await control(config, 'stop', undefined, undefined, { runner, procPids, bootState });
+    return control(config, 'start', state.release, state.mode, { runner, procPids, bootState });
+  }
   if (action === 'inspect' || action === 'inspect-runtime') {
     if (config.proxy && action === 'inspect') {
       assert.match(config.proxy.name, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/); assert.match(config.proxy.network, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/);
@@ -87,6 +125,7 @@ export async function control(config, action, release, mode, { runner = exec, pr
     return facts;
   }
   if (action === 'stop') {
+    if (config.bootUnit) await systemctl(['disable', '--', bootUnit]);
     for (const c of all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel)) {
       await run(['update', '--restart=no', c.Id]);
       if (c.State.Running) await run(['stop', '--time', '60', c.Id]);
@@ -96,12 +135,19 @@ export async function control(config, action, release, mode, { runner = exec, pr
     assert.ok(config.releases.includes(release) && ['offline', 'collect'].includes(mode));
     const candidates = all.filter(c => c.Config?.Labels?.['zap.archive'] === config.appLabel && c.Config.Labels['zap.release'] === release && c.Config.Cmd.includes('--collect') === (mode === 'collect'));
     assert.equal(candidates.length, 1, 'prepared_release_missing');
+    if (config.bootUnit) await bootState.prepare?.();
     await run(['start', candidates[0].Id]);
     // Docker supports bounded count, not a five-minute window/delay. Three restarts then offline failure.
     await run(['update', '--restart=on-failure:3', candidates[0].Id]);
   }
   all = await inventory(); facts = inspectContainers(config, all, typeof procPids === 'function' ? processes() : action === 'stop' ? [] : procPids);
+  facts.autostart = await bootAutostart() || facts.autostart;
   assert.ok(action === 'stop' ? !facts.running && !facts.autostart && facts.profileProcesses === 0 : facts.running && facts.release === release && facts.mode === mode);
+  if (action === 'start' && config.bootUnit) {
+    await bootState.write({ version: 1, machineId: facts.machineId, profilePathHash: facts.profilePathHash, release: facts.release, mode: facts.mode });
+    await systemctl(['enable', '--', bootUnit]);
+    assert.equal(await bootAutostart(), true); facts.autostart = true;
+  }
   return facts;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
