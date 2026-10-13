@@ -38,7 +38,7 @@ function rootFile(path, mode) {
   assert.ok(mode === 0o700 ? s.isDirectory() : s.isFile() && s.nlink === 1 && s.size <= 262144);
 }
 export async function control(config, action, release, mode, { runner = exec, procPids = [] } = {}) {
-  assert.ok(['inspect', 'stop', 'start'].includes(action));
+  assert.ok(['inspect', 'inspect-runtime', 'stop', 'start'].includes(action));
   const run = async args => (await runner('/usr/bin/docker', args, { shell: false, timeout: 70_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } })).stdout;
   const inventory = async () => {
     const ids = (await run(['ps', '--all', '--quiet'])).trim().split('\n').filter(Boolean);
@@ -47,8 +47,8 @@ export async function control(config, action, release, mode, { runner = exec, pr
   };
   const processes = () => typeof procPids === 'function' ? procPids() : procPids;
   let all = await inventory(), facts = inspectContainers(config, all, processes());
-  if (action === 'inspect') {
-    if (config.proxy) {
+  if (action === 'inspect' || action === 'inspect-runtime') {
+    if (config.proxy && action === 'inspect') {
       assert.match(config.proxy.name, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/); assert.match(config.proxy.network, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/);
       const proxy = all.filter(c => c.Name === '/' + config.proxy.name); assert.equal(proxy.length, 1); assert.equal(proxy[0].State.Running, true);
       const peer = proxy[0].NetworkSettings?.Networks?.[config.proxy.network]?.IPAddress;

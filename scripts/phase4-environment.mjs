@@ -100,7 +100,7 @@ async function hostProbe(scope) {
   }
   if (scope.supervisor) {
     if (scope.supervisor.kind === 'docker') {
-      const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, 'inspect']));
+      const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, scope.recovery ? 'inspect-runtime' : 'inspect']));
       if (facts.machineId !== out.machineId) throw Error('supervisor_host');
       out.supervisor = facts; out.supervisor.version = 'bounded-docker-helper';
     } else {
@@ -238,6 +238,18 @@ export async function assertReady(options = {}) {
   const receipt = await discover(options);
   assert.equal(receipt.status, 'ready', 'environment_blocked');
   assert.ok(Date.now() - Date.parse(receipt.observedAt) <= 15 * 60 * 1000); return receipt;
+}
+export async function assertRecoveryReady({ configFile, signal, runner } = {}) {
+  requirePrivate(configFile);
+  const stored = JSON.parse(readFileSync(configFile, 'utf8'));
+  // Recovery needs this host/profile/runtime, not a working HTTP listener or last successful backup.
+  const config = validateConfig({ evidenceDir: stored.evidenceDir, target: stored.target, supervisor: stored.supervisor, persistentVolume: stored.persistentVolume });
+  assert.ok(config.target && config.supervisor?.kind === 'docker' && config.persistentVolume);
+  const facts = await probeHost(config.target, { dataDir: config.target.dataDir, appRoot: config.target.appRoot, supervisor: config.supervisor, volume: config.persistentVolume, recovery: true }, { signal, runner });
+  assert.ok(facts.os === 'linux' && facts.node === 'v24.21.0' && facts.fts && facts.privateData && facts.volume?.private && facts.volume.path === config.target.dataDir, 'recovery_environment_blocked');
+  const mount = JSON.parse(facts.volume.mount).filesystems?.[0];
+  assert.ok(mount && !['tmpfs', 'ramfs', 'overlay'].includes(mount.fstype) && !mount.options.split(',').includes('ro'));
+  return facts;
 }
 export async function selfTest() {
   const dir = mkdtempSync(join(tmpdir(), 'zap-environment-self-'));

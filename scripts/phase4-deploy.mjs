@@ -17,7 +17,7 @@ import { privateFile, readPrivateJson, atomicPrivateJson, acquireOperation, newJ
 import { createSnapshot, validateSnapshot } from '../dist/src/backup.js';
 import { createSourceFence } from '../dist/src/promotion.js';
 import { readOffsiteConfig, runOffsiteBackup, produceOffsiteCopy, acknowledgeOffsiteCopy } from '../dist/src/offsite.js';
-import { assertReady } from './phase4-environment.mjs';
+import { assertReady, assertRecoveryReady } from './phase4-environment.mjs';
 import { Readable } from 'node:stream';
 import { createRequire } from 'node:module';
 
@@ -25,6 +25,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), exec = prom
 const digest = value => createHash('sha256').update(value).digest('hex');
 const absolute = value => { assert.ok(typeof value === 'string' && /^\/[A-Za-z0-9_./-]+$/.test(value) && !value.split('/').includes('..')); return value; };
 const commit = value => { assert.match(value, /^[a-f0-9]{40}$/); return value; };
+const targetBinding = config => digest(JSON.stringify([config.target.machineId, resolve(config.target.dataDir), resolve(config.target.appRoot), config.target.helperPath]));
 
 // Shared by the SSH probe and local fixture, always read-only; personal values stay in private evidence.
 export function profileState(dataDir) {
@@ -52,7 +53,7 @@ export async function swapRelease(config, { controller, ready, backup, state = (
   // All preconditions are live effects, never a boolean or a persisted readiness JSON.
   await ready(); await backup(); await ready();
   const previous = await controller.inspect(); assert.ok(previous.running && previous.profileProcesses === 1);
-  const journal = { version: 1, kind: 'release', priorRelease: previous.release ?? config.priorRelease, candidateRelease: config.candidateRelease, priorMode: previous.mode, stage: 'prepared', startedAt: new Date().toISOString() };
+  const journal = { version: 1, kind: 'release', targetBinding: config.targetBinding, archiveSchema: config.archiveSchema, authSchema: config.authSchema, priorRelease: previous.release ?? config.priorRelease, candidateRelease: config.candidateRelease, priorMode: previous.mode, stage: 'prepared', startedAt: new Date().toISOString() };
   const stage = async value => { journal.stage = value; atomicPrivateJson(join(journalDir, 'deploy-journal.json'), journal); await fault?.(value); };
   await stage('prepared');
   let baseline;
@@ -152,8 +153,8 @@ async function remoteTask(task, input) {
   throw Error('task_rejected');
   function assertRemotePath(value) { if (!/^\/[A-Za-z0-9_./-]+$/.test(value) || value.split('/').includes('..')) throw Error('path_rejected'); }
 }
-function validateConfig(config) {
-  assert.equal(config.version, 1); privateFile(config.operationDir, true); privateFile(config.environmentFile); privateFile(config.pullConfigFile); privateFile(config.ownerPasswordFile);
+function validateConfig(config, recovery = false) {
+  assert.equal(config.version, 1); privateFile(config.operationDir, true); privateFile(config.environmentFile); if (!recovery) privateFile(config.pullConfigFile); privateFile(config.ownerPasswordFile);
   const r = config.target; for (const p of ['dataDir', 'appRoot', 'nodePath', 'helperPath', 'snapshotDir', 'promotionConfigFile']) absolute(r[p]);
   assert.match(r.helperPath, /^\/usr\/local\/libexec\/[A-Za-z0-9_.-]+$/);
   assert.match(r.host, /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/); assert.match(r.user, /^[a-z_][a-z0-9_-]*$/); privateFile(r.identityFile); privateFile(r.knownHostsFile);
@@ -163,35 +164,47 @@ function validateConfig(config) {
   assert.equal(env.publicOrigin, config.publicOrigin); assert.equal(new URL(config.publicOrigin).origin, config.publicOrigin);
   return config;
 }
-async function rpc(config, task, extra = {}, input) {
+async function rpc(config, task, extra = {}, input, runner = exec) {
   const r = config.target, payload = { ...r, ...extra }, source = '(' + remoteTask.toString() + ')(' + JSON.stringify(task) + ',' + JSON.stringify(payload) + ').then(r=>process.stdout.write(JSON.stringify(r))).catch(()=>process.exitCode=1)';
   const command = r.nodePath + " -e 'eval(Buffer.from(\"" + Buffer.from(source).toString('base64') + "\",\"base64\").toString())'";
   const argv = ['-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ClearAllForwardings=yes', '-o', 'IdentitiesOnly=yes', '-o', 'UserKnownHostsFile=' + r.knownHostsFile, '-i', r.identityFile, '-p', String(r.port ?? 22), '-l', r.user, '--', r.host, command];
-  if (!input) return JSON.parse((await exec('/usr/bin/ssh', argv, { timeout: 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false })).stdout);
+  if (!input) return JSON.parse((await runner('/usr/bin/ssh', argv, { timeout: 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false })).stdout);
   const child = spawn('/usr/bin/ssh', argv, { stdio: ['pipe', 'pipe', 'ignore'], signal: AbortSignal.timeout(120_000), killSignal: 'SIGKILL' });
   const { pipeline } = await import('node:stream/promises'); const done = new Promise((yes, no) => { child.on('error', no); child.on('exit', code => code === 0 ? yes() : no(Error('transfer_failed'))); });
   child.stdout.resume(); await Promise.all([pipeline(input, child.stdin), done]); return { received: true };
 }
-export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATION_CONFIG_FILE } = {}) {
+export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATION_CONFIG_FILE, runner = exec, ca } = {}) {
   assert.ok(['preflight', 'migrate', 'update', 'recover'].includes(mode));
-  assert.ok(configFile, 'configuration_missing'); const config = validateConfig(readPrivateJson(configFile));
+  assert.ok(configFile, 'configuration_missing'); const config = validateConfig(readPrivateJson(configFile), mode === 'recover'); config.targetBinding = targetBinding(config);
   const ready = () => assertReady({ configFile: config.environmentFile });
-  await ready(); // no host mutation before current identity/capacity/TLS/independent recovery probes
+  if (mode === 'recover') await assertRecoveryReady({ configFile: config.environmentFile, runner });
+  else await ready(); // full gates remain mandatory before migrate/update
+  const call = (task, extra = {}, input) => rpc(config, task, extra, input, runner);
   const controller = {
-    inspect: () => rpc(config, 'control', { action: 'inspect' }),
-    stop: () => rpc(config, 'control', { action: 'stop' }),
-    activate: (release, mode) => rpc(config, 'control', { action: 'start', release, mode })
+    inspect: () => call('control', { action: mode === 'recover' ? 'inspect-runtime' : 'inspect' }),
+    stop: () => call('control', { action: 'stop' }),
+    activate: (release, mode) => call('control', { action: 'start', release, mode })
   };
   const facts = await controller.inspect();
-  for (const release of [config.priorRelease, config.candidateRelease]) assert.ok(facts.preparedReleases?.some(p => p.release === release && p.mode === 'offline'), 'prepared_release_missing');
+  if (mode !== 'recover') for (const release of [config.priorRelease, config.candidateRelease]) assert.ok(facts.preparedReleases?.some(p => p.release === release && p.mode === 'offline'), 'prepared_release_missing');
   if (mode === 'preflight') { return { ready: true, operationalAcceptance: false }; }
   const lock = (await import('../dist/src/whatsapp.js')).acquireServiceLock(config.operationDir);
   try {
     const journalPath = join(config.operationDir, 'deploy-journal.json');
     if (mode === 'recover') {
-      const journal = readPrivateJson(journalPath); assert.equal(journal.kind, 'release'); await controller.stop(); assertQuiet(await controller.inspect(), true);
-      const state = await rpc(config, 'state'); assert.equal(state.databases['archive.sqlite'].schema, config.archiveSchema); assert.equal(state.databases['auth.sqlite'].schema, config.authSchema);
-      await controller.activate(commit(journal.priorRelease), 'offline'); journal.stage = 'recovered-offline'; atomicPrivateJson(journalPath, journal); return { recovered: true, mode: 'offline' };
+      const journal = readPrivateJson(journalPath); assert.equal(journal.version, 1); assert.equal(journal.kind, 'release');
+      assert.equal(journal.targetBinding, config.targetBinding); assert.equal(journal.archiveSchema, config.archiveSchema); assert.equal(journal.authSchema, config.authSchema);
+      assert.ok(['prepared', 'stopped', 'swapped', 'verified', 'committed', 'recovered-offline', 'blocked-offline', 'recovery-validation-failed'].includes(journal.stage));
+      commit(journal.priorRelease); assert.equal(journal.candidateRelease, config.candidateRelease);
+      assert.ok(facts.preparedReleases?.some(p => p.release === journal.priorRelease && p.mode === 'offline'), 'prepared_release_missing');
+      const schemas = state => { assert.equal(state.databases['archive.sqlite'].schema, config.archiveSchema); assert.equal(state.databases['auth.sqlite'].schema, config.authSchema); };
+      schemas(await call('state')); // reject incompatibility before stopping a surviving service
+      await controller.stop(); assertQuiet(await controller.inspect(), true);
+      const baseline = await call('state'); schemas(baseline);
+      await controller.activate(journal.priorRelease, 'offline'); journal.stage = 'recovered-offline'; atomicPrivateJson(journalPath, journal);
+      try { assert.deepEqual(await call('state'), baseline); await verifyHttps(config.publicOrigin, readFileSync(config.ownerPasswordFile, 'utf8').replace(/\n$/, ''), baseline.originals, ca); }
+      catch { journal.stage = 'recovery-validation-failed'; atomicPrivateJson(journalPath, journal); throw Error('recovery_validation_failed'); }
+      return { recovered: true, mode: 'offline', validated: true };
     }
     if (existsSync(journalPath)) assert.ok(['committed', 'recovered-offline', 'migration-offline'].includes(readPrivateJson(journalPath).stage), 'deploy_recovery_required');
     const pull = readOffsiteConfig(config.pullConfigFile); assert.equal(pull.role, 'pull');
