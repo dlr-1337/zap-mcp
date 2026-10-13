@@ -1,11 +1,11 @@
 ---
 phase: 04-opera-o-e-restaura-o-na-vps
-reviewed: 2026-10-13T21:19:34Z
+reviewed: 2026-10-13T21:27:21Z
 depth: standard
 files_reviewed: 2
 files_reviewed_list:
-  - public/app.js
-  - test/ui.test.ts
+  - scripts/phase4-deploy.mjs
+  - test/deploy.test.ts
 findings:
   critical: 0
   warning: 0
@@ -16,14 +16,14 @@ status: clean
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-13T21:19:34Z
+**Reviewed:** 2026-10-13T21:27:21Z
 **Depth:** standard
 **Files Reviewed:** 2
 **Status:** clean
 
 ## Summary
 
-Revisão padrão do delta d47602b..ec6ff29 no HEAD ec6ff29, delimitada a public/app.js e test/ui.test.ts. Foram examinados o estado de backup nunca iniciado e a tradução allowlisted das causas de falha, com rastreamento do contrato em src/offsite.ts. Nenhum achado aberto. As revisões anteriores de UI, negociação, IPC e deploy permanecem abaixo como histórico; o frontmatter delimita esta rodada.
+Revisão padrão do delta ec6ff29..38cae4d no HEAD 38cae4d, delimitada a scripts/phase4-deploy.mjs e test/deploy.test.ts. Foram rastreados os callers do RPC, as ações do helper e os caminhos de falha da repetição limitada de inspeções SSH. Nenhum achado aberto. As revisões anteriores de UI, negociação, IPC e deploy permanecem abaixo como histórico; o frontmatter delimita esta rodada.
 
 Não foram fornecidos structural findings nem evidência de revisores externos. As contagens acima representam apenas achados abertos. Os IDs de revisões anteriores não foram reutilizados; o histórico anterior permanece em 04-REVIEW-DISPOSITION.md e relatórios históricos. Nesta rodada, somente este relatório foi alterado; nenhuma fonte, configuração pessoal, VPS ou dado real foi modificado, e nenhum commit foi criado pelo revisor.
 
@@ -31,7 +31,20 @@ Não foram fornecidos structural findings nem evidência de revisores externos. 
 
 Nenhum achado aberto. All reviewed files meet quality standards. No issues found.
 
-### Backup nunca iniciado e causas seguras: delta revisado
+### Inspeção SSH: repetição limitada revisada
+
+**Files:** `scripts/phase4-deploy.mjs:242-259`, `test/deploy.test.ts:339-356`.
+Somente RPC sem input, task control e action inspect/inspect-runtime pode repetir. O primeiro erro precisa ter code numérico 255, killed falsy e stderr inteiro com a linha exata “ssh: connect to host … port …: Connection refused”, aceitando apenas LF ou CRLF final. Não basta substring, timeout, falha de autenticação ou erro do helper. Start, stop, promote e os demais tasks não entram nessa exceção. A ramificação de transferências binárias também não muda.
+
+Após 45 segundos há uma segunda chamada fora do try/catch de repetição. A segunda falha é propagada; não existe loop nem terceira chamada. Cada tentativa conserva seu prazo de 90 segundos para essas inspeções. JSON.parse ocorre depois do retry, de modo que resposta inválida não autoriza repetição. Os argumentos permanecem os mesmos, com host/usuário validados, arquivo privado de known_hosts, StrictHostKeyChecking, ausência de forwarding e shell false.
+
+Os callers em runDeployment passam actions fixas de inspeção antes dos controles e continuam conferindo assertSupervisorFacts/assertQuiet; os probes de implantação e cleanup do aceite também conferem os fatos retornados. O helper retorna facts para inspect/inspect-runtime após leituras de inventário/runtime; essas ramificações não acionam start, stop ou promoção. Falha durante uma mutação não é reclassificada como operação cancelada ou bem-sucedida, e a mudança não cria observações de aceite nem altera o journal.
+
+**Verificação atual:** Executado com Node 24.21.0 o teste novo do RPC: **1/1 passou**, exit 0, zero falhas/cancelamentos/skips/todo. O relógio simulado confirma uma única chamada até 44.999 ms e a segunda em 45.000 ms, com negativos de start, stop, promote, timeout/killed e helper code 1. Controles adicionais isolados confirmaram propagação da segunda falha e ausência de terceira chamada nas duas actions, além de ausência de retry para Permission denied e para stderr com linha extra. Nenhuma conexão SSH real foi usada nesses controles.
+
+A suíte completa já iniciada pelo orquestrador não foi repetida nem considerada concluída nesta revisão. O diagnóstico de firewall em produção e o registro privado RED não foram reexecutados pelo revisor.
+
+### Histórico do backup nunca iniciado e causas seguras — clean
 
 **Files:** `public/app.js:458-462`, `test/ui.test.ts:514-526`.
 O backend cria o estado inicial com result pending e lastAttempt null; esse estado não prova execução de uma cópia. O renderer agora exige result pending e lastAttemptAt presente para mostrar “Backup em andamento”. Sem tentativa registrada, conserva “Nenhuma cópia conferida ainda”, sem fabricar progresso. Operações reais do backend persistem lastAttempt quando passam ao estado pending.
@@ -40,7 +53,7 @@ Os sete códigos da tabela backupFailures correspondem ao conjunto safeCodes do 
 
 A alteração preserva a limpeza em signedOut e a recusa de resposta de geração anterior. Não altera role status/alert, fuso America/Sao_Paulo, o rótulo do horário de conferência ou o atraso calculado pela criação do snapshot. O HTML e os fluxos de login não foram modificados neste delta.
 
-**Verificação atual:** Executado com Node 24.21.0 o teste UI afetado: **1/1 passou**, exit 0, zero falhas/cancelamentos/skips/todo. Confere pending sem tentativa, pending com tentativa, causa conhecida de espaço, código desconhecido sentinel, propriedade herdada toString, ausência de detalhe privado, reflow 320/1280 px e limpeza no logout. Conferida a presença dos novos controles no teste compilado. A suíte completa e os testes de login não foram repetidos nesta rodada.
+**Verificação da rodada anterior:** Executado com Node 24.21.0 o teste UI afetado: **1/1 passou**, exit 0, zero falhas/cancelamentos/skips/todo. Confere pending sem tentativa, pending com tentativa, causa conhecida de espaço, código desconhecido sentinel, propriedade herdada toString, ausência de detalhe privado, reflow 320/1280 px e limpeza no logout. Conferida a presença dos novos controles no teste compilado. A suíte completa e os testes de login não foram repetidos nesta rodada.
 
 ### Histórico do status operacional e login — clean
 
@@ -82,12 +95,12 @@ Os IDs e dispositions anteriores permanecem preservados nos relatórios e em 04-
 
 Na reavaliação anterior de CR-06, o foco de entrega HTTPS com pausa controlada passou **1/1**; antes daquela correção, os dois arquivos focados haviam passado **34/34**. Esses resultados permanecem históricos e não são apresentados como execuções atuais do delta de negociação. A suíte completa não foi repetida nem considerada concluída aqui.
 
-O delta de UI não modifica deploy, IPC, negociação, credenciais ou política de sandbox. As revisões e a resolução de CR-06 acima permanecem históricas; não substituem o escopo desta rodada.
+O delta atual modifica apenas a repetição limitada no RPC e sua cobertura; não altera rede, firewall, IPC, negociação, credenciais ou política de sandbox. As revisões anteriores e a resolução de CR-06 permanecem históricas; não substituem o escopo desta rodada.
 
 Esta revisão não executou Codex instalado contra a VPS, atualização real, backup externo ou troca de backend restaurado. Não reavaliou a cronologia nem autenticou o registro privado do gate RED. Testes locais não concluem OPS-01 a OPS-04; o aceite operacional continua dependendo de evidência atual no ambiente real.
 
 ---
 
-_Reviewed: 2026-10-13T21:19:34Z_
+_Reviewed: 2026-10-13T21:27:21Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
