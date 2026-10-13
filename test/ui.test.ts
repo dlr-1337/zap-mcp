@@ -498,3 +498,31 @@ test('contatos homônimos e estados UC01 a UC22 usam DOM acessível e recorte es
   await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#search-results > li').count(), 0); assert.equal(await page.locator('#contact-candidates > li').count(), 0); assert.equal(await page.locator('#contact-query').inputValue(), '');
 });
+
+test('estado operacional mostra backup conferido atraso falha e coleta pausada sem expor detalhes privados', async t => {
+  const { page, login } = await uiFixture(t);
+  let backup: any = { result: 'success', lastVerifiedAt: '2026-10-13T12:00:00.000Z', overdue24h: false, host: 'PRIVATE_SENTINEL', path: 'PRIVATE_SENTINEL' };
+  await page.route('**/api/status', (route: any) => route.fulfill({ status: 200, json: { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, media: null, coverage: null, backup } }));
+  await login();
+  assert.match(await page.locator('#backup-status').textContent(), /Última cópia conferida.*13\/10\/2026.*09:00:00.*America\/Sao_Paulo/);
+  assert.match(await page.locator('#connection').textContent(), /Coleta pausada/); assert.doesNotMatch(await page.locator('#qr-status').textContent(), /preparação.*cópia recuperável/i);
+  backup = { ...backup, result: 'failed', overdue24h: true, safeFailureCode: 'PRIVATE_SENTINEL' };
+  await page.evaluate(() => dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('Falha na última tentativa'));
+  assert.match(await page.locator('#backup-status').textContent(), /atrasada|mais de 24 horas/); assert.equal(await page.locator('#backup-status').getAttribute('role'), 'alert');
+  assert.doesNotMatch(await page.locator('body').textContent(), /PRIVATE_SENTINEL/);
+  backup = { result: 'pending', lastVerifiedAt: null, overdue24h: true }; await page.evaluate(() => dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('em andamento'));
+  assert.match(await page.locator('#backup-status').textContent(), /Nenhuma cópia conferida/);
+  for (const width of [320, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); }
+});
+
+test('login distingue recusa de acesso de senha incorreta', async t => {
+  const { page, base } = await uiFixture(t); let status = 403;
+  await page.route('**/login', (route: any) => route.fulfill({ status, json: { error: 'PRIVATE_SENTINEL' } }));
+  await page.goto(base); await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click();
+  await page.waitForFunction(() => document.getElementById('login-error')?.textContent);
+  assert.match(await page.locator('#login-error').textContent(), /Recarregue/); assert.doesNotMatch(await page.locator('#login-error').textContent(), /senha|PRIVATE_SENTINEL/i);
+  status = 401; await page.locator('#password').fill('senha sintética'); await page.locator('#login-button').click();
+  await page.waitForFunction(() => document.getElementById('login-error')?.textContent?.includes('Confira a senha'));
+});
