@@ -342,7 +342,7 @@ test('RPC repete somente inspeção recusada antes da conexão SSH após a janel
   const refused = Object.assign(Error('connection refused'), { code: 255, stderr: 'ssh: connect to host fixture.invalid port 22: Connection refused\r\n' });
   let attempts = 0;
   const pending = m.rpc(config, 'control', { action: 'inspect' }, undefined, async () => { if (++attempts === 1) throw refused; return { stdout: '{"observed":true}' }; });
-  const outcome = pending.then((value: unknown) => ({ value }), (error: unknown) => ({ error }));
+  const outcome = pending.then((value: unknown) => ({ value }), () => ({ error: 'refused' }));
   await new Promise<void>(resolve => setImmediate(resolve));
   assert.equal(attempts, 1); t.mock.timers.tick(44999); await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(attempts, 1);
   t.mock.timers.tick(1); assert.deepEqual(await outcome, { value: { observed: true } }); assert.equal(attempts, 2);
