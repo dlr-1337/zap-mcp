@@ -17,11 +17,11 @@ import { createTransport, transportFromEnv, type TransportConfig } from './trans
 import { shutdownService, readOperationConfig, coordinatedSnapshot, recoverOperation } from './operation.js';
 import { authorizePromotedCollector, promoteProfile, createSourceFence, type PromotionPermit } from './promotion.js';
 import { isRestoredProfile } from './backup.js';
-import { readOffsiteConfig, runOffsiteBackup, recoverOffsiteCopy, streamProducedCopy, acknowledgeOffsiteCopy } from './offsite.js';
+import { readOffsiteConfig, runOffsiteBackup, recoverOffsiteCopy, streamProducedCopy, acknowledgeOffsiteCopy, recordOffsiteFailure, backupStatus } from './offsite.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
-export function createService({ dataDir, transport: config }: { dataDir: string; transport?: TransportConfig }) {
+export function createService({ dataDir, transport: config, backupStateFile }: { dataDir: string; transport?: TransportConfig; backupStateFile?: string }) {
   const transport = createTransport(config);
   if (process.versions.node.split('.')[0] !== '24') throw Error('Node24 obrigatório');
   const root = realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
@@ -101,7 +101,7 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
     streams.add(stream); stream.once('close', () => streams.delete(stream));
     res.on('close', () => stream.destroy()); stream.on('error', error => { if (res.headersSent) res.destroy(); else next(error); }); stream.pipe(res);
   });
-  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: collectorFailure ?? 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage }); });
+  app.get('/api/status', (_req, res) => { const coverage = archive.getCoverage(); res.json({ ...(collector?.snapshot() ?? { connection: 'disconnected', collectorEnabled: false, pairingAvailable: false, diagnostic: collectorFailure ?? 'Coleta real bloqueada até cópia e restauração conferidas' }), media: mediaWorker?.snapshot() ?? null, lastIngestion: coverage.lastIngestion, coverage, backup: backupStatus(backupStateFile) }); });
   app.get('/api/qr', async (req, res) => {
     const pairing = await collector?.pairing();
     requireOwner(req, res, error => {
@@ -259,13 +259,13 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
 }
 
 async function cli() {
-  if (['offsite-backup', 'offsite-recover', 'offsite-produce', 'offsite-ack'].includes(process.argv[2])) {
+  if (['offsite-backup', 'offsite-recover', 'offsite-produce', 'offsite-ack', 'offsite-failed'].includes(process.argv[2])) {
     if (!process.env.ZAP_OPERATION_CONFIG_FILE) throw Error('Configuração offsite privada obrigatória');
     const config = readOffsiteConfig(process.env.ZAP_OPERATION_CONFIG_FILE), command = process.argv[2];
     if (command === 'offsite-backup' && config.role === 'pull' && process.argv.length === 3) await runOffsiteBackup(config);
     else if (command === 'offsite-recover' && config.role === 'pull' && process.argv.length === 5) await recoverOffsiteCopy(config, process.argv[3], process.argv[4]);
     else if (command === 'offsite-produce' && config.role === 'source' && process.argv.length === 4 && resolve(config.dataDir) === resolve(process.env.ZAP_DATA_DIR ?? '')) { await streamProducedCopy(config, process.argv[3]); return; }
-    else if (command === 'offsite-ack' && config.role === 'source' && process.argv.length === 3 && resolve(config.dataDir) === resolve(process.env.ZAP_DATA_DIR ?? '')) { let input = ''; for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 4096) throw Error('ACK inválido'); } await acknowledgeOffsiteCopy(config, JSON.parse(input)); }
+    else if (['offsite-ack', 'offsite-failed'].includes(command) && config.role === 'source' && process.argv.length === 3 && resolve(config.dataDir) === resolve(process.env.ZAP_DATA_DIR ?? '')) { let input = ''; for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 4096) throw Error('ACK inválido'); } if (command === 'offsite-ack') await acknowledgeOffsiteCopy(config, JSON.parse(input)); else await recordOffsiteFailure(config, JSON.parse(input)); }
     else throw Error('Comando offsite inválido');
     console.log('Operação offsite conferida; aceite do ambiente real permanece separado'); return;
   }
@@ -293,7 +293,7 @@ async function cli() {
   if (process.argv[2] === 'preflight') { if (process.argv.length !== 3) throw Error('Uso: preflight'); preflight(dataDir); console.log('Pronto para um único coletor; conta e cobertura ainda não validadas'); return; }
   if (!collect && process.argv.length !== 3) throw Error('Argumentos inválidos');
   const transport = process.argv[2] === 'serve' ? transportFromEnv(process.env) : { mode: 'local' as const };
-  const service = createService({ dataDir, transport });
+  const service = createService({ dataDir, transport, backupStateFile: process.env.ZAP_BACKUP_STATE_FILE });
   if (process.argv[2] === 'profile-init') {
     try { createAuthState(service.authDb, { newProfile: true }); console.log('Perfil local preparado; nenhuma conta conectada'); } finally { await service.close(); }
   } else if (process.argv[2] === 'owner-set') {

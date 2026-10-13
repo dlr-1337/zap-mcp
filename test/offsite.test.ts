@@ -11,6 +11,7 @@ import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
 import { startMediaWorker } from '../src/media.js';
 import { validateSnapshot } from '../src/backup.js';
+import { ZipFile } from 'yazl';
 
 const modulePath = '../src/offsite.js';
 async function load() { const m = await import(modulePath).catch(() => null); assert.ok(m?.runOffsiteBackup && m?.produceOffsiteCopy && m?.recoverOffsiteCopy, 'cópia age por pull e recuperação integral devem existir'); return m; }
@@ -43,7 +44,8 @@ function adapter(m: any, f: Awaited<ReturnType<typeof fixture>>, fault?: string)
       if (fault === 'corrupt') writeFileSync(output, 'corrupt'); signal.throwIfAborted();
     },
     async getById(id: string, output: string) { copyFileSync(join(f.pull.destinationDir, id + '.age'), output); chmodSync(output, 0o600); if (fault === 'readback') writeFileSync(output, 'corrupt readback'); },
-    async acknowledge(receipt: any) { await m.acknowledgeOffsiteCopy(f.source, receipt); }
+    async acknowledge(receipt: any) { await m.acknowledgeOffsiteCopy(f.source, receipt); },
+    async reportFailure(operationId: string, safeFailureCode: string) { await m.recordOffsiteFailure(f.source, { operationId, safeFailureCode }); }
   };
 }
 
@@ -66,6 +68,7 @@ test('partial corrupção readback e chave errada não publicam sucesso externo'
     if (point === 'key') { const bad = join(f.base, 'kit', 'wrong'); execFileSync('/usr/bin/age-keygen', ['-o', bad], { stdio: 'ignore' }); chmodSync(bad, 0o600); f.pull.identityFile = bad; }
     await assert.rejects(m.runOffsiteBackup(f.pull, { adapter: adapter(m, f, point) }));
     const state = JSON.parse(readFileSync(join(f.pull.operationDir, 'offsite-state.json'), 'utf8')); assert.equal(state.lastVerifiedSuccess ?? null, null); assert.equal((await f.controller.inspect()).running, true);
+    assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).result, 'failed');
   }
 });
 
@@ -87,12 +90,13 @@ test('status mede RPO pela criação do snapshot e autentica allowlist sem ident
   const status = m.backupStatus(path, now); assert.equal(status.overdue24h, true); assert.equal(status.ageSeconds, 25 * 3600); assert.equal(status.result, 'success');
   assert.equal(status.lastVerifiedAt, state.lastVerifiedSuccess.verifiedAt); assert.equal(JSON.stringify(status).includes(state.operationId), false); assert.equal(JSON.stringify(status).includes(f.base), false);
   const service = createService({ dataDir: f.source.dataDir, backupStateFile: path } as any), server = service.app.listen(0, '127.0.0.1'); await once(server, 'listening');
-  t.after(async () => { await new Promise<void>(r => server.close(() => r())); await service.close(); });
+  try {
   const base = `http://127.0.0.1:${(server.address() as any).port}`; assert.equal((await fetch(base + '/api/status')).status, 401);
   const challenge = await fetch(base + '/api/session'), csrfToken = (await challenge.json()).csrfToken;
   const login = await fetch(base + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'senha de fixture independente', csrfToken }) }); assert.equal(login.status, 200);
   const response = await fetch(base + '/api/status', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } }); assert.deepEqual((await response.json()).backup, status);
   state.result = 'failed'; state.safeFailureCode = 'PRIVATE_SENTINEL_REMOTE_HOST'; writeFileSync(path, JSON.stringify(state)); assert.equal(JSON.stringify(m.backupStatus(path)).includes('PRIVATE_SENTINEL'), false);
+  } finally { await new Promise<void>(r => server.close(() => r())); await service.close(); }
 });
 
 test('último bom permanece após capacidade timeout auth key symlink e concorrência', async t => {
@@ -128,4 +132,38 @@ test('SIGKILL durante pull/publicação/readback mantém último bom e retoma me
     await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) }); last = JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess;
     assert.equal(last.operationId, prepared.receipt.operationId);
   }
+});
+
+test('SIGKILL após ciphertext exclusivo reconcilia snapshot original sem falsa confirmação', async t => {
+  const f = await fixture(t), m = await load();
+  for (const point of ['published', 'prepared']) {
+    const lastVerifiedAt = m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).lastVerifiedAt;
+    const operationId = randomUUID();
+    const script = `import{produceOffsiteCopy}from'./dist/src/offsite.js';let running=true;const controller={async stop(){running=false},async start(){running=true},async inspect(){return{running,autostart:false,pid:running?process.pid:0,startTime:null,machineId:'fixture',profileProcesses:running?1:0,mode:'offline'}}};await produceOffsiteCopy(JSON.parse(process.env.CONFIG),process.env.ID,{controller,fault:async p=>{if(p===process.env.POINT){console.log('ready');await new Promise(()=>setInterval(()=>{},1000))}}});`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, CONFIG: JSON.stringify(f.source), ID: operationId, POINT: point }, stdio: ['ignore', 'pipe', 'pipe'] }); t.after(() => child.kill('SIGKILL'));
+    await new Promise<void>((accept, reject) => { const timer = setTimeout(() => { child.kill('SIGKILL'); reject(Error('producer timeout')); }, 5000); child.stdout.on('data', b => { if (String(b).includes('ready')) { clearTimeout(timer); accept(); } }); child.once('exit', c => { clearTimeout(timer); reject(Error('producer exited ' + c)); }); });
+    const exit = once(child, 'exit'); child.kill('SIGKILL'); await exit;
+    const result = await m.produceOffsiteCopy(f.source, operationId, { controller: f.controller }); assert.equal(result.receipt.operationId, operationId);
+    assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).lastVerifiedAt, lastVerifiedAt);
+    const stateFile = join(f.pull.operationDir, 'offsite-state.json'); writeFileSync(stateFile, JSON.stringify({ version: 1, lastAttempt: null, operationId, result: 'pending', failedStage: null, safeFailureCode: null, lastVerifiedSuccess: null }), { mode: 0o600 });
+    await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+    assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).result, 'success');
+  }
+});
+
+test('pacote age recusa arquivo fora da allowlist symlink duplicata replay e destino ocupado', async t => {
+  const f = await fixture(t), m = await load(), cipher = m.createAgeCipher({ recipientFile: f.source.recipientFile, identityFile: f.pull.identityFile, maxBytes: f.pull.maxBytes });
+  for (const point of ['path', 'symlink', 'duplicate']) {
+    const zip = new ZipFile(), operationId = randomUUID();
+    if (point === 'path') zip.addBuffer(Buffer.from('private key'), 'recovery/source-fence-key.json');
+    else if (point === 'symlink') zip.addBuffer(Buffer.from('/outside'), 'snapshot/archive.sqlite', { mode: 0o120777 });
+    else { zip.addBuffer(Buffer.from('one'), 'metadata.json'); zip.addBuffer(Buffer.from('two'), 'metadata.json'); }
+    zip.end(); await cipher.encrypt(zip.outputStream, join(f.pull.destinationDir, operationId + '.age'), AbortSignal.timeout(5000));
+    const destination = join(f.base, 'bad-' + point); await assert.rejects(m.recoverOffsiteCopy(f.pull, operationId, destination)); assert.equal(existsSync(destination), false);
+  }
+  const good = await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) }), wrongId = randomUUID();
+  copyFileSync(join(f.pull.destinationDir, good.operationId + '.age'), join(f.pull.destinationDir, wrongId + '.age')); chmodSync(join(f.pull.destinationDir, wrongId + '.age'), 0o600);
+  await assert.rejects(m.recoverOffsiteCopy(f.pull, wrongId, join(f.base, 'replay')), /Replay/);
+  mkdirSync(join(f.base, 'occupied'), { mode: 0o700 }); writeFileSync(join(f.base, 'occupied', 'keep'), 'keep', { mode: 0o600 });
+  await assert.rejects(m.recoverOffsiteCopy(f.pull, good.operationId, join(f.base, 'occupied')), /novo/); assert.equal(readFileSync(join(f.base, 'occupied', 'keep'), 'utf8'), 'keep');
 });
