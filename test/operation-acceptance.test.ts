@@ -49,6 +49,7 @@ test('negociação nativa aceita somente zap-archive atual e não presume protoc
   const line = (name: string, at: number) => `${new Date(at).toISOString()} INFO rmcp::service: Service initialized as client peer_info=Some(ServerPeerInfo { protocol_version: ProtocolVersion("2025-06-18"), server_info: Implementation { name: "${name}" } })`;
   const proof = acceptance.parseNativeNegotiation(line('other-plugin', now) + '\n' + line('zap-archive', now), startedAt, now + 1);
   assert.equal(proof?.[1], '2025-06-18');
+  assert.equal(acceptance.parseNativeNegotiation(line('zap-archive', now).replace('INFO rmcp::service', 'INFO serve_inner: rmcp::service'), startedAt, now + 1)?.[1], '2025-06-18');
   assert.equal(acceptance.parseNativeNegotiation(line('other-plugin', now), startedAt, now + 1), undefined);
   assert.equal(acceptance.parseNativeNegotiation(line('zap-archive', startedAt - 1), startedAt, now + 1), undefined);
   assert.equal(acceptance.parseNativeNegotiation(line('zap-archive', now + 2), startedAt, now + 1), undefined);
