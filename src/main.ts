@@ -17,6 +17,7 @@ import { createTransport, transportFromEnv, type TransportConfig } from './trans
 import { shutdownService, readOperationConfig, coordinatedSnapshot, recoverOperation } from './operation.js';
 import { authorizePromotedCollector, promoteProfile, createSourceFence, type PromotionPermit } from './promotion.js';
 import { isRestoredProfile } from './backup.js';
+import { readOffsiteConfig, runOffsiteBackup, recoverOffsiteCopy, streamProducedCopy, acknowledgeOffsiteCopy } from './offsite.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -258,6 +259,16 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
 }
 
 async function cli() {
+  if (['offsite-backup', 'offsite-recover', 'offsite-produce', 'offsite-ack'].includes(process.argv[2])) {
+    if (!process.env.ZAP_OPERATION_CONFIG_FILE) throw Error('Configuração offsite privada obrigatória');
+    const config = readOffsiteConfig(process.env.ZAP_OPERATION_CONFIG_FILE), command = process.argv[2];
+    if (command === 'offsite-backup' && config.role === 'pull' && process.argv.length === 3) await runOffsiteBackup(config);
+    else if (command === 'offsite-recover' && config.role === 'pull' && process.argv.length === 5) await recoverOffsiteCopy(config, process.argv[3], process.argv[4]);
+    else if (command === 'offsite-produce' && config.role === 'source' && process.argv.length === 4 && resolve(config.dataDir) === resolve(process.env.ZAP_DATA_DIR ?? '')) { await streamProducedCopy(config, process.argv[3]); return; }
+    else if (command === 'offsite-ack' && config.role === 'source' && process.argv.length === 3 && resolve(config.dataDir) === resolve(process.env.ZAP_DATA_DIR ?? '')) { let input = ''; for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 4096) throw Error('ACK inválido'); } await acknowledgeOffsiteCopy(config, JSON.parse(input)); }
+    else throw Error('Comando offsite inválido');
+    console.log('Operação offsite conferida; aceite do ambiente real permanece separado'); return;
+  }
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
   if (['operation-snapshot', 'operation-recover', 'promote-profile', 'fence-source'].includes(process.argv[2])) {

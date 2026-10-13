@@ -55,7 +55,7 @@ test('pull age retoma antes da rede e recupera SQL FTS sessão e todos originais
   const snapshot = validateSnapshot(recovery.snapshotDir); assert.equal(snapshot.manifest.databases['archive.sqlite'].counts.messages, 1);
   for (const file of snapshot.manifest.files.filter((x: any) => x.path.endsWith('.bin'))) assert.deepEqual(readFileSync(join(recovery.snapshotDir, file.path)), f.bytes);
   const restored = createService({ dataDir: recovery.restoredDir });
-  try { assert.equal(restored.archive.getCoverage().uniqueMessages, 1); assert.equal((restored.archiveDb.prepare("SELECT count(*) n FROM message_fts WHERE message_fts MATCH 'CAPTION'").get() as { n: number }).n, 1); assert.throws(() => restored.startCollector(), /offline|restaurad|promo/i); } finally { await restored.close(); }
+  try { assert.equal(restored.archive.getCoverage().uniqueMessages, 1); assert.equal((restored.archiveDb.prepare("SELECT count(*) n FROM search_fts WHERE search_fts MATCH 'CAPTION'").get() as { n: number }).n, 1); assert.throws(() => restored.startCollector(), /offline|restaurad|promo/i); } finally { await restored.close(); }
 });
 
 test('partial corrupção readback e chave errada não publicam sucesso externo', async t => {
