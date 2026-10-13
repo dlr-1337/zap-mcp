@@ -245,9 +245,10 @@ export function createNotebookAdapter(config: PullOffsiteConfig): OffsiteAdapter
 }
 export async function runOffsiteBackup(config: PullOffsiteConfig, { adapter = createNotebookAdapter(config), cipher = createAgeCipher({ identityFile: config.identityFile, maxBytes: config.maxBytes }), fault }: { adapter?: OffsiteAdapter; cipher?: CipherAdapter; fault?: Fault } = {}) {
   budget(config); if (config.role !== 'pull') throw Error('Backup deve ser iniciado pelo notebook'); privateFile(config.operationDir, true);
-  const lock = acquireServiceLock(config.operationDir), state = loadState(config.operationDir), operationId = state.result !== 'success' && state.operationId ? state.operationId : randomUUID();
-  let stage = 'key', work: string | undefined;
-  try { state.lastAttempt = new Date().toISOString(); state.operationId = operationId; state.result = 'pending'; state.failedStage = null; state.safeFailureCode = null; saveState(config.operationDir, state);
+  const lock = acquireServiceLock(config.operationDir);
+  let stage = 'key', work: string | undefined, state: State | undefined, operationId: string | undefined;
+  try { state = loadState(config.operationDir); operationId = state.result !== 'success' && state.operationId ? state.operationId : randomUUID();
+    state.lastAttempt = new Date().toISOString(); state.operationId = operationId; state.result = 'pending'; state.failedStage = null; state.safeFailureCode = null; saveState(config.operationDir, state);
     privateFile(config.identityFile); privateFile(config.destinationDir, true); stage = 'capacity';
     await fault?.(stage); space(config.destinationDir, config.maxBytes * 5, (config.maxFiles ?? 10000) * 4, config.reserveBytes);
     work = mkdtempSync(join(config.destinationDir, '.offsite-pull-')); const stored = join(config.destinationDir, operationId + '.age');
@@ -265,8 +266,8 @@ export async function runOffsiteBackup(config: PullOffsiteConfig, { adapter = cr
     stage = 'acknowledge'; await fault?.(stage); await adapter.acknowledge(restored.receipt, AbortSignal.timeout(120_000));
     stage = 'verified'; await fault?.(stage); state.lastVerifiedSuccess = { ...restored.receipt, verifiedAt: new Date().toISOString() }; state.result = 'success'; state.failedStage = null; state.safeFailureCode = null; saveState(config.operationDir, state);
     return { verified: true, operationId };
-  } catch (error) { state.result = 'failed'; state.failedStage = stage; state.safeFailureCode = failureCode(error, stage); saveState(config.operationDir, state); if (['transfer', 'readback', 'decrypt', 'validate', 'acknowledge'].includes(stage)) await adapter.reportFailure?.(operationId, state.safeFailureCode, AbortSignal.timeout(120_000)).catch(() => {}); throw Error('Backup recusado: ' + state.safeFailureCode); }
-  finally { if (work) rmSync(work, { recursive: true }); lock.release(); }
+  } catch (error) { if (!state || !operationId) throw error; state.result = 'failed'; state.failedStage = stage; state.safeFailureCode = failureCode(error, stage); saveState(config.operationDir, state); if (['transfer', 'readback', 'decrypt', 'validate', 'acknowledge'].includes(stage)) await adapter.reportFailure?.(operationId, state.safeFailureCode, AbortSignal.timeout(120_000)).catch(() => {}); throw Error('Backup recusado: ' + state.safeFailureCode); }
+  finally { try { if (work) rmSync(work, { recursive: true }); } finally { lock.release(); } }
 }
 
 export function readOffsiteConfig(path: string): SourceOffsiteConfig | PullOffsiteConfig { const c = readPrivateJson(path); budget(c); if (!['source', 'pull'].includes(c.role)) throw Error('Papel offsite inválido'); return c; }

@@ -192,3 +192,15 @@ test('pacote age recusa arquivo fora da allowlist symlink duplicata replay e des
   mkdirSync(join(f.base, 'occupied'), { mode: 0o700 }); writeFileSync(join(f.base, 'occupied', 'keep'), 'keep', { mode: 0o600 });
   await assert.rejects(m.recoverOffsiteCopy(f.pull, good.operationId, join(f.base, 'occupied')), /novo/); assert.equal(readFileSync(join(f.base, 'occupied', 'keep'), 'utf8'), 'keep');
 });
+
+test('estado offsite inválido libera mutex e permite nova chamada no mesmo processo', async t => {
+  const f = await fixture(t), m = await load(); await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+  const path = join(f.pull.operationDir, 'offsite-state.json');
+  for (const invalid of ['{invalid-json', JSON.stringify({ version: 999 })]) {
+    const valid = readFileSync(path); writeFileSync(path, invalid);
+    await assert.rejects(m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) }));
+    assert.equal(existsSync(join(f.pull.operationDir, 'service.lock')), false, 'mutex deve ser liberado mesmo quando loadState falha');
+    writeFileSync(path, valid);
+    const result = await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) }); assert.equal(result.verified, true);
+  }
+});
