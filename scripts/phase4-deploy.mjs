@@ -137,7 +137,7 @@ export async function rotateRestoredOwner(config, password, { controller = creat
   const quiet = async () => { const facts = await controller.inspect(); assert.equal(facts.machineId, config.supervisor.machineId); if (config.supervisor.helperPath) assertSupervisorFacts(config.supervisor, facts); assertQuiet(facts, true); };
   await quiet(); const lock = acquireServiceLock(privateFile(config.dataDir, true)); let db;
   try {
-    db = new Database(privateFile(join(config.dataDir, 'auth.sqlite')), { fileMustExist: true }); db.pragma('synchronous=FULL');
+    db = new Database(privateFile(join(config.dataDir, 'auth.sqlite'), false, Number.MAX_SAFE_INTEGER), { fileMustExist: true }); db.pragma('synchronous=FULL');
     const proof = assertPromotionAuthorization(config.dataDir, db);
     if (!proof.sourceFence) await verifyPromotionFence(proof.source, sourceController);
     const before = profileState(config.dataDir); await setOwnerPassword(db, password); lock.assert();

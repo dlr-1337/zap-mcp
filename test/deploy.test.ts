@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, symlinkSync, statSync } from 'node:fs';
 import { tmpdir, homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -184,11 +184,12 @@ test('probe HTTP streaming limita bytes e prazo absoluto mesmo com atividade con
   await assert.rejects(m.tlsCall(origin, '/', { ca: f.ca, expectedBytes: 1000, timeoutMs: 40 }), /probe_timeout/);
 });
 
-test('rotação explícita após promoção muda somente owner do destino parado', async t => {
+test('rotação explícita após promoção aceita auth acima de 256 KiB e muda somente owner do destino parado', async t => {
   const m = await load(), base = mkdtempSync(join(tmpdir(), 'zap-deploy-owner-')); t.after(() => rmSync(base, { recursive: true }));
   const source = join(base, 'source'), dataDir = join(base, 'target'), snapshotDir = join(base, 'snapshot'), operationDir = join(base, 'operations'); mkdirSync(operationDir, { mode: 0o700 });
   const service = createService({ dataDir: source });
-  createAuthState(service.authDb, { newProfile: true }).state.keys.set({ session: { fixture: Buffer.from('WA session stays original') } }); await service.setPassword('original owner fixture'); await service.close();
+  createAuthState(service.authDb, { newProfile: true }).state.keys.set({ session: { fixture: Buffer.alloc(400 * 1024, 0x61) } }); await service.setPassword('original owner fixture'); await service.close();
+  assert.ok(statSync(join(source, 'auth.sqlite')).size > 262144);
   const sourceBefore = m.profileState(source); await createSnapshot({ dataDir: source, destination: snapshotDir }); await restoreSnapshot({ snapshotDir, destination: dataDir });
   const machineId = '0'.repeat(32), supervisor = { kind: 'systemd', name: 'fixture.service', dataDir, machineId }, facts = { running: false, autostart: false, pid: 0, startTime: null, profileProcesses: 0, mode: 'offline', machineId };
   const controller = { async inspect() { return { ...facts }; } }, config = { dataDir, operationDir, destination: snapshotDir, snapshotDir, verificationDir: join(base, 'verified'), priorMode: 'offline', priorRelease: 'fixture', supervisor, source: { ...supervisor, dataDir: source } };
