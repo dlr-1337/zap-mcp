@@ -515,6 +515,7 @@ test('estado operacional mostra backup conferido atraso falha e coleta pausada s
   await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('em andamento'));
   assert.match(await page.locator('#backup-status').textContent(), /Nenhuma cópia conferida/);
   for (const width of [320, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); }
+  await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); assert.equal(await page.locator('#backup-status').textContent(), '');
 });
 
 test('login distingue recusa de acesso de senha incorreta', async t => {

@@ -184,7 +184,7 @@ function signedOut(message = '') {
   for (const tab of tabs.values()) { ++tab.generation; releasePanel(tab.panel); tab.panel.remove(); tab.button.parentElement.remove(); } tabs.clear();
   for (const id of ['conversations', 'coverage', 'coverage-batches']) $(id).replaceChildren();
   resetReader();
-  for (const id of ['connection', 'qr-status', 'media-status', 'archive-error', 'list-status', 'status-loading']) $(id).textContent = '';
+  for (const id of ['connection', 'backup-status', 'qr-status', 'media-status', 'archive-error', 'list-status', 'status-loading']) $(id).textContent = '';
   for (const id of ['pairing', 'back', 'more-conversations', 'more-messages', 'refresh-conversation', 'retry', 'empty-list']) $(id).hidden = true;
   for (const id of ['reader', 'conversation-panel']) $(id).removeAttribute('aria-busy');
   $('message-title').textContent = 'Mensagens arquivadas'; $('reader-status').textContent = 'Abra uma conversa ou um resultado para ler o contexto.';
