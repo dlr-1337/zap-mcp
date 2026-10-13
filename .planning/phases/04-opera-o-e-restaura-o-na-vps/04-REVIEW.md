@@ -1,6 +1,6 @@
 ---
 phase: 04-opera-o-e-restaura-o-na-vps
-reviewed: 2026-10-13T17:32:43Z
+reviewed: 2026-10-13T17:58:29Z
 depth: standard
 files_reviewed: 4
 files_reviewed_list:
@@ -9,62 +9,53 @@ files_reviewed_list:
   - scripts/phase2-acceptance.mjs
   - scripts/phase3-acceptance.mjs
 findings:
-  critical: 4
+  critical: 0
   warning: 0
   info: 0
-  total: 4
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-13T17:32:43Z
+**Reviewed:** 2026-10-13T17:58:29Z
 **Depth:** standard
 **Files Reviewed:** 4
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-Revisão adversarial dos quatro arquivos explicitamente delimitados, na fonte 3065b55. O fluxo operacional mantém observações em WeakMap e rejeita recibos serializados, mas alguns gates ainda registram conclusões mais fortes do que as evidências verificadas. Há também exposição de fingerprints no recibo anterior e perda de configuração MCP durante seu cleanup.
+Revisão final das correções dos quatro blockers anteriores no HEAD d8eacec, incluindo os commits 2c7310c, 84673b2 e 98c05c7. Nenhum achado aberto nos quatro arquivos delimitados. As conclusões abaixo decorrem dos caminhos reais do código e dos controles negativos; a aprovação dos testes não substitui essa análise.
 
-A revisão histórica de 30 arquivos registrava como resolvidos os problemas de retry de cifragem, retomada de release antiga, dependência de HTTPS no recovery, divergência helper/volume, mutex após estado inválido e binding do container. Esse histórico não representa uma revisão desses 30 arquivos nesta rodada.
+O aceite operacional real continua pendente: esta revisão não executou Codex real, VPS, backup externo ou troca de backend permanente/restaurado. Nenhum dado real, credencial, configuração global ou diretório privado de deploy foi acessado. Nenhuma fonte foi editada e nenhum commit foi criado.
 
-Somente fontes e dependências diretas necessárias foram examinadas. Não houve acesso a dados reais, VPS, configurações globais ou diretórios privados de deploy. Os 307 testes/CI informados pelo orquestrador não foram usados como prova de correção. Não foram fornecidos structural findings nem evidência externa.
+A revisão histórica de 30 arquivos registrava como resolvidos retry de cifragem, retomada de release antiga, dependência de HTTPS no recovery, divergência helper/volume, mutex após estado inválido e binding do container. Esse histórico não amplia o escopo desta rodada. Não foram fornecidos structural findings nem evidência externa.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
+Nenhum achado aberto. As classificações abaixo pertencem ao histórico dos problemas corrigidos, não às contagens atuais.
 
-### CR-01: Gate de contexto do Codex ignora as mensagens e a navegação
+| Achado anterior | Classificação anterior | Resolução verificada |
+|---|---|---|
+| CR-01 — contexto validado somente pela âncora | BLOCKER — resolvido | assertCodexContexts, scripts/phase4-acceptance.mjs:168-181, exige abertura inicial para a âncora conhecida, compara mensagens/metadados com a janela SQL canônica, verifica limites/ordinais e partições before/after. Navegação exige cursor de resposta precedente da mesma snapshot e janela consecutiva. Cada direção é obrigatória quando o cursor inicial correspondente não é null; não exige direção inexistente no limite da conversa. O probe instalado chama o oráculo antes dos gates, na linha 227. |
+| CR-02 — arquivo local/substring usados como prova de entrega | BLOCKER — resolvido | createDeliveryBroker, scripts/phase4-acceptance.mjs:186-207, usa escopo fixo e único com dois IDs/destinos distintos. O helper gerado apenas solicita entrega pelo socket Unix privado: o pai lê o bearer privado e executa os GETs HTTPS no origin fixo. Rejeita TLS não autorizado, status diferente de 200, redirect, tamanho excessivo, truncamento e hash divergente. Só publica o arquivo após pipeline completo e igualdade SQL de tamanho/SHA; link exclusivo rejeita destino previamente criado. Observações ficam em WeakMap privado, gravadas somente após publicação, e assertDeliveryObserved não aceita objeto serializado. |
+| CR-03 — fingerprints no recibo público | BLOCKER — resolvido | scripts/phase3-acceptance.mjs:43 projeta originals para bytes/integrityVerified e não retorna SHA. O gate ainda confere hashes privados antes da emissão; o retorno/entrypoint usam o recibo reduzido. Teste de privacidade verifica a ausência dos fingerprints sintéticos no recibo serializado. |
+| CR-04 — cleanup remove configuração MCP anterior | BLOCKER — resolvido | scripts/phase3-acceptance.mjs:147 captura todas as linhas de web_config antes de rotateMcpToken. restoreWebConfig, linha 48, repõe o conjunto inteiro transacionalmente. O finally, linhas 269-280, fecha os listeners, restaura proprietário/sessões/revogações/configuração, fecha bancos e apaga a credencial temporária; falhas de cleanup não pulam as tentativas posteriores e são propagadas em AggregateError. Os controles conferem igualdade integral, validade do bearer original e recusa do temporário tanto em sucesso quanto após falha de rotação. |
 
-**Classification:** BLOCKER
-**File:** `scripts/phase4-acceptance.mjs:183`
-**Issue:** O probe exige uma chamada get_context para a referência conhecida, mas compara somente p.anchor com messageOracle. Não verifica p.messages, before, after, ordinal, anchorOrdinal nem os cursores; tampouco exige chamadas before/after. Um endpoint que retorna a âncora correta com messages vazio, mensagens de outra conversa ou navegação quebrada continua permitindo registrar permanentCodex/restoredCodex na linha 188. O teste operacional percorre a navegação do site e MCP sintético, mas não exercita essa validação do cliente instalado.
-**Fix:** Aplicar aqui o oráculo de janela/canonical order já implementado em scripts/phase3-acceptance.mjs:233-240: obter a conversa e posição canônicas do anchor por SQL, comparar todas as mensagens/metadados e partições before/after, exigir as chamadas de navegação quando houver vizinhos, e conferir argumentos e cursores consecutivos. Adicionar controles que preservem a âncora e corrompam somente mensagens/ordinais/direções; todos devem recusar o gate.
+### Entrega e cleanup: rastreamento da fronteira de confiança
 
-### CR-02: Arquivos locais e substring de comando não comprovam entrega autenticada
+O socket aceita apenas nonce e os dois attachmentIds esperados, uma única vez. Nem URL, destino, hash ou afirmação de sucesso enviados pelo helper são tratados como evidência. No pai, receive verifica ausência do destino, autentica o GET e mede os bytes do stream em temporário exclusivo. A observação é acrescentada depois do link final; o helper recebe delivered:2 apenas após as duas operações. Os GETs e arquivos pertencem ao broker criado no próprio probe/live run, e os arquivos finais também têm mtime posterior ao início da execução e igualdade SQL reconferida na linha 228.
 
-**Classification:** BLOCKER
-**File:** `scripts/phase4-acceptance.mjs:173-184`
-**Issue:** A execução do downloader é inferida por command.includes(downloader), e a entrega por arquivos novos cujo tamanho/SHA coincide com o banco. Um comando bem-sucedido como `echo /synthetic/helper.mjs` satisfaz a primeira condição; um helper que copia os bytes do snapshot local satisfaz a segunda sem GET autenticado do endpoint permanente ou restaurado. A chamada get_attachment só confirma que um URL foi devolvido, não que ele foi consumido. O probe recebe o snapshot local e parâmetros de execução arbitrários, mas não observa/correlaciona tráfego de download. Portanto savedOriginals e os gates do Codex podem passar quando o caminho remoto de entrega falha. O teste sintético realizado nesta revisão confirmou a aceitação da substring por um echo.
-**Fix:** Construir um downloader controlado pelo driver, com argv/origin/IDs/destinos fixos e credencial recebida privadamente. Observar cada GET e seu término/status, identidade do anexo e bytes, correlacionando-os com o call get_attachment e o arquivo final, como a fase 3 faz em suas linhas 248-249. No endpoint remoto, usar observação confiável do proxy/helper ou um relay autenticado da execução, sem depender de declarações da ferramenta/modelo. Recusar no-op, cópia local, download de outro endpoint, arquivo parcial e IDs duplicados. Não registrar savedOriginals somente por existência/hash.
+O probe exige assertDeliveryObserved antes de continuar e fecha o broker em finally, mesmo se runCodex ou o gate falhar. close aborta requests, destrói sockets, espera operações pendentes, fecha o listener e remove helper/socket/diretório temporário. Assim, echo sem GET, cópia local e JSON declarando observed não podem registrar savedOriginals. A negociação permanece derivada somente do stderr nativo do processo, não de stdout ou conteúdo de conversas.
 
-### CR-03: Recibo público da fase 3 divulga fingerprints dos anexos
+### Verificação independente
 
-**Classification:** BLOCKER
-**File:** `scripts/phase3-acceptance.mjs:43`
-**Issue:** publicReceipt inclui originals[].sha256 calculado a partir dos anexos reais. runAcceptance devolve esse objeto e o entrypoint o imprime no stdout na linha 293; esse canal pode alimentar logs ou artefatos públicos. Embora os arquivos privados de evidência tenham modo 0600, o recibo permite correlacionar conteúdo por fingerprint e contraria o limite de privacidade desta revisão. A fase 4 remove hashes do recibo, mas a fase 3 continua no escopo e pode ser executada diretamente. Um ensaio com arquivos exclusivamente sintéticos confirmou que o SHA é preservado no retorno público.
-**Fix:** Manter SHA e identificadores somente em evidence.json privado. No recibo allowlisted, substituir originals por contagem, bytes (se necessários) e um boolean de integridade verificada; remover sha256 do retorno e stdout. Acrescentar teste de privacidade da fase 3 com fingerprint sintético e conferir sua ausência em todo recibo serializado.
+Executados os dois arquivos de testes focados com o binário Node 24.21.0 exigido pelo projeto: **22 testes passaram**, exit 0. Foram examinados os controles negativos de contexto vazio, referência/ordinal/partição/direção/cursor corrompidos e direção ausente; entrega sem GET, cópia local, escopo/IDs alterados, status não 200 e resposta parcial; privacidade do recibo e restauração de credenciais. test/mcp-acceptance.test.ts foi consultado como evidência auxiliar das correções CR-03/04, sem ampliar a lista primária.
 
-### CR-04: Cleanup da fase 3 elimina a configuração MCP anterior
-
-**Classification:** BLOCKER
-**File:** `scripts/phase3-acceptance.mjs:274-275`
-**Issue:** A linha 146 guarda originalConfig com WHERE key NOT LIKE 'mcp-%'. rotateMcpToken sobrescreve mcp-token-digest, mcp-generation e mcp-cursor-secret durante o ensaio; no finally, todas as entradas mcp-% são apagadas e apenas as demais restauradas. Se o clone offline já tinha um token válido, executar o aceite o revoga permanentemente, inclusive em falhas posteriores à rotação. Não há precondição exigindo ausência desses registros. A preservação do config.toml não preserva a autenticação do arquivo consultado.
-**Fix:** Capturar todas as linhas de web_config antes da rotação. Ao encerrar os listeners e revogar a credencial temporária, restaurar exatamente o conjunto original em uma transação; o token temporário deixará de ser válido porque seu digest/generation serão substituídos. Testar sucesso e falha após rotateMcpToken com configuração MCP sintética pré-existente, conferindo igualdade do banco e validade da credencial original após cleanup.
+Uma tentativa anterior com o Node 26 do PATH foi recusada pelo guard Node24 obrigatório; foi repetida com o runtime correto. A suíte completa e os self-tests do orquestrador não foram repetidos nesta revisão.
 
 ---
 
-_Reviewed: 2026-10-13T17:32:43Z_
+_Reviewed: 2026-10-13T17:58:29Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
