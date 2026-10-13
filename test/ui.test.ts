@@ -511,9 +511,17 @@ test('estado operacional mostra backup conferido atraso falha e coleta pausada s
   await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('Falha na última tentativa'));
   assert.match(await page.locator('#backup-status').textContent(), /atrasada|mais de 24 horas/); assert.equal(await page.locator('#backup-status').getAttribute('role'), 'alert');
   assert.doesNotMatch(await page.locator('body').textContent(), /PRIVATE_SENTINEL/);
-  backup = { result: 'pending', lastVerifiedAt: null, overdue24h: true }; await page.evaluate(() => dispatchEvent(new Event('online')));
+  backup = { result: 'pending', lastVerifiedAt: null, lastAttemptAt: null, overdue24h: true }; await page.evaluate(() => dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('Nenhuma cópia conferida'));
+  assert.doesNotMatch(await page.locator('#backup-status').textContent(), /em andamento/);
+  backup = { ...backup, lastAttemptAt: '2026-10-13T12:30:00.000Z' }; await page.evaluate(() => dispatchEvent(new Event('online')));
   await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('em andamento'));
   assert.match(await page.locator('#backup-status').textContent(), /Nenhuma cópia conferida/);
+  backup = { ...backup, result: 'failed', safeFailureCode: 'capacity_insufficient' }; await page.evaluate(() => dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => document.getElementById('backup-status')?.textContent?.includes('Espaço insuficiente'));
+  backup = { ...backup, safeFailureCode: 'toString' }; await page.evaluate(() => dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => !document.getElementById('backup-status')?.textContent?.includes('Espaço insuficiente'));
+  assert.doesNotMatch(await page.locator('#backup-status').textContent(), /function|toString|PRIVATE_SENTINEL/);
   for (const width of [320, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); }
   await page.locator('#logout-button').click(); await page.locator('#login-panel').waitFor({ state: 'visible' }); assert.equal(await page.locator('#backup-status').textContent(), '');
 });

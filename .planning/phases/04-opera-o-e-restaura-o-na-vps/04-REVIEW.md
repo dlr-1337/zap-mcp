@@ -1,11 +1,12 @@
 ---
 phase: 04-opera-o-e-restaura-o-na-vps
-reviewed: 2026-10-13T20:15:51Z
+reviewed: 2026-10-13T21:09:49Z
 depth: standard
-files_reviewed: 2
+files_reviewed: 3
 files_reviewed_list:
-  - scripts/phase4-acceptance.mjs
-  - test/operation-acceptance.test.ts
+  - public/app.js
+  - public/index.html
+  - test/ui.test.ts
 findings:
   critical: 0
   warning: 0
@@ -16,14 +17,14 @@ status: clean
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-13T20:15:51Z
+**Reviewed:** 2026-10-13T21:09:49Z
 **Depth:** standard
-**Files Reviewed:** 2
+**Files Reviewed:** 3
 **Status:** clean
 
 ## Summary
 
-Reavaliação padrão delimitada a scripts/phase4-acceptance.mjs e test/operation-acceptance.test.ts, delta 6d72c12..944f494 no HEAD 944f494. A mudança acrescenta somente o span nativo opcional e exato serve_inner: antes do target rmcp::service no parser de negociação. Foram rastreados o stderr separado do subprocesso, a filtragem de horário/servidor e o caller que exige essa negociação antes de registrar os gates. Nenhum achado aberto no delta. A revisão anterior de quatro arquivos e a resolução de CR-06 são histórico; a lista do frontmatter delimita esta rodada.
+Revisão padrão do delta de interface 5ec7d3f..d47602b no HEAD d47602b, delimitada a public/app.js, public/index.html e test/ui.test.ts. Foram examinados status de backup, coleta pausada, distinção de falhas de login, limpeza no logout, proteção contra respostas atrasadas e contrato da API de status. Nenhum achado aberto. As revisões anteriores de negociação, IPC e deploy permanecem abaixo como histórico; o frontmatter delimita esta rodada.
 
 Não foram fornecidos structural findings nem evidência de revisores externos. As contagens acima representam apenas achados abertos. Os IDs de revisões anteriores não foram reutilizados; o histórico anterior permanece em 04-REVIEW-DISPOSITION.md e relatórios históricos. Nesta rodada, somente este relatório foi alterado; nenhuma fonte, configuração pessoal, VPS ou dado real foi modificado, e nenhum commit foi criado pelo revisor.
 
@@ -31,14 +32,27 @@ Não foram fornecidos structural findings nem evidência de revisores externos. 
 
 Nenhum achado aberto. All reviewed files meet quality standards. No issues found.
 
-### Parser nativo: delta revisado
+### Status operacional e login: delta revisado
+
+**Files:** `public/app.js:173-197,450-506`, `public/index.html:27-35`, `test/ui.test.ts:502-529`.
+O parágrafo backup-status só é preenchido depois de request/json e da conferência de readVersion/statusVersion. O wrapper request recusa resposta de geração anterior e encerra a sessão em 401; signedOut incrementa as gerações e limpa o novo texto. Pagehide e a tentativa de logout invalidam readVersion antes que callbacks antigos possam preencher novamente a interface.
+
+A apresentação do backup usa frases fixas, result, lastVerifiedAt e overdue24h por textContent. Host, paths, hashes, safeFailureCode e mensagens cruas de backend não são exibidos nesse novo bloco. A formatação reutiliza America/Sao_Paulo. O contrato conectado em backupStatus calcula overdue24h pela criação do snapshot, e a interface distingue essa idade do horário de conferência: “Última cópia conferida” rotula verifiedAt; “o arquivo protegido tem mais de 24 horas” rotula o atraso, sem prometer conteúdo recente apenas por uma verificação recente.
+
+Pendência, última falha, ausência de cópia conferida e cópia anterior preservada têm textos distintos. Falha/atraso usam role alert, os demais estados usam status. O novo parágrafo fica na região autenticada existente e herda reflow/overflow-wrap. Não adiciona ação de coleta ou pareamento; collectorEnabled false deixa explícita a coleta pausada e não atribui a pausa a uma preparação não comprovada.
+
+Login 401 orienta conferir a senha, 403 e outras recusas orientam recarregar a página, e 429 mantém a orientação de espera. Não há exposição do body de erro. O input de senha continua limpo e o erro permanece associado ao campo por aria-describedby e role alert.
+
+**Verificação atual:** Executados com Node 24.21.0 os dois testes UI afetados: **2/2 passaram**, exit 0, zero falhas/cancelamentos/skips/todo. Cobrem horário em São Paulo, sucesso/atraso/falha/pendência/ausência de cópia, sentinel privado não renderizado, role alert, coleta pausada, reflow em 320/1280 px, limpeza no logout e distinção 403/401. Respostas atrasadas foram rastreadas no mecanismo comum de gerações; não foi criada nem executada uma nova matriz de atraso específica do backup. Não foi repetida a suíte completa nem executada auditoria visual de produção.
+
+### Histórico do parser nativo — clean
 
 **File:** `scripts/phase4-acceptance.mjs:165-168,217-234`.
 A expressão permanece ancorada no início da linha, em timestamp UTC e nível INFO, e aceita somente `(?:serve_inner:\\s+)?` antes de `rmcp::service`. Não foi substituída por wildcard de spans. Após esse filtro, o parser continua exigindo inicialização de cliente, peer_info, protocolo retornado e nome exato zap-archive, com timestamp dentro da janela atual. observeCodexNegotiation continua lendo somente result.stderr; stdout, eventos e transcript fornecidos como dados não substituem o log nativo.
 
 probeInstalledCodex continua exigindo negociação na linha 221, chamadas atuais, oráculos SQL, entrega HTTPS testemunhada e preservação de configuração antes do record da linha 234. A mudança não cria fallback, não reconstitui observações perdidas nem reutiliza receipts de execução anterior.
 
-O teste novo em `test/operation-acceptance.test.ts:52` exercita o formato com serve_inner. Foram executados os dois testes de negociação com Node 24.21.0: **2/2 passaram**, exit 0, zero falhas/cancelamentos/skips/todo. Um controle adicional direto confirmou esse positivo e **sete negativos** no formato com span: servidor estrangeiro, span diferente, texto intermediário não permitido, prefixo corrompido, timestamp anterior/posterior à janela e log forjado somente em stdout/eventos. Os testes de regressão anteriores não foram repetidos nesta rodada.
+O teste novo em `test/operation-acceptance.test.ts:52` exercita o formato com serve_inner. Foram executados os dois testes de negociação com Node 24.21.0: **2/2 passaram**, exit 0, zero falhas/cancelamentos/skips/todo. Um controle adicional direto confirmou esse positivo e **sete negativos** no formato com span: servidor estrangeiro, span diferente, texto intermediário não permitido, prefixo corrompido, timestamp anterior/posterior à janela e log forjado somente em stdout/eventos. Esses testes pertencem à revisão anterior do parser; não foram repetidos na rodada atual de UI.
 
 ### Histórico CR-01 a CR-05
 
@@ -58,12 +72,12 @@ Os IDs e dispositions anteriores permanecem preservados nos relatórios e em 04-
 
 Na reavaliação anterior de CR-06, o foco de entrega HTTPS com pausa controlada passou **1/1**; antes daquela correção, os dois arquivos focados haviam passado **34/34**. Esses resultados permanecem históricos e não são apresentados como execuções atuais do delta de negociação. A suíte completa não foi repetida nem considerada concluída aqui.
 
-O delta de negociação não modifica deploy, IPC, credenciais ou política de sandbox. A resolução de CR-06 acima permanece histórica e o código de entrega não mudou neste delta.
+O delta de UI não modifica deploy, IPC, negociação, credenciais ou política de sandbox. As revisões e a resolução de CR-06 acima permanecem históricas; não substituem o escopo desta rodada.
 
 Esta revisão não executou Codex instalado contra a VPS, atualização real, backup externo ou troca de backend restaurado. Não reavaliou a cronologia nem autenticou o registro privado do gate RED. Testes locais não concluem OPS-01 a OPS-04; o aceite operacional continua dependendo de evidência atual no ambiente real.
 
 ---
 
-_Reviewed: 2026-10-13T20:15:51Z_
+_Reviewed: 2026-10-13T21:09:49Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_

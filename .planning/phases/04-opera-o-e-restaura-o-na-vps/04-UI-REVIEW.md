@@ -1,5 +1,23 @@
 # Fase 04 — UI Review
 
+## Reavaliação da correção — 2026-10-13
+
+**Delta:** `5ec7d3f..d47602b`. **Resultado atual: 22/24** — Copywriting 3/4, Visuals 4/4, Color 4/4, Typography 4/4, Spacing 4/4, Experience Design 3/4. A avaliação inicial abaixo permanece como histórico.
+
+C-01 e C-02 foram resolvidos: `public/app.js:457,475` anuncia coleta pausada e pareamento indisponível sem afirmar preparação incompleta; `:503` reserva orientação de senha para 401 e oferece recarregamento para outras recusas, conservando 429. E-01 foi parcialmente resolvido: `public/index.html:30` recebe o estado do backup; `public/app.js:458-460` informa último sucesso conferido em America/Sao_Paulo, atraso e falha, preservando o último bom. `:187` limpa o novo texto no logout.
+
+Foram lidos os testes DOM em `test/ui.test.ts:502-531` e seus resultados: foco novo **2/2**, conjunto UI **21/21**, zero fail/cancel/skip/todo. As assertions verificam fuso, alerta de falha/atraso, ausência de sentinela privada, modo pausado, logout e ausência de overflow a 320/1280px. São testes de fixture com DOM renderizado; os resultados existentes foram inspecionados, sem repetir execução ou inspecionar novas imagens. CSS não mudou. A captura de login desktop continua a única imagem de produção inspecionada. Nenhuma afirmação sobre implantação desta correção ou gates OPS é adicionada.
+
+### Advertências residuais e prioridade atual
+
+1. **WARNING E-01 residual — Motivo seguro da falha ausente.** `public/app.js:460` informa somente falha genérica e ignora `safeFailureCode`, embora D-12 exija motivo e `src/offsite.ts:54-60` entregue categorias sanitizadas. Traduzir apenas valores conhecidos em mensagens fixas (capacidade, prazo, transporte, integridade, decifração e estado inválido); valor desconhecido permanece genérico. O teste atual usa somente sentinela desconhecida, portanto não verifica tradução dos motivos válidos. Experience Design sobe de 2 para 3 pela visibilidade recuperada, sem encerrar esse residual.
+2. **WARNING C-03 — Estado inicial confundido com backup em execução.** `src/offsite.ts:25,55-60` devolve `result: pending` com `lastAttemptAt: null` quando não existe estado/tentativa. `public/app.js:460` transforma esse retorno em “Backup em andamento”. Distinguir ausência de tentativa de tentativa pendente, usando `lastAttemptAt` junto de `result`; teste `test/ui.test.ts:514-516` atualmente confirma andamento sem fornecer tentativa. Copywriting permanece 3/4 por essa mensagem inexata.
+3. **Sem terceira correção aberta.** Os problemas anteriores de coleta pausada e classe de erro de login foram fechados; não foi criada recomendação cosmética para preencher a lista.
+
+**Recommendation Count atual:** duas correções prioritárias residuais; zero BLOCKER demonstrado, zero recomendação cosmética. Este resultado supersede a nota e o contador da avaliação inicial.
+
+---
+
 **Auditado:** 2026-10-13
 **Baseline:** padrões abstratos dos seis pilares, proporcionais ao escopo operacional; sem UI-SPEC específico da fase 04. Decisões D-04/D-12 do CONTEXT também foram confrontadas com a implementação.
 **Screenshots:** não capturados nesta rodada (nenhum servidor nas portas locais 3000, 5173 ou 8080). Captura privada existente do login permanente inspecionada, com campo vazio e foco visível; imagem não publicada.
