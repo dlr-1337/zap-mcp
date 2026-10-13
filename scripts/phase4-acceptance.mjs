@@ -163,7 +163,7 @@ export async function probeBackendCleanup(live,{configFile,ca}) {
   record(live,['cleanup']);}finally{try{await closeSshMaster(config);}finally{lock.release();}}
 }
 export function parseNativeNegotiation(logs,startedAt,endedAt=Date.now()) {
-  return logs.replace(/\x1b\[[0-9;]*m/g,'').split('\n').filter(line=>/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z\s+INFO\s+rmcp::service\b/.test(line)).map(line=>({line,time:Date.parse(line.match(/20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/)?.[0]??'')})).filter(e=>e.time>=startedAt&&e.time<=endedAt).map(e=>/rmcp::service[^\n]*Service initialized as client[^\n]*peer_info[^\n]*(?:ServerPeerInfo|InitializeResult)[^\n]*(?:protocol_version|protocolVersion)[^\n]*?(20\d\d-\d\d-\d\d)[^\n]*name: \"zap-archive\"/.exec(e.line)).find(Boolean);
+  return logs.replace(/\x1b\[[0-9;]*m/g,'').split('\n').filter(line=>/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z\s+INFO\s+(?:serve_inner:\s+)?rmcp::service\b/.test(line)).map(line=>({line,time:Date.parse(line.match(/20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/)?.[0]??'')})).filter(e=>e.time>=startedAt&&e.time<=endedAt).map(e=>/rmcp::service[^\n]*Service initialized as client[^\n]*peer_info[^\n]*(?:ServerPeerInfo|InitializeResult)[^\n]*(?:protocol_version|protocolVersion)[^\n]*?(20\d\d-\d\d-\d\d)[^\n]*name: \"zap-archive\"/.exec(e.line)).find(Boolean);
 }
 export function observeCodexNegotiation(result,startedAt,endedAt=Date.now()) { return parseNativeNegotiation(result.stderr ?? '',startedAt,endedAt); }
 export function assertCodexContexts(db,calls,anchorReference) {
