@@ -13,6 +13,9 @@ import { createHash } from 'node:crypto';
 import { createService } from '../src/main.js';
 import { startMediaWorker } from '../src/media.js';
 import { createTransport, transportFromEnv } from '../src/transport.js';
+import { rotateMcpToken } from '../src/mcp.js';
+import Database from 'better-sqlite3';
+import yauzl from 'yauzl';
 
 const hostname = 'archive.example.test', password = 'senha somente da fixture';
 type Reply = { status: number; headers: IncomingHttpHeaders; bytes: Buffer; json(): any };
@@ -114,4 +117,55 @@ test('modo local recusa forwarding e preserva HTTP e TLS nativo', async t => {
   const tls = createTransport();
   const fake = { socket: { encrypted: true }, get: () => 'localhost:4443' } as unknown as Parameters<typeof tls.canonicalOrigin>[0];
   assert.equal(tls.canonicalOrigin(fake), 'https://localhost:4443');
+});
+
+test('MCP negocia e publica somente URL canônica HTTPS atrás do proxy', async t => {
+  const f = await fixture(t); rotateMcpToken(f.s.authDb, join(f.dir, 'token'));
+  const token = readFileSync(join(f.dir, 'token'), 'utf8').trim(), headers = { Authorization: 'Bearer ' + token, Accept: 'application/json, text/event-stream', Origin: f.origin };
+  const rpc = async (method: string, params: unknown) => {
+    const r = await f.call('/mcp', { method: 'POST', headers, body: { jsonrpc: '2.0', id: 1, method, params } });
+    assert.equal(r.status, 200, 'MCP com Origin canônica deve negociar por HTTPS');
+    const raw = r.bytes.toString(); return JSON.parse(raw.startsWith('event:') ? raw.split('data: ')[1].split('\n')[0] : raw);
+  };
+  const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'synthetic-transport', version: '1' } }); assert.equal(init.result.protocolVersion, '2025-06-18');
+  const attachment = await rpc('tools/call', { name: 'get_attachment', arguments: { attachmentId: f.id, preference: 'download' } });
+  assert.equal(attachment.result.structuredContent.downloadUrl, f.origin + '/mcp/attachments/' + f.id);
+  const original = await f.call('/mcp/attachments/' + f.id, { headers }); assert.equal(original.status, 200); assert.deepEqual(original.bytes, f.bytes);
+  const head = await f.call('/mcp/attachments/' + f.id, { method: 'HEAD', headers }); assert.equal(head.status, 200); assert.equal(Number(head.headers['content-length']), f.bytes.length); assert.equal(head.bytes.length, 0);
+  const range = await f.call('/mcp/attachments/' + f.id, { headers: { ...headers, Range: 'bytes=2-12' } }); assert.equal(range.status, 206); assert.deepEqual(range.bytes, f.bytes.subarray(2, 13));
+  const cookie = await f.login();
+  for (const path of ['/mcp', '/mcp/attachments/' + f.id]) for (const bad of [{}, { Cookie: cookie }, { Authorization: 'Bearer invalid' }] as Record<string, string>[]) assert.equal((await f.call(path, { method: path === '/mcp' ? 'POST' : 'GET', headers: bad, body: path === '/mcp' ? {} : undefined })).status, 401);
+  assert.equal((await f.call('/mcp/attachments/' + f.id, { headers: { ...headers, Origin: 'https://hostile.example' } })).status, 403);
+  assert.equal((await f.call('/mcp/attachments/' + f.id, { headers: { Authorization: headers.Authorization } })).status, 200, 'cliente bearer sem Origin');
+  assert.equal((await f.call('/api/attachments/' + f.id, { headers })).status, 401, 'bearer não autentica web');
+  rotateMcpToken(f.s.authDb, join(f.dir, 'rotated-token'));
+  assert.equal((await f.call('/mcp/attachments/' + f.id, { headers })).status, 401);
+  assert.equal((await f.call('/api/status', { headers: { Cookie: cookie } })).status, 200, 'rotação MCP preserva owner');
+});
+
+test('CSRF, ZIP, Range e logout Secure preservam fronteira web HTTPS', async t => {
+  const f = await fixture(t), cookie = await f.login(), headers = { Cookie: cookie, Origin: f.origin };
+  const csrfToken = (await f.call('/api/session', { headers })).json().csrfToken;
+  const selection = { conversationId: f.stored.conversationId, from: '', to: '', csrfToken };
+  for (const path of ['/login', '/logout', '/api/exports']) {
+    assert.equal((await f.call(path, { method: 'POST', headers, body: { ...selection, password, csrfToken: 'invalid' } })).status, 403);
+    assert.equal((await f.call(path, { method: 'POST', headers: { Cookie: cookie, Origin: 'https://hostile.example' }, body: selection })).status, 403);
+    assert.equal((await f.call(path, { method: 'POST', headers: { Cookie: cookie }, body: selection })).status, 403);
+  }
+  const db = new Database(join(f.dir, 'data', 'exports', 'jobs.sqlite'), { readonly: true });
+  assert.equal((db.prepare('SELECT count(*) AS n FROM jobs').get() as { n: number }).n, 0); db.close();
+  const job = await f.call('/api/exports', { method: 'POST', headers, body: selection }); assert.equal(job.status, 202); const jobId = job.json().jobId;
+  let state = '';
+  for (let i = 0; i < 100; i++) { state = (await f.call('/api/exports/' + jobId, { headers })).json().state; if (state !== 'preparing') break; await new Promise(ok => setTimeout(ok, 5)); }
+  assert.equal(state, 'ready');
+  const zip = await f.call('/api/exports/' + jobId + '/download', { headers }); assert.equal(zip.status, 200); assert.match(zip.headers['content-type']!, /application\/zip/);
+  const z = await new Promise<yauzl.ZipFile>((ok, fail) => yauzl.fromBuffer(zip.bytes, { lazyEntries: true, validateEntrySizes: true }, (e, file) => e ? fail(e) : ok(file!)));
+  const files: Buffer[] = [];
+  await new Promise<void>((ok, fail) => { z.on('error', fail); z.on('end', ok); z.on('entry', entry => { z.openReadStream(entry, (error, stream) => { if (error) { fail(error); return; } const chunks: Buffer[] = []; stream!.on('data', c => chunks.push(c)); stream!.on('error', fail); stream!.on('end', () => { files.push(Buffer.concat(chunks)); z.readEntry(); }); }); }); z.readEntry(); });
+  assert.ok(files.some(bytes => bytes.equals(f.bytes)), 'ZIP contém original recebido');
+  assert.equal((await f.call('/api/exports/' + jobId + '/download')).status, 401);
+  const range = await f.call('/api/attachments/' + f.id, { headers: { ...headers, Range: 'bytes=2-12' } }); assert.equal(range.status, 206); assert.deepEqual(range.bytes, f.bytes.subarray(2, 13));
+  const logout = await f.call('/logout', { method: 'POST', headers, body: { csrfToken } }); assert.equal(logout.status, 200); assert.match(logout.headers['set-cookie']![0], /; Secure/); assert.match(logout.headers['set-cookie']![0], /Expires=Thu, 01 Jan 1970/);
+  assert.equal((await f.call('/api/status', { headers: { Cookie: cookie } })).status, 401);
+  const expired = await f.login(); f.s.authDb.prepare('UPDATE web_sessions SET touched_at=0').run(); assert.equal((await f.call('/api/status', { headers: { Cookie: expired } })).status, 401);
 });
