@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, appendFileSync, existsSync, lstatSync, realpathSync, mkdtempSync, chmodSync, unlinkSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, appendFileSync, existsSync, lstatSync, realpathSync, mkdtempSync, chmodSync, unlinkSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
@@ -51,15 +51,31 @@ export function runCodex(executable, args, env, cwd, transcript, prompt) {
     // Codex can launch helpers inheriting its pipes; stop the whole Linux process group.
     const child = spawn(executable, args, { env, cwd, detached: true, stdio: ['pipe', 'pipe', 'pipe'] }); let output = '', stderr = '', failure, killTimer;
     const signal = name => { if (child.pid) { try { process.kill(-child.pid, name); } catch (error) { if (error.code !== 'ESRCH') throw error; } } };
+    const groupRunning = () => readdirSync('/proc').some(pid => {
+      if (!/^\d+$/.test(pid)) return false;
+      try {
+        const stat = readFileSync('/proc/' + pid + '/stat', 'utf8'), fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+        return Number(fields[2]) === child.pid && fields[0] !== 'Z' && fields[0] !== 'X';
+      } catch (error) { if (['ENOENT', 'ESRCH'].includes(error.code)) return false; throw error; }
+    });
     const timer = setTimeout(() => {
       failure = Error('Codex budget exceeded'); signal('SIGTERM'); killTimer = setTimeout(() => signal('SIGKILL'), 2000);
     }, 240000);
     child.on('error', e => { failure ??= e; }); child.stdin.on('error', e => { if (e.code !== 'EPIPE') failure ??= e; });
     child.stdout.on('data', b => { output += b; appendFileSync(transcript, b); }); child.stderr.on('data', b => stderr += b);
-    child.on('close', code => { if (killTimer) signal('SIGKILL'); clearTimeout(timer); clearTimeout(killTimer); appendFileSync(transcript, '\n' + stderr);
+    child.on('close', async code => { clearTimeout(timer); clearTimeout(killTimer);
+      try {
+      if (killTimer) {
+        signal('SIGKILL'); const deadline = Date.now() + 2000;
+        // Sending KILL is asynchronous; parent close does not wait for independently piped descendants.
+        while (groupRunning()) { if (Date.now() >= deadline) throw Error('Codex process group did not terminate'); await new Promise(r => setTimeout(r, 10)); }
+      }
+      appendFileSync(transcript, '\n' + stderr);
       if (failure) { reject(failure); return; }
       const events = output.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
-      accept({ pid: child.pid, code, output: output + stderr, events }); }); child.stdin.end(prompt);
+      accept({ pid: child.pid, code, output: output + stderr, events });
+      } catch (error) { reject(error); }
+    }); child.stdin.end(prompt);
   });
 }
 function http(origin, ca, path, options = {}) {

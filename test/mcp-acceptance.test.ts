@@ -110,7 +110,7 @@ test('recibo público usa whitelist e não vaza sentinelas privadas', t => {
 test('WR-01 timeout espera close e encerra filho e descendente que ignoram TERM', { timeout: 10000 }, async t => {
   for (const independentPipes of [false, true]) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-timeout-')); t.after(() => rmSync(dir, { recursive: true }));
-  let child: ChildProcess | undefined, closed = false, descendant = 0, budget: (() => void) | undefined;
+  let child: ChildProcess | undefined, closed = false, descendant = 0, budget: (() => void) | undefined, settled = false, holdTermination = independentPipes;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let markReady!: () => void;
   const ready = new Promise<void>(resolve => markReady = resolve);
@@ -124,15 +124,26 @@ test('WR-01 timeout espera close e encerra filho e descendente que ignoram TERM'
     const timer = setTimeout(() => { timers.delete(timer); fn(); }, ms); timers.add(timer); return timer;
   };
   const clear = (timer: ReturnType<typeof setTimeout>) => { timers.delete(timer); clearTimeout(timer); };
-  // Execute the current function body; only its budget clock and spawn observation are controlled.
+  let markObserved!: () => void;
+  const observed = new Promise<void>(resolve => markObserved = resolve);
+  // Model delayed kernel termination so the missing wait fails deterministically; real processes remain checked below.
+  const read = (path: string, ...args: any[]) => {
+    if (holdTermination && path === '/proc/' + descendant + '/stat') { markObserved(); return `${descendant} (fixture ) worker) R 1 ${child!.pid} 0`; }
+    return (readFileSync as any)(path, ...args);
+  };
+  const entries = (path: string) => path === '/proc' && holdTermination ? [...new Set([...readdirSync(path), String(descendant)])] : readdirSync(path);
+  // Execute the current function body with controlled budget and termination observations.
   const body = source.slice(source.indexOf('function runCodex('), source.indexOf('\nfunction http('));
-  const run = new Function('spawn', 'writeFileSync', 'appendFileSync', 'setTimeout', 'clearTimeout', body + ';return runCodex;')(trackedSpawn, writeFileSync, appendFileSync, clock, clear);
+  const run = new Function('spawn', 'writeFileSync', 'appendFileSync', 'readFileSync', 'readdirSync', 'setTimeout', 'clearTimeout', body + ';return runCodex;')(trackedSpawn, writeFileSync, appendFileSync, read, entries, clock, clear);
   const fixture = independentPipes
     ? `const {spawn}=require('node:child_process');const c=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});process.send('READY');setInterval(()=>{},1000)"],{stdio:['ignore','ignore','ignore','ipc']});c.once('message',()=>console.log('READY:'+c.pid));setInterval(()=>{},1000);`
     : `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>process.stderr.write('TERM_IGNORED\\n'));const c=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});console.log('CHILD_READY');setInterval(()=>{},1000)"],{stdio:['ignore','pipe','inherit']});c.stdout.once('data',()=>console.log('READY:'+c.pid));setInterval(()=>{},1000);`;
   try {
     const pending = run(process.execPath, ['-e', fixture], process.env, dir, join(dir, 'transcript'), '');
-    await ready; assert.ok(budget); budget(); await assert.rejects(pending, /budget exceeded/);
+    await ready; assert.ok(budget); budget();
+    const rejected = assert.rejects(pending, /budget exceeded/).then(() => settled = true);
+    if (independentPipes) { await Promise.race([observed, rejected]); assert.equal(settled, false, 'Promise settled before descendant termination was observed'); holdTermination = false; }
+    await rejected;
     assert.equal(closed, true, 'Promise rejected before child close');
     if (independentPipes) assert.equal(child!.signalCode, 'SIGTERM', 'parent must close promptly on TERM');
     else assert.match(readFileSync(join(dir, 'transcript'), 'utf8'), /TERM_IGNORED/, 'child really ignored TERM');
@@ -141,6 +152,7 @@ test('WR-01 timeout espera close e encerra filho e descendente que ignoram TERM'
     const status = (() => { try { return readFileSync('/proc/' + descendant + '/stat', 'utf8').split(' ')[2]; } catch { return null; } })();
     assert.ok(status === null || status === 'Z', independentPipes ? 'descendant with independent pipes still executes when Promise settles' : 'descendant must not remain running with inherited pipes');
   } finally {
+    holdTermination = false;
     for (const timer of timers) clearTimeout(timer);
     if (child) {
       const done = closed ? Promise.resolve() : once(child, 'close');
