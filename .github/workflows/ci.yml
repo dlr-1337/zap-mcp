@@ -49,4 +49,6 @@ jobs:
           appendFileSync(process.env.GITHUB_ENV, 'ZAP_BROWSER_MODULE=' + modules + '/package.json\nZAP_BROWSER_EXECUTABLE=' + chromium.executablePath() + '\n');
           NODE
       - run: node --check public/app.js
+      - name: Prepare isolated OpenSSH test runtime
+        run: sudo install -d -o root -g root -m 0755 /run/sshd
       - run: npm test
