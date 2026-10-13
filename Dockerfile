@@ -21,7 +21,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist/src ./dist/src
 COPY package.json ./
 COPY public ./public
+# Git checkouts made with a private umask still need readable code for the app UID.
+RUN chmod -R a+rX /app
 USER 12001:12001
+RUN node --input-type=module -e "import D from 'better-sqlite3'; import { readFileSync } from 'node:fs'; const d=new D(':memory:'); d.exec('CREATE VIRTUAL TABLE p USING fts5(t)'); d.close(); await import('./dist/src/main.js'); readFileSync('./public/index.html');"
 EXPOSE 3000
 STOPSIGNAL SIGTERM
 CMD ["node", "dist/src/main.js", "serve"]
