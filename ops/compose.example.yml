@@ -46,6 +46,7 @@ services:
       traefik.http.routers.zap.rule: Host(`${ZAP_HOST:?canonical authority required}`)
       traefik.http.routers.zap.entrypoints: https
       traefik.http.routers.zap.tls: "true"
+      traefik.http.routers.zap.tls.certresolver: ${ZAP_TLS_CERTRESOLVER:?existing ACME resolver required}
       traefik.http.routers.zap.middlewares: zap-forwarding
       traefik.http.services.zap.loadbalancer.server.port: "3000"
       traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.Forwarded: ""
