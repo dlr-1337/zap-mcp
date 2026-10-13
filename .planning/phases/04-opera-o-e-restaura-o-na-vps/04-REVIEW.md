@@ -1,10 +1,10 @@
 ---
 phase: 04-opera-o-e-restaura-o-na-vps
-reviewed: 2026-10-13T21:27:21Z
+reviewed: 2026-10-13T22:18:35Z
 depth: standard
 files_reviewed: 2
 files_reviewed_list:
-  - scripts/phase4-deploy.mjs
+  - ops/zap-container-control.mjs
   - test/deploy.test.ts
 findings:
   critical: 0
@@ -16,14 +16,14 @@ status: clean
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-13T21:27:21Z
+**Reviewed:** 2026-10-13T22:18:35Z
 **Depth:** standard
 **Files Reviewed:** 2
 **Status:** clean
 
 ## Summary
 
-Revisão padrão do delta ec6ff29..38cae4d no HEAD 38cae4d, delimitada a scripts/phase4-deploy.mjs e test/deploy.test.ts. Foram rastreados os callers do RPC, as ações do helper e os caminhos de falha da repetição limitada de inspeções SSH. Nenhum achado aberto. As revisões anteriores de UI, negociação, IPC e deploy permanecem abaixo como histórico; o frontmatter delimita esta rodada.
+Revisão padrão do delta da2c444..9fc9f5a no HEAD 9fc9f5a, delimitada a ops/zap-container-control.mjs e test/deploy.test.ts. Foram examinados o inventário completo, o erro de remoção concorrente, o limite de novas leituras, os controles de escritores e a composição com o RPC SSH. Nenhum achado aberto. As revisões anteriores permanecem abaixo como histórico; o frontmatter delimita esta rodada.
 
 Não foram fornecidos structural findings nem evidência de revisores externos. As contagens acima representam apenas achados abertos. Os IDs de revisões anteriores não foram reutilizados; o histórico anterior permanece em 04-REVIEW-DISPOSITION.md e relatórios históricos. Nesta rodada, somente este relatório foi alterado; nenhuma fonte, configuração pessoal, VPS ou dado real foi modificado, e nenhum commit foi criado pelo revisor.
 
@@ -31,7 +31,22 @@ Não foram fornecidos structural findings nem evidência de revisores externos. 
 
 Nenhum achado aberto. All reviewed files meet quality standards. No issues found.
 
-### Inspeção SSH: repetição limitada revisada
+### Inventário Docker: nova leitura limitada revisada
+
+**Files:** `ops/zap-container-control.mjs:109-137`, `test/deploy.test.ts:445-470`.
+A segunda tentativa só ocorre para code numérico 1 e stderr textual cujas linhas, após remoção de espaços externos, correspondam integralmente a No such container/object com ID hexadecimal de 12 a 64 caracteres, nos dois formatos Error/Error response from daemon. Linha vazia ou mensagem adicional de outra causa impede a exceção. Não há busca por substring ou tratamento genérico de todos os erros do Docker.
+
+Cada read executa novo ps --all --quiet, valida a lista completa e só então faz inspect --type=container. Nenhum filtro de label é introduzido. A falha do primeiro inspect descarta o stdout parcial, em vez de aceitar um subconjunto sem o container removido. A semântica do [inspector oficial do Docker CLI v28](https://github.com/docker/cli/blob/v28.0.0/cli/command/inspect/inspector.go#L62) confirma leituras por referência, possibilidade de saída parcial e retorno code 1 quando uma referência falha; essa fonte não comprova a versão instalada na VPS.
+
+O segundo read fica fora do catch que autoriza repetição, portanto sua falha é propagada e não há terceira leitura naquele inventário. O resultado atual passa inteiro por inspectContainers: ausência de container próprio continua inválida e montagem RW do perfil por container estrangeiro ativo continua bloqueada, antes das mutações. Mudanças de PID, identidade, ambiente e mounts continuam submetidas às invariantes existentes.
+
+O retry está somente dentro de inventory. Chamadas update/start/stop, escrita de boot state e controles systemd não entram no catch nem são refeitas por ele. Refresh posterior à mutação pode refazer apenas seu inventário, sem voltar ao início da ação. O RPC externo continua repetindo somente conexão recusada com code 255 em inspect/inspect-runtime; recusa do helper sai como code 1, não aciona esse retry externo e não reexecuta uma mutação.
+
+**Verificação atual:** Executados com Node 24.21.0 o teste novo e os três controles CR-05: **4/4 passaram**, exit 0, zero falhas/cancelamentos/skips/todo. O teste novo exige segunda lista/inspect íntegros no positivo, recusa container próprio ausente, writer estrangeiro atual, repetição da ausência e permission denied, e mantém zero mutações em todos esses cenários. Cinco controles adicionais isolados confirmaram os formatos container/object, CRLF, várias linhas exclusivamente de ausência, recusa de mensagem mista e stderr vazio, com limite de duas leituras. Nenhum Docker/SSH real foi acionado nesses controles.
+
+A suíte completa já iniciada pelo orquestrador não foi repetida nem considerada concluída aqui. O trace privado e a versão/binário de produção não foram reexecutados ou inspecionados pelo revisor.
+
+### Histórico da inspeção SSH — clean
 
 **Files:** `scripts/phase4-deploy.mjs:242-259`, `test/deploy.test.ts:339-356`.
 Somente RPC sem input, task control e action inspect/inspect-runtime pode repetir. O primeiro erro precisa ter code numérico 255, killed falsy e stderr inteiro com a linha exata “ssh: connect to host … port …: Connection refused”, aceitando apenas LF ou CRLF final. Não basta substring, timeout, falha de autenticação ou erro do helper. Start, stop, promote e os demais tasks não entram nessa exceção. A ramificação de transferências binárias também não muda.
@@ -40,7 +55,7 @@ Após 45 segundos há uma segunda chamada fora do try/catch de repetição. A se
 
 Os callers em runDeployment passam actions fixas de inspeção antes dos controles e continuam conferindo assertSupervisorFacts/assertQuiet; os probes de implantação e cleanup do aceite também conferem os fatos retornados. O helper retorna facts para inspect/inspect-runtime após leituras de inventário/runtime; essas ramificações não acionam start, stop ou promoção. Falha durante uma mutação não é reclassificada como operação cancelada ou bem-sucedida, e a mudança não cria observações de aceite nem altera o journal.
 
-**Verificação atual:** Executado com Node 24.21.0 o teste novo do RPC: **1/1 passou**, exit 0, zero falhas/cancelamentos/skips/todo. O relógio simulado confirma uma única chamada até 44.999 ms e a segunda em 45.000 ms, com negativos de start, stop, promote, timeout/killed e helper code 1. Controles adicionais isolados confirmaram propagação da segunda falha e ausência de terceira chamada nas duas actions, além de ausência de retry para Permission denied e para stderr com linha extra. Nenhuma conexão SSH real foi usada nesses controles.
+**Verificação da rodada anterior:** Executado com Node 24.21.0 o teste novo do RPC: **1/1 passou**, exit 0, zero falhas/cancelamentos/skips/todo. O relógio simulado confirma uma única chamada até 44.999 ms e a segunda em 45.000 ms, com negativos de start, stop, promote, timeout/killed e helper code 1. Controles adicionais isolados confirmaram propagação da segunda falha e ausência de terceira chamada nas duas actions, além de ausência de retry para Permission denied e para stderr com linha extra. Nenhuma conexão SSH real foi usada nesses controles.
 
 A suíte completa já iniciada pelo orquestrador não foi repetida nem considerada concluída nesta revisão. O diagnóstico de firewall em produção e o registro privado RED não foram reexecutados pelo revisor.
 
@@ -95,12 +110,12 @@ Os IDs e dispositions anteriores permanecem preservados nos relatórios e em 04-
 
 Na reavaliação anterior de CR-06, o foco de entrega HTTPS com pausa controlada passou **1/1**; antes daquela correção, os dois arquivos focados haviam passado **34/34**. Esses resultados permanecem históricos e não são apresentados como execuções atuais do delta de negociação. A suíte completa não foi repetida nem considerada concluída aqui.
 
-O delta atual modifica apenas a repetição limitada no RPC e sua cobertura; não altera rede, firewall, IPC, negociação, credenciais ou política de sandbox. As revisões anteriores e a resolução de CR-06 permanecem históricas; não substituem o escopo desta rodada.
+O delta atual modifica apenas a nova leitura limitada do inventário e sua cobertura; não altera rede, firewall, IPC, negociação, credenciais ou política de sandbox. As revisões anteriores e a resolução de CR-06 permanecem históricas; não substituem o escopo desta rodada.
 
 Esta revisão não executou Codex instalado contra a VPS, atualização real, backup externo ou troca de backend restaurado. Não reavaliou a cronologia nem autenticou o registro privado do gate RED. Testes locais não concluem OPS-01 a OPS-04; o aceite operacional continua dependendo de evidência atual no ambiente real.
 
 ---
 
-_Reviewed: 2026-10-13T21:27:21Z_
+_Reviewed: 2026-10-13T22:18:35Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
