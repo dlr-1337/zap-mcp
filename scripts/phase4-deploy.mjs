@@ -96,8 +96,23 @@ export function tlsCall(origin, path, { ca, cookie, method = 'GET', body, header
     req.once('close', () => clearTimeout(deadline)); req.on('error', reject); req.setTimeout(15000, () => req.destroy(Error('probe_timeout'))); req.end(payload);
   });
 }
-export async function verifyHttps(origin, password, originals, ca) {
-  const challenge = await tlsCall(origin, '/api/session', { ca }); assert.equal(challenge.status, 200);
+async function waitHttpsChallenge(origin, ca, startupTimeoutMs) {
+  assert.ok(Number.isSafeInteger(startupTimeoutMs) && startupTimeoutMs > 0 && startupTimeoutMs <= 180000);
+  const deadline = performance.now() + startupTimeoutMs;
+  while (performance.now() < deadline) {
+    const remaining = Math.ceil(deadline - performance.now()); if (remaining <= 0) break;
+    let response;
+    try { response = await tlsCall(origin, '/api/session', { ca, timeoutMs: Math.min(15000, remaining) }); }
+    catch (error) { if (!['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'probe_timeout', 'probe_incomplete'].includes(error.code ?? error.message)) throw error; }
+    if (performance.now() >= deadline) break;
+    if (response?.status === 200) return response;
+    if (response) assert.equal(response.status, 503, 'HTTPS startup returned a non-transient status');
+    await new Promise(yes => setTimeout(yes, Math.min(250, Math.max(0, deadline - performance.now()))));
+  }
+  throw Error('startup_timeout');
+}
+export async function verifyHttps(origin, password, originals, ca, { startupTimeoutMs = 180000 } = {}) {
+  const challenge = await waitHttpsChallenge(origin, ca, startupTimeoutMs);
   const cookie = challenge.headers['set-cookie'][0].split(';')[0], csrf = JSON.parse(challenge.bytes).csrfToken;
   const login = await tlsCall(origin, '/login', { ca, cookie, method: 'POST', headers: { Origin: origin }, body: { password, csrfToken: csrf } });
   assert.equal(login.status, 200); assert.match(login.headers['set-cookie'][0], /; Secure/);
@@ -212,8 +227,9 @@ async function rpc(config, task, extra = {}, input, runner = exec) {
   const { pipeline } = await import('node:stream/promises'); const done = new Promise((yes, no) => { child.on('error', no); child.on('exit', code => code === 0 ? yes() : no(Error('transfer_failed'))); });
   child.stdout.resume(); await Promise.all([pipeline(input, child.stdin), done]); return { received: true };
 }
-export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATION_CONFIG_FILE, runner = exec, ca } = {}) {
+export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATION_CONFIG_FILE, runner = exec, ca, startupTimeoutMs = 180000 } = {}) {
   assert.ok(['preflight', 'migrate', 'update', 'recover'].includes(mode));
+  assert.ok(Number.isSafeInteger(startupTimeoutMs) && startupTimeoutMs > 0 && startupTimeoutMs <= 180000);
   assert.ok(configFile, 'configuration_missing'); const config = validateConfig(readPrivateJson(configFile), mode === 'recover'); config.targetBinding = targetBinding(config);
   const ready = () => assertReady({ configFile: config.environmentFile });
   if (mode === 'recover') await assertRecoveryReady({ configFile: config.environmentFile, runner });
@@ -242,7 +258,7 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
       await controller.stop(); assertQuiet(await controller.inspect(), true);
       const baseline = await call('state'); schemas(baseline);
       await controller.activate(journal.priorRelease, 'offline'); journal.stage = 'recovered-offline'; atomicPrivateJson(journalPath, journal);
-      try { assert.deepEqual(await call('state'), baseline); await verifyHttps(config.publicOrigin, readFileSync(config.ownerPasswordFile, 'utf8').replace(/\n$/, ''), baseline.originals, ca); }
+      try { assert.deepEqual(await call('state'), baseline); await verifyHttps(config.publicOrigin, readFileSync(config.ownerPasswordFile, 'utf8').replace(/\n$/, ''), baseline.originals, ca, { startupTimeoutMs }); }
       catch { journal.stage = 'recovery-validation-failed'; atomicPrivateJson(journalPath, journal); throw Error('recovery_validation_failed'); }
       return { recovered: true, mode: 'offline', validated: true };
     }
@@ -252,7 +268,7 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
     assert.equal(pull.remote?.host, config.target.host); assert.equal(pull.remote?.user, config.target.user);
     assert.equal(pull.remote?.dataDir, config.target.dataDir); assert.equal(pull.remote?.mainPath, join(config.target.appRoot, 'dist/src/main.js')); assert.equal(pull.remote?.nodePath, config.target.nodePath);
     const password = readFileSync(config.ownerPasswordFile, 'utf8').replace(/\n$/, '');
-    if (mode === 'update') return await swapRelease({ ...config, verify: async () => { const state = await rpc(config, 'state'); await verifyHttps(config.publicOrigin, password, state.originals); } }, { controller, ready, backup: () => runOffsiteBackup(pull), state: () => rpc(config, 'state') });
+    if (mode === 'update') return await swapRelease({ ...config, verify: async () => { const state = await rpc(config, 'state'); await verifyHttps(config.publicOrigin, password, state.originals, ca, { startupTimeoutMs }); } }, { controller, ready, backup: () => runOffsiteBackup(pull), state: () => rpc(config, 'state') });
     // Migration is initiated on the notebook; source is local and recovery key never leaves it.
     const source = readPrivateJson(privateFile(config.sourceConfigFile)); assert.equal(source.role, 'source');
     const sourceController = createSupervisor(source.supervisor); assert.equal(source.supervisor.kind, 'systemd'); assert.equal(source.supervisor.user, true);
@@ -278,7 +294,7 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
     await rpc(config, 'fence', { publicKey: fence.publicKey, signedFence: readPrivateJson(fence.fenceFile) });
     await rpc(config, 'restore'); await rpc(config, 'promote');
     if (config.rotateOwnerOnMigration) { assertQuiet(await controller.inspect(), true); await rpc(config, 'rotate-owner', {}, createReadStream(config.ownerPasswordFile)); assertQuiet(await controller.inspect(), true); }
-    await controller.activate(config.candidateRelease, 'offline'); const state = await rpc(config, 'state'); await verifyHttps(config.publicOrigin, password, state.originals);
+    await controller.activate(config.candidateRelease, 'offline'); const state = await rpc(config, 'state'); await verifyHttps(config.publicOrigin, password, state.originals, ca, { startupTimeoutMs });
     await runOffsiteBackup(pull); // actual VPS -> notebook copy and current decrypt/readback ACK
     atomicPrivateJson(journalPath, { version: 1, kind: 'migration', stage: 'migration-offline', snapshot, startedAt: new Date().toISOString() });
     return { migrated: true, mode: 'offline', collectorRequiresSeparateValidityCheck: true };

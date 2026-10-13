@@ -61,7 +61,7 @@ test('falha no backup ou gate atual impede qualquer troca de código', async t =
   }
 });
 
-async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 'stopped', listener = true, originalSize = 0) {
+async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 'stopped', listener = true, originalSize = 0, unavailableChallenges = 0) {
   const m = await load(), base = mkdtempSync(join(tmpdir(), 'zap-deploy-recovery-'));
   const operationDir = join(base, 'operations'), evidenceDir = join(base, 'evidence'), dataDir = join(base, 'data');
   for (const p of [operationDir, evidenceDir]) mkdirSync(p, { mode: 0o700 });
@@ -87,7 +87,7 @@ async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 's
   const binding = createHash('sha256').update(JSON.stringify([machineId, dataDir, target.appRoot, helperPath])).digest('hex');
   const journal = { version: 1, kind: 'release', stage, targetBinding: binding, archiveSchema: config.archiveSchema, authSchema: config.authSchema, priorRelease: A, candidateRelease: B, priorMode: 'collect', startedAt: new Date().toISOString() };
   const journalPath = join(operationDir, 'deploy-journal.json'); writeFileSync(journalPath, JSON.stringify(journal), { mode: 0o600 });
-  const actions: string[] = []; let running = false, active: string | null = null, server: ReturnType<typeof createServer> | undefined, service: ReturnType<typeof createService> | undefined;
+  const actions: string[] = [], challenges: number[] = []; let running = false, active: string | null = null, server: ReturnType<typeof createServer> | undefined, service: ReturnType<typeof createService> | undefined;
   const stop = async () => { if (server) { server.closeAllConnections(); await new Promise<void>(yes => server!.close(() => yes())); server = undefined; } if (service) { await service.close(); service = undefined; } running = false; active = null; };
   t.after(async () => { await stop(); rmSync(base, { recursive: true }); });
   const facts = () => ({ running, pid: running ? process.pid : 0, startTime: running ? 'fixture' : null, profileProcesses: running ? 1 : 0, mode: 'offline', autostart: false, machineId, profilePathHash: createHash('sha256').update(dataDir).digest('hex'), release: active, preparedReleases: [{ release: A, mode: 'offline' }] });
@@ -102,12 +102,15 @@ async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 's
       assert.equal(input.release, A); assert.equal(input.mode, 'offline'); running = true; active = input.release;
       if (listener) {
         service = createService({ dataDir, transport: { mode: 'proxy', publicOrigin: origin, trustedProxyPeers: ['127.0.0.1'] } });
-        server = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (req, res) => { req.headers['x-forwarded-proto'] = 'https'; service!.app(req, res); }); server.listen(port, '127.0.0.1'); await once(server, 'listening');
+        server = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (req, res) => {
+          if (req.url === '/api/session') { const status = challenges.length < unavailableChallenges ? 503 : 200; challenges.push(status); if (status === 503) { res.writeHead(status); res.end(); return; } }
+          req.headers['x-forwarded-proto'] = 'https'; service!.app(req, res);
+        }); server.listen(port, '127.0.0.1'); await once(server, 'listening');
       }
     }
     return { stdout: JSON.stringify(facts()) };
   };
-  return { m, config, configFile: file('driver.json', config), runner, ca: readFileSync(cert), actions, baseline, journal, journalPath, dataDir };
+  return { m, config, configFile: file('driver.json', config), runner, ca: readFileSync(cert), actions, baseline, journal, journalPath, dataDir, challenges, startupTimeoutMs: listener ? 2000 : 50 };
 }
 
 test('recover retoma listener ausente e journal stopped sem exigir HTTPS/backup prévios', async t => {
@@ -118,6 +121,42 @@ test('recover retoma listener ausente e journal stopped sem exigir HTTPS/backup 
     assert.equal(result.validated, true); assert.deepEqual(f.m.profileState(f.dataDir), f.baseline);
     assert.ok(f.actions.includes('start')); assert.equal(JSON.parse(readFileSync(f.journalPath, 'utf8')).stage, 'recovered-offline');
   }
+});
+
+test('recover aguarda challenge HTTPS depois de 503 transitório durante boot', async t => {
+  const f = await recoveryFixture(t, 'stopped', true, 0, 3);
+  assert.equal((await f.m.runDeployment('recover', f)).validated, true);
+  assert.deepEqual(f.challenges, [503, 503, 503, 200]);
+  assert.deepEqual(f.m.profileState(f.dataDir), f.baseline);
+});
+
+test('HTTPS aguarda listener atrasado sem repetir respostas de autenticação nem erro TLS', async t => {
+  const f = await recoveryFixture(t, 'stopped', false), port = Number(new URL(f.config.publicOrigin).port);
+  const service = createService({ dataDir: f.dataDir, transport: { mode: 'proxy', publicOrigin: f.config.publicOrigin, trustedProxyPeers: ['127.0.0.1'] } });
+  let forcedStatus = 0, requests = 0, connections = 0, resetChallenge = true;
+  const server = createServer({ key: readFileSync(join(f.dataDir, '..', 'key')), cert: f.ca }, (req, res) => {
+    requests++; if (resetChallenge && req.url === '/api/session') { resetChallenge = false; req.socket.destroy(); return; } if (forcedStatus) { res.writeHead(forcedStatus); res.end(); return; } req.headers['x-forwarded-proto'] = 'https'; service.app(req, res);
+  }); server.on('connection', () => connections++);
+  const timer = setTimeout(() => server.listen(port, '127.0.0.1'), 60);
+  try {
+    assert.equal(await f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [], f.ca, { startupTimeoutMs: 2000 }), true);
+    for (const status of [401, 403, 302]) { forcedStatus = status; const before = requests; await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [], f.ca, { startupTimeoutMs: 1000 })); assert.equal(requests - before, 1); }
+    forcedStatus = 0;
+    for (const [origin, ca] of [[f.config.publicOrigin, undefined], ['https://127.0.0.1:' + port, f.ca]] as const) {
+      const before = connections; await assert.rejects(f.m.verifyHttps(origin, 'fixture recovery password', [], ca, { startupTimeoutMs: 1000 }), /certificate|cert|hostname|IP/i); assert.equal(connections - before, 1);
+    }
+  } finally { clearTimeout(timer); if (server.listening) { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); } await service.close(); }
+});
+
+test('HTTPS startup tem deadline total quando proxy mantém 503 ou challenge nunca termina', async t => {
+  const f = await recoveryFixture(t, 'stopped', false); let hanging = false;
+  const server = createServer({ key: readFileSync(join(f.dataDir, '..', 'key')), cert: f.ca }, (_req, res) => { res.writeHead(hanging ? 200 : 503); if (!hanging) res.end(); else res.flushHeaders(); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try {
+    const origin = 'https://localhost:' + (server.address() as any).port;
+    await assert.rejects(f.m.verifyHttps(origin, 'fixture', [], f.ca, { startupTimeoutMs: 50 }), /startup_timeout/);
+    hanging = true; await assert.rejects(f.m.verifyHttps(origin, 'fixture', [], f.ca, { startupTimeoutMs: 50 }), /startup_timeout/);
+  } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); }
 });
 
 test('HTTPS verifica original acima de 32 MiB por stream e rejeita tamanho/hash divergente', async t => {
