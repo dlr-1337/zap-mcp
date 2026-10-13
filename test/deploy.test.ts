@@ -62,7 +62,7 @@ test('falha no backup ou gate atual impede qualquer troca de código', async t =
   }
 });
 
-async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 'stopped', listener = true, originalSize = 0, unavailableChallenges = 0) {
+async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 'stopped', listener = true, originalSize = 0, unavailableChallenges: number | number[] = 0) {
   const m = await load(), base = mkdtempSync(join(tmpdir(), 'zap-deploy-recovery-'));
   const operationDir = join(base, 'operations'), evidenceDir = join(base, 'evidence'), dataDir = join(base, 'data');
   for (const p of [operationDir, evidenceDir]) mkdirSync(p, { mode: 0o700 });
@@ -104,7 +104,7 @@ async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 's
       if (listener) {
         service = createService({ dataDir, transport: { mode: 'proxy', publicOrigin: origin, trustedProxyPeers: ['127.0.0.1'] } });
         server = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (req, res) => {
-          if (req.url === '/api/session') { const status = challenges.length < unavailableChallenges ? 503 : 200; challenges.push(status); if (status === 503) { res.writeHead(status); res.end(); return; } }
+          if (req.url === '/api/session') { const status = (Array.isArray(unavailableChallenges) ? unavailableChallenges[challenges.length] : challenges.length < unavailableChallenges ? 503 : undefined) ?? 200; challenges.push(status); if (status !== 200) { res.writeHead(status); res.end(); return; } }
           req.headers['x-forwarded-proto'] = 'https'; service!.app(req, res);
         }); server.listen(port, '127.0.0.1'); await once(server, 'listening');
       }
@@ -131,6 +131,13 @@ test('recover aguarda challenge HTTPS depois de 503 transitório durante boot', 
   assert.deepEqual(f.m.profileState(f.dataDir), f.baseline);
 });
 
+test('recover aguarda gateway 502 503 504 transitórios somente no challenge de startup', async t => {
+  const f = await recoveryFixture(t, 'stopped', true, 0, [502, 503, 504]);
+  assert.equal((await f.m.runDeployment('recover', f)).validated, true);
+  assert.deepEqual(f.challenges, [502, 503, 504, 200]);
+  assert.deepEqual(f.m.profileState(f.dataDir), f.baseline);
+});
+
 test('HTTPS aguarda listener atrasado sem repetir respostas de autenticação nem erro TLS', async t => {
   const f = await recoveryFixture(t, 'stopped', false), port = Number(new URL(f.config.publicOrigin).port);
   const service = createService({ dataDir: f.dataDir, transport: { mode: 'proxy', publicOrigin: f.config.publicOrigin, trustedProxyPeers: ['127.0.0.1'] } });
@@ -141,7 +148,7 @@ test('HTTPS aguarda listener atrasado sem repetir respostas de autenticação ne
   const timer = setTimeout(() => server.listen(port, '127.0.0.1'), 60);
   try {
     assert.equal(await f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [], f.ca, { startupTimeoutMs: 2000 }), true);
-    for (const status of [401, 403, 302]) { forcedStatus = status; const before = requests; await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [], f.ca, { startupTimeoutMs: 1000 })); assert.equal(requests - before, 1); }
+    for (const status of [401, 403, 404, 302, 500]) { forcedStatus = status; const before = requests; await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [], f.ca, { startupTimeoutMs: 1000 })); assert.equal(requests - before, 1); }
     forcedStatus = 0;
     for (const [origin, ca] of [[f.config.publicOrigin, undefined], ['https://127.0.0.1:' + port, f.ca]] as const) {
       const before = connections; await assert.rejects(f.m.verifyHttps(origin, 'fixture recovery password', [], ca, { startupTimeoutMs: 1000 }), /certificate|cert|hostname|IP/i); assert.equal(connections - before, 1);
@@ -149,15 +156,32 @@ test('HTTPS aguarda listener atrasado sem repetir respostas de autenticação ne
   } finally { clearTimeout(timer); if (server.listening) { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); } await service.close(); }
 });
 
-test('HTTPS startup tem deadline total quando proxy mantém 503 ou challenge nunca termina', async t => {
-  const f = await recoveryFixture(t, 'stopped', false); let hanging = false;
-  const server = createServer({ key: readFileSync(join(f.dataDir, '..', 'key')), cert: f.ca }, (_req, res) => { res.writeHead(hanging ? 200 : 503); if (!hanging) res.end(); else res.flushHeaders(); });
+test('HTTPS startup tem deadline total quando proxy mantém gateway ou challenge nunca termina', async t => {
+  const f = await recoveryFixture(t, 'stopped', false); let hanging = false, gateway = 503;
+  const server = createServer({ key: readFileSync(join(f.dataDir, '..', 'key')), cert: f.ca }, (_req, res) => { res.writeHead(hanging ? 200 : gateway); if (!hanging) res.end(); else res.flushHeaders(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   try {
     const origin = 'https://localhost:' + (server.address() as any).port;
-    await assert.rejects(f.m.verifyHttps(origin, 'fixture', [], f.ca, { startupTimeoutMs: 50 }), /startup_timeout/);
+    for (const status of [502, 503, 504]) { gateway = status; await assert.rejects(f.m.verifyHttps(origin, 'fixture', [], f.ca, { startupTimeoutMs: 50 }), /startup_timeout/); }
     hanging = true; await assert.rejects(f.m.verifyHttps(origin, 'fixture', [], f.ca, { startupTimeoutMs: 50 }), /startup_timeout/);
   } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); }
+});
+
+test('gateway depois do challenge não repete login nem download autenticado', async t => {
+  const f = await recoveryFixture(t, 'stopped', false, 1), service = createService({ dataDir: f.dataDir, transport: { mode: 'proxy', publicOrigin: f.config.publicOrigin, trustedProxyPeers: ['127.0.0.1'] } });
+  let failurePath = '/login', gateway = 502, failures = 0;
+  const server = createServer({ key: readFileSync(join(f.dataDir, '..', 'key')), cert: f.ca }, (req, res) => {
+    if (req.url === failurePath && (failurePath === '/login' || req.method === 'GET' && req.headers.cookie)) { failures++; res.writeHead(gateway); res.end(); return; }
+    req.headers['x-forwarded-proto'] = 'https'; service.app(req, res);
+  });
+  server.listen(Number(new URL(f.config.publicOrigin).port), '127.0.0.1'); await once(server, 'listening');
+  try {
+    for (const path of ['/login', '/api/attachments/' + f.baseline.originals[0].id]) for (const status of [502, 503, 504]) {
+      failurePath = path; gateway = status; const before = failures;
+      await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', f.baseline.originals, f.ca, { startupTimeoutMs: 1000 }));
+      assert.equal(failures - before, 1, 'retry fica restrito ao challenge de startup');
+    }
+  } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); await service.close(); }
 });
 
 test('HTTPS verifica original acima de 32 MiB por stream e rejeita tamanho/hash divergente', async t => {

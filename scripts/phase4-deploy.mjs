@@ -106,7 +106,7 @@ async function waitHttpsChallenge(origin, ca, startupTimeoutMs) {
     catch (error) { if (!['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'probe_timeout', 'probe_incomplete'].includes(error.code ?? error.message)) throw error; }
     if (performance.now() >= deadline) break;
     if (response?.status === 200) return response;
-    if (response) assert.equal(response.status, 503, 'HTTPS startup returned a non-transient status');
+    if (response) assert.ok([502, 503, 504].includes(response.status), 'HTTPS startup returned a non-transient status');
     await new Promise(yes => setTimeout(yes, Math.min(250, Math.max(0, deadline - performance.now()))));
   }
   throw Error('startup_timeout');
