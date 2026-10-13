@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { randomUUID, createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { createService } from '../src/main.js';
@@ -76,4 +77,55 @@ test('produtor reapresenta somente mesmo ID imutável sem nova parada e ACK exig
   await assert.rejects(m.acknowledgeOffsiteCopy(f.source, { ...first.receipt, manifestHash: '0'.repeat(64) }));
   assert.equal(JSON.parse(readFileSync(join(f.source.operationDir, 'offsite-state.json'), 'utf8')).lastVerifiedSuccess ?? null, null);
   assert.equal(existsSync(join(f.base, 'source', 'auth.sqlite')), true);
+});
+
+test('status mede RPO pela criação do snapshot e autentica allowlist sem identificadores', async t => {
+  const f = await fixture(t), m = await load(); assert.equal(typeof m.backupStatus, 'function', 'status honesto do backup deve existir');
+  await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+  const path = join(f.pull.operationDir, 'offsite-state.json'), state = JSON.parse(readFileSync(path, 'utf8'));
+  const now = Date.now(); state.lastVerifiedSuccess.snapshotCreatedAt = new Date(now - 25 * 3600000).toISOString(); state.lastVerifiedSuccess.verifiedAt = new Date(now - 1000).toISOString(); writeFileSync(path, JSON.stringify(state), { mode: 0o600 });
+  const status = m.backupStatus(path, now); assert.equal(status.overdue24h, true); assert.equal(status.ageSeconds, 25 * 3600); assert.equal(status.result, 'success');
+  assert.equal(status.lastVerifiedAt, state.lastVerifiedSuccess.verifiedAt); assert.equal(JSON.stringify(status).includes(state.operationId), false); assert.equal(JSON.stringify(status).includes(f.base), false);
+  const service = createService({ dataDir: f.source.dataDir, backupStateFile: path } as any), server = service.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(async () => { await new Promise<void>(r => server.close(() => r())); await service.close(); });
+  const base = `http://127.0.0.1:${(server.address() as any).port}`; assert.equal((await fetch(base + '/api/status')).status, 401);
+  const challenge = await fetch(base + '/api/session'), csrfToken = (await challenge.json()).csrfToken;
+  const login = await fetch(base + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'senha de fixture independente', csrfToken }) }); assert.equal(login.status, 200);
+  const response = await fetch(base + '/api/status', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } }); assert.deepEqual((await response.json()).backup, status);
+  state.result = 'failed'; state.safeFailureCode = 'PRIVATE_SENTINEL_REMOTE_HOST'; writeFileSync(path, JSON.stringify(state)); assert.equal(JSON.stringify(m.backupStatus(path)).includes('PRIVATE_SENTINEL'), false);
+});
+
+test('último bom permanece após capacidade timeout auth key symlink e concorrência', async t => {
+  const f = await fixture(t), m = await load(); await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+  const path = join(f.pull.operationDir, 'offsite-state.json'), last = JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess, original = readFileSync(join(f.pull.destinationDir, last.operationId + '.age'));
+  let attempts = 0;
+  const denied = { ...adapter(m, f), async putNew() { attempts++; throw Error('PRIVATE_SENTINEL_SSH_AUTH'); } };
+  await assert.rejects(m.runOffsiteBackup(f.pull, { adapter: denied })); assert.equal(attempts, 3); assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess, last);
+  await assert.rejects(m.runOffsiteBackup(f.pull, { adapter: denied, fault: (p: string) => { if (p === 'capacity') throw Object.assign(Error('ENOSPC'), { code: 'ENOSPC' }); } })); assert.equal(attempts, 3); assert.equal(m.backupStatus(path).safeFailureCode, 'capacity_insufficient');
+  await assert.rejects(m.runOffsiteBackup(f.pull, { adapter: denied, fault: (p: string) => { if (p === 'transfer') throw new DOMException('private timeout', 'TimeoutError'); } })); assert.equal(m.backupStatus(path).safeFailureCode, 'deadline_exceeded');
+  const link = join(f.base, 'link'); symlinkSync(f.pull.destinationDir, link); await assert.rejects(m.runOffsiteBackup({ ...f.pull, destinationDir: link }, { adapter: denied }));
+  await assert.rejects(m.runOffsiteBackup({ ...f.pull, identityFile: join(f.base, 'missing') }, { adapter: denied }));
+  await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f), fault: async (p: string) => { if (p === 'readback') await assert.rejects(m.runOffsiteBackup(f.pull, { adapter: denied }), /ativo/); } });
+  assert.deepEqual(readFileSync(join(f.pull.destinationDir, last.operationId + '.age')), original);
+});
+
+test('ENOSPC real por orçamento recusa produtor antes de parar a fonte', async t => {
+  const f = await fixture(t), m = await load();
+  await assert.rejects(m.produceOffsiteCopy({ ...f.source, maxBytes: 1024 }, randomUUID(), { controller: f.controller }), /Orçamento/); assert.deepEqual(f.events, []);
+});
+
+test('SIGKILL durante pull/publicação/readback mantém último bom e retoma mesmo ID', async t => {
+  const f = await fixture(t), m = await load(); await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+  const path = join(f.pull.operationDir, 'offsite-state.json'); let last = JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess;
+  for (const point of ['publishing', 'readback', 'verified']) {
+    const prepared = await m.produceOffsiteCopy(f.source, randomUUID(), { controller: f.controller });
+    const childSource = `import{runOffsiteBackup,acknowledgeOffsiteCopy}from'./dist/src/offsite.js';import{copyFileSync,chmodSync}from'node:fs';import{join}from'node:path';const c=JSON.parse(process.env.CONFIG),s=JSON.parse(process.env.SOURCE);const a={async putNew(i,p){copyFileSync(process.env.CIPHER,p);chmodSync(p,384)},async getById(i,p){copyFileSync(join(c.destinationDir,i+'.age'),p);chmodSync(p,384)},async acknowledge(r){await acknowledgeOffsiteCopy(s,r)}};await runOffsiteBackup(c,{adapter:a,fault:async p=>{if(p===process.env.POINT){console.log('ready');await new Promise(()=>setInterval(()=>{},1000))}}});`;
+    const state = JSON.parse(readFileSync(path, 'utf8')); state.result = 'pending'; state.operationId = prepared.receipt.operationId; writeFileSync(path, JSON.stringify(state));
+    const child = spawn(process.execPath, ['--input-type=module', '-e', childSource], { env: { ...process.env, CONFIG: JSON.stringify(f.pull), SOURCE: JSON.stringify(f.source), CIPHER: prepared.file, POINT: point }, stdio: ['ignore', 'pipe', 'pipe'] }); t.after(() => child.kill('SIGKILL'));
+    await new Promise<void>((accept, reject) => { const timer = setTimeout(() => { child.kill('SIGKILL'); reject(Error('crash timeout')); }, 5000); child.stdout.on('data', b => { if (String(b).includes('ready')) { clearTimeout(timer); accept(); } }); child.once('exit', code => { clearTimeout(timer); reject(Error('crash exited ' + code)); }); });
+    const exit = once(child, 'exit'); child.kill('SIGKILL'); await exit;
+    assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess, last);
+    await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) }); last = JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess;
+    assert.equal(last.operationId, prepared.receipt.operationId);
+  }
 });
