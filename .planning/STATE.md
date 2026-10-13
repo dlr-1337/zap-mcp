@@ -4,10 +4,10 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: 5
 status: executing
-stopped_at: 04-05-02 executing: real profile migrated/promoted; permanent HTTPS originals verification in progress
+stopped_at: 04-05-02 executing: migration/HTTPS originals/offsite/restart verified; real update in progress
 last_updated: "2026-10-13T15:26:39.438Z"
 last_activity: 2026-10-13
-last_activity_desc: Real profile migrated and promoted; target-only owner recovery applied; permanent HTTPS verification in progress
+last_activity_desc: Real migration, all 895 HTTPS originals, external backup recovery and service restart verified; release update executing
 state_head: 083366e667c543558ebb32750ff879bcd975fab7
 progress:
   total_phases: 4
@@ -30,13 +30,13 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 
 ## Current Position
 
-Phase: 4 (Operação e restauração na VPS) — MIGRAÇÃO REAL EM ANDAMENTO
+Phase: 4 (Operação e restauração na VPS) — VERIFICAÇÃO OPERACIONAL EM ANDAMENTO
 Current Plan: 5
 Total Plans in Phase: 6
 Status: Executing
-Last activity: 2026-10-13 — Real profile migrated and promoted; target-only owner recovery applied; permanent HTTPS verification in progress
+Last activity: 2026-10-13 — Migração real, 895 originais via HTTPS, recuperação externa e reinício do serviço conferidos; atualização real em execução
 
-Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem uma de duas tarefas concluída; a tarefa real está em execução, com perfil migrado/promovido e originais sendo conferidos pelo HTTPS permanente. 04-06 não foi iniciado.
+Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem uma de duas tarefas concluída; a tarefa real continua em execução. Migração, promoção, nova senha somente no destino, 895 originais autenticados via HTTPS e primeira cópia externa recuperada passaram. O reinício do serviço exigiu uma retentativa automática, concluída com dados preservados; não houve reboot completo da VPS. A atualização real está em execução após novo backup externo verificado. A preparação local isolada de04-06 avançou, mas cliente permanente, clone por HTTPS e aceite OPS continuam pendentes de04-05 e dos probes reais.
 
 ## Performance Metrics
 
