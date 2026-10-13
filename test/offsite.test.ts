@@ -95,7 +95,12 @@ test('status mede RPO pela criação do snapshot e autentica allowlist sem ident
   const base = `http://127.0.0.1:${(server.address() as any).port}`; assert.equal((await fetch(base + '/api/status')).status, 401);
   const challenge = await fetch(base + '/api/session'), csrfToken = (await challenge.json()).csrfToken;
   const login = await fetch(base + '/login', { method: 'POST', headers: { Cookie: challenge.headers.get('set-cookie')!.split(';')[0], Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'senha de fixture independente', csrfToken }) }); assert.equal(login.status, 200);
-  const response = await fetch(base + '/api/status', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } }); assert.deepEqual((await response.json()).backup, status);
+  const statusStartedAt = Date.now(), response = await fetch(base + '/api/status', { headers: { Cookie: login.headers.get('set-cookie')!.split(';')[0] } });
+  const returned = (await response.json()).backup, statusFinishedAt = Date.now();
+  const { ageSeconds, ...returnedFields } = returned, { ageSeconds: _beforeLoginAge, ...expectedFields } = status;
+  assert.deepEqual(returnedFields, expectedFields);
+  const createdAt = Date.parse(state.lastVerifiedSuccess.snapshotCreatedAt);
+  assert.ok(Number.isSafeInteger(ageSeconds) && ageSeconds >= Math.floor((statusStartedAt - createdAt) / 1000) && ageSeconds <= Math.floor((statusFinishedAt - createdAt) / 1000), 'idade deve refletir o instante real da requisição');
   state.result = 'failed'; state.safeFailureCode = 'PRIVATE_SENTINEL_REMOTE_HOST'; writeFileSync(path, JSON.stringify(state)); assert.equal(JSON.stringify(m.backupStatus(path)).includes('PRIVATE_SENTINEL'), false);
   } finally { await new Promise<void>(r => server.close(() => r())); await service.close(); }
 });
