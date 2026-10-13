@@ -454,7 +454,10 @@ async function refreshStatus() {
     const response = await request('/api/status'); if (!response.ok) throw Error('server');
     const data = await response.json(); if (version !== readVersion || ticket !== statusVersion) return;
     const states = { 'awaiting-pairing': 'Aguardando pareamento', connecting: 'Conectando', connected: 'Conectado', reconnecting: 'Reconectando', disconnected: 'Desconectado', 'invalid-session': 'Sessão inválida' };
-    $('connection').textContent = (states[data.connection] ?? unknown) + (data.connection === 'disconnected' ? ' — WhatsApp desconectado. Você pode consultar o material já arquivado.' : data.connection === 'reconnecting' ? ' — Reconectando ao WhatsApp. Novas capturas podem demorar; o acervo salvo continua disponível.' : data.connection === 'invalid-session' ? ' — O vínculo precisa ser refeito no celular. O material já arquivado continua disponível.' : '');
+    $('connection').textContent = !data.collectorEnabled ? 'Coleta pausada — você pode consultar o material já arquivado.' : (states[data.connection] ?? unknown) + (data.connection === 'disconnected' ? ' — WhatsApp desconectado. Você pode consultar o material já arquivado.' : data.connection === 'reconnecting' ? ' — Reconectando ao WhatsApp. Novas capturas podem demorar; o acervo salvo continua disponível.' : data.connection === 'invalid-session' ? ' — O vínculo precisa ser refeito no celular. O material já arquivado continua disponível.' : '');
+    const backup = data.backup;
+    $('backup-status').setAttribute('role', backup?.result === 'failed' || backup?.overdue24h ? 'alert' : 'status');
+    $('backup-status').textContent = (backup?.result === 'pending' ? 'Backup em andamento. ' : backup?.result === 'failed' ? 'Falha na última tentativa de backup. ' : '') + (backup?.lastVerifiedAt ? 'Última cópia conferida: ' + date(backup.lastVerifiedAt) + ' — America/Sao_Paulo.' + (backup.overdue24h ? ' Cópia atrasada: o arquivo protegido tem mais de 24 horas.' : '') : 'Nenhuma cópia conferida ainda.');
     const coverage = data.coverage; $('coverage').replaceChildren(); $('coverage-batches').replaceChildren();
     if (coverage) {
       for (const [label, value] of [['Última ingestão confirmada — America/Sao_Paulo', coverage.lastIngestion ? date(coverage.lastIngestion) : 'Nenhuma ingestão confirmada ainda.'], ['Intervalo observado — America/Sao_Paulo', coverage.interval.oldest ? date(coverage.interval.oldest) + ' até ' + date(coverage.interval.newest) : 'Intervalo observado ainda desconhecido.'], ['Mensagens únicas arquivadas', String(coverage.uniqueMessages)]]) { addText($('coverage'), 'dt', label); addText($('coverage'), 'dd', value); }
@@ -469,7 +472,7 @@ async function refreshStatus() {
     }
     attemptsLimit = data.media?.attemptsLimit; $('media-status').textContent = data.media?.diagnostic ?? (data.connection !== 'connected' ? 'A retomada aguarda conexão com o WhatsApp.' : '');
     hideQr(); $('pairing').hidden = false;
-    $('qr-status').textContent = !data.collectorEnabled ? 'Pareamento ainda indisponível. A preparação da cópia recuperável precisa ser concluída no host.' : data.connection === 'connected' ? 'Conta vinculada. O arquivo mostra apenas o material efetivamente recebido.' : data.connection === 'awaiting-pairing' ? (data.pairingAvailable ? 'Aguardando um QR válido…' : 'Este QR expirou. Aguarde um novo código.') : 'Aguardando um QR válido…';
+    $('qr-status').textContent = !data.collectorEnabled ? 'Pareamento indisponível enquanto a coleta estiver pausada. O acervo permanece disponível.' : data.connection === 'connected' ? 'Conta vinculada. O arquivo mostra apenas o material efetivamente recebido.' : data.connection === 'awaiting-pairing' ? (data.pairingAvailable ? 'Aguardando um QR válido…' : 'Este QR expirou. Aguarde um novo código.') : 'Aguardando um QR válido…';
     if (data.connection === 'awaiting-pairing' && data.pairingAvailable) {
       const response = await request('/api/qr');
       if (response.status === 409) { if (version === readVersion && ticket === statusVersion) $('qr-status').textContent = 'Este QR expirou. Aguarde um novo código.'; return; }
@@ -497,7 +500,7 @@ $('login-form').addEventListener('submit', async event => {
   $('login-button').disabled = true; $('login-form').setAttribute('aria-busy', 'true'); $('login-error').textContent = ''; $('login-status').textContent = 'Entrando no acervo…';
   try {
     await challenge(); const response = await request('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('password').value, csrfToken }) }); $('password').value = '';
-    if (!response.ok) { const retry = response.headers.get('Retry-After'); $('login-error').textContent = response.status === 429 ? 'Muitas tentativas. Aguarde o prazo indicado e tente novamente.' + (retry ? ' Prazo: ' + retry + ' segundos.' : '') : 'Não foi possível entrar. Confira a senha e tente novamente.'; $('password').focus(); return; }
+    if (!response.ok) { const retry = response.headers.get('Retry-After'); $('login-error').textContent = response.status === 429 ? 'Muitas tentativas. Aguarde o prazo indicado e tente novamente.' + (retry ? ' Prazo: ' + retry + ' segundos.' : '') : response.status === 401 ? 'Não foi possível entrar. Confira a senha e tente novamente.' : 'A solicitação de acesso não foi concluída. Recarregue a página e tente novamente.'; $('password').focus(); return; }
     if (!(await challenge()).authenticated) { signedOut(expired); return; } await enter(); if (!selected && authenticated) $('conversations').querySelector('a')?.focus();
   } catch (error) { if (!['expired', 'stale'].includes(error.message)) $('login-error').textContent = noServer; }
   finally { $('password').value = ''; $('login-button').disabled = false; $('login-form').removeAttribute('aria-busy'); $('login-status').textContent = ''; }
