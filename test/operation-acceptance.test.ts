@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {once} from 'node:events';
 const modulePath = '../../scripts/phase4-acceptance.mjs';
 const acceptance = await import(modulePath);
 test('tracer operacional percorre HTTPS site ZIP MCP e restore com oráculos reais', async () => {
@@ -72,8 +73,21 @@ test('CR-01 correct anchor cannot hide empty context or corrupted windows and cu
  assert.doesNotThrow(()=>acceptance.assertCodexContexts(s.archiveDb,valid,'m4'));
  for(const mutation of [(a:any[])=>a[0].result.structured_content.messages=[],(a:any[])=>a[0].result.structured_content.messages[0]=dto(8),(a:any[])=>a[0].result.structured_content.ordinal=2,(a:any[])=>a[1].arguments.cursor='forged',(a:any[])=>a[1].result.structured_content.before=[],(a:any[])=>a.splice(1,1),(a:any[])=>a[2].result.structured_content.direction='before']){const bad=structuredClone(valid);mutation(bad);assert.throws(()=>acceptance.assertCodexContexts(s.archiveDb,bad,'m4'),'anchor alone must not authorize context');}
 });
-test('CR-02 driver requires an actual authenticated HTTPS delivery broker', async t => {
- const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path');const dir=mkdtempSync(join(tmpdir(),'zap-delivery-'));t.after(()=>rmSync(dir,{recursive:true}));
- const broker=await acceptance.createDeliveryBroker(acceptance.beginRun(),{destination:dir,origin:'https://localhost',tokenFile:join(dir,'token'),files:[]});
- assert.ok(broker,'driver-owned IPC/GET broker must exist');
+test('CR-02 authenticated HTTPS delivery rejects echo local copy wrong scope and partial bytes', async t => {
+ const fs=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),https=await import('node:https'),{execFile,spawnSync}=await import('node:child_process'),{promisify}=await import('node:util'),{createHash}=await import('node:crypto');
+ const dir=fs.mkdtempSync(join(tmpdir(),'zap-delivery-test-')),key=join(dir,'key'),cert=join(dir,'cert'),token=join(dir,'token');fs.writeFileSync(token,'x'.repeat(43)+'\n',{mode:0o600});
+ assert.equal(spawnSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1'],{stdio:'ignore'}).status,0);
+ const ids=['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002'],data=[Buffer.from('first original'),Buffer.from('second original')],requests:string[]=[];let fault='';
+ const server=https.createServer({key:fs.readFileSync(key),cert:fs.readFileSync(cert)},(req,res)=>{requests.push(req.url!);const index=ids.indexOf(req.url!.split('/').at(-1)!);if(req.headers.authorization!=='Bearer '+'x'.repeat(43)){res.writeHead(401).end();return;}if(fault==='status'){res.writeHead(503).end();return;}res.writeHead(200,{'Content-Length':data[index]!.length});if(fault==='partial'){res.write(data[index]!.subarray(0,2));res.destroy();return;}res.end(data[index]);});server.listen(0,'127.0.0.1');await once(server,'listening');
+ const brokers:any[]=[];t.after(async()=>{for(const b of brokers)await b.close();server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));fs.rmSync(dir,{recursive:true});});
+ const origin='https://127.0.0.1:'+(server.address() as any).port,ca=fs.readFileSync(cert),run=promisify(execFile);
+ const make=async(label:string)=>{const files=ids.map((attachmentId,i)=>({attachmentId,path:join(dir,label+'-'+i),size:data[i]!.length,sha256:createHash('sha256').update(data[i]!).digest('hex')}));const b=await acceptance.createDeliveryBroker(acceptance.beginRun(),{destination:dir,origin,ca,tokenFile:token,files});brokers.push(b);return {b,files};};
+ const positive=await make('positive');await run('/bin/echo',[positive.b.helperPath]);assert.throws(()=>acceptance.assertDeliveryObserved(positive.b));assert.equal(requests.length,0,'echo never generates GET');
+ const helper=fs.readFileSync(positive.b.helperPath,'utf8'),scope=JSON.parse(helper.match(/const scope=(\{.*?\});const s=connect/)![1]!),socket=JSON.parse(helper.match(/const s=connect\((".*?")\)/)![1]!);
+ const send=async(payload:any)=>{const {connect}=await import('node:net');return new Promise<void>((yes,no)=>{const s=connect(socket);s.on('connect',()=>s.write(JSON.stringify(payload)+'\n'));s.on('data',()=>{});s.on('close',()=>yes());s.on('error',no);});};
+ await send({...scope,origin:'https://other.invalid'});await send({...scope,attachmentIds:[ids[0],ids[0]]});assert.equal(requests.length,0,'wrong origin/duplicate IDs never generate GET');
+ await run(process.execPath,[positive.b.helperPath]);assert.deepEqual(acceptance.assertDeliveryObserved(positive.b),{originals:2});assert.deepEqual(requests,ids.map(id=>'/mcp/attachments/'+id));for(const [i,f]of positive.files.entries())assert.deepEqual(fs.readFileSync(f.path),data[i]);assert.throws(()=>acceptance.assertDeliveryObserved(JSON.parse(JSON.stringify({helperPath:positive.b.helperPath,observed:true}))));
+ const local=await make('local');fs.writeFileSync(local.files[0]!.path,data[0]!,{mode:0o600});await assert.rejects(run(process.execPath,[local.b.helperPath]));assert.throws(()=>acceptance.assertDeliveryObserved(local.b));assert.equal(requests.length,2,'local copy cannot trigger successful delivery');
+ for(const failure of ['status','partial']){fault=failure;const bad=await make(failure);await assert.rejects(run(process.execPath,[bad.b.helperPath]));assert.throws(()=>acceptance.assertDeliveryObserved(bad.b));assert.equal(fs.existsSync(bad.files[0]!.path),false,'failed GET cannot publish original');}fault='';
+ await assert.rejects(acceptance.createDeliveryBroker(acceptance.beginRun(),{destination:dir,origin,ca,tokenFile:token,files:[local.files[0],local.files[0]]}),/distinct/);
 });

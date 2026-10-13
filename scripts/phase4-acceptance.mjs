@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, lstatSync, realpathSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, lstatSync, realpathSync, existsSync, createWriteStream, linkSync, unlinkSync, chmodSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { createServer, request } from 'node:https';
 import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createServer as createUnixServer } from 'node:net';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
 import Database from 'better-sqlite3';
@@ -174,20 +176,45 @@ export function assertCodexContexts(db,calls,anchorReference) {
   if(!args.direction){check(!args.cursor&&p.messages.some(m=>m.reference===anchorReference),'initial_context_contains_anchor');continue;}
   check(['before','after'].includes(args.direction),'context_direction');
   if(args.cursor){const preceding=contexts.slice(0,contexts.indexOf(item)).find(e=>e.result?.structured_content?.[args.direction==='before'?'previousCursor':'nextCursor']===args.cursor);check(preceding&&p.snapshotId===preceding.result.structured_content.snapshotId,'context_cursor_current_chain');const previous=preceding.result.structured_content;check(args.direction==='before'?p.endOrdinal===previous.ordinal:p.ordinal===previous.endOrdinal,'context_consecutive_window');}
-  else{check(first[args.direction==='before'?'previousCursor':'nextCursor']===null&&p.ordinal===first.ordinal&&p.endOrdinal===first.endOrdinal,'context_boundary_without_cursor');}
+  else{check(false,'context_navigation_requires_current_cursor');}
  }
- for(const direction of ['before','after'])if(direction==='before'?anchorOrdinal>0:anchorOrdinal<rows.length-1)check(contexts.some(e=>e.arguments?.direction===direction),'context_navigation_required_'+direction);
+ for(const direction of ['before','after'])if(first[direction==='before'?'previousCursor':'nextCursor']!==null)check(contexts.some(e=>e.arguments?.direction===direction),'context_navigation_required_'+direction);
  return {messages:contexts.reduce((n,e)=>n+e.result.structured_content.messages.length,0)};
 }
-export async function createDeliveryBroker() { return null; }
-export async function probeInstalledCodex(live,{origin,ca,executable=join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex'),args,env=process.env,cwd,destination,prompt,tokenFile,dataDir,case:c,serverName='zap',files,restored=false,downloader}) {
+const deliveryWitnesses=new WeakMap();
+export function assertDeliveryObserved(broker) { const state=deliveryWitnesses.get(broker);check(state&&state.observed.length===2&&state.observed.every((e,i)=>e.completed&&e.status===200&&e.id===state.files[i].attachmentId&&e.size===state.files[i].size&&e.sha256===state.files[i].sha256),'actual_https_delivery_required');return {originals:2}; }
+export async function createDeliveryBroker(live,{destination,origin,ca,tokenFile,files}) {
+ check(runs.has(live),'live_run_required');privateFile(destination,true);privateFile(tokenFile);check(new URL(origin).protocol==='https:'&&new URL(origin).origin===origin,'fixed_delivery_origin');
+ check(Array.isArray(files)&&files.length===2&&new Set(files.map(f=>f.attachmentId)).size===2&&new Set(files.map(f=>f.path)).size===2,'two_distinct_delivery_ids');
+ files=files.map(f=>{check(/^[a-f0-9-]{36}$/.test(f.attachmentId)&&Number.isSafeInteger(f.size)&&f.size>0&&/^[a-f0-9]{64}$/.test(f.sha256)&&!existsSync(f.path),'known_new_delivery');privateFile(dirname(f.path),true);return Object.freeze({...f});});
+ check(Buffer.byteLength(join(tmpdir(),'zap-ipc-XXXXXX','s'))<=103,'unix_socket_path_limit');
+ const secret=readFileSync(tokenFile,'utf8').trim(),directory=mkdtempSync(join(tmpdir(),'zap-ipc-')),socketPath=join(directory,'s'),helperPath=join(directory,'receive.mjs'),nonce=randomUUID();check(Buffer.byteLength(socketPath)<=103,'unix_socket_path_limit');
+ const controller=new AbortController(),active=new Set(),pending=new Set(),observed=[];let consumed=false;
+ const receive=async f=>{check(!existsSync(f.path),'delivery_destination_was_locally_created');const temporary=f.path+'.part-'+randomUUID();let req;try{
+  const res=await new Promise((yes,no)=>{req=request(new URL('/mcp/attachments/'+f.attachmentId,origin),{ca,rejectUnauthorized:true,agent:false,signal:controller.signal,headers:{Authorization:'Bearer '+secret}},yes);req.setTimeout(30000,()=>req.destroy(Error('delivery_timeout')));req.on('error',no);req.end();});
+  check(res.statusCode===200&&req.socket.authorized===true&&!res.headers.location&&(!res.headers['content-length']||Number(res.headers['content-length'])===f.size),'delivery_tls_status_origin');
+  let size=0;const hash=createHash('sha256'),measured=new Transform({transform(b,_encoding,done){size+=b.length;if(size>f.size){done(Error('delivery_oversize'));return;}hash.update(b);done(null,b);}});
+  await pipeline(res,measured,createWriteStream(temporary,{flags:'wx',mode:0o600}));const sha256=hash.digest('hex');check(size===f.size&&sha256===f.sha256,'delivery_complete_sql_bytes');linkSync(temporary,f.path);unlinkSync(temporary);observed.push({id:f.attachmentId,status:res.statusCode,size,sha256,completed:true,at:Date.now()});
+ }finally{req?.destroy();if(existsSync(temporary))unlinkSync(temporary);}};
+ const server=createUnixServer(socket=>{active.add(socket);socket.on('error',()=>{});socket.on('close',()=>active.delete(socket));socket.setTimeout(120000,()=>socket.destroy());let raw='',handled=false;
+  socket.on('data',chunk=>{raw+=chunk;if(raw.length>4096){socket.destroy();return;}if(!raw.includes('\n')||handled)return;handled=true;
+   const operation=(async()=>{try{const input=JSON.parse(raw);check(!consumed&&Object.keys(input).sort().join(',')==='attachmentIds,nonce'&&input.nonce===nonce&&same(input.attachmentIds,files.map(f=>f.attachmentId)),'fixed_ipc_scope');consumed=true;for(const f of files)await receive(f);socket.end(JSON.stringify({delivered:2})+'\n');}catch{socket.end(JSON.stringify({error:'delivery_refused'})+'\n');}})();pending.add(operation);operation.finally(()=>pending.delete(operation));
+  });
+ });
+ try{await new Promise((yes,no)=>{server.once('error',no);server.listen(socketPath,yes);});chmodSync(socketPath,0o600);
+ const helper=`import{connect}from'node:net';const scope=${JSON.stringify({nonce,attachmentIds:files.map(f=>f.attachmentId)})};const s=connect(${JSON.stringify(socketPath)});let raw='';const timer=setTimeout(()=>{s.destroy();process.exitCode=1;},120000);s.on('connect',()=>s.write(JSON.stringify(scope)+String.fromCharCode(10)));s.on('data',b=>raw+=b);s.on('error',()=>{process.exitCode=1;});s.on('close',()=>{clearTimeout(timer);try{const r=JSON.parse(raw);if(r.delivered!==2)throw Error();process.stdout.write(JSON.stringify({delivered:2}));}catch{process.stderr.write('Delivery refused');process.exitCode=1;}});`;
+ writeFileSync(helperPath,helper,{mode:0o700,flag:'wx'});const quote=x=>"'"+x.replaceAll("'","'\''")+"'";
+ const broker={helperPath,command:quote(process.execPath)+' '+quote(helperPath),async close(){controller.abort();for(const socket of active)socket.destroy();await Promise.allSettled([...pending]);await new Promise(r=>server.close(r));rmSync(directory,{recursive:true,force:true});}};deliveryWitnesses.set(broker,{files,observed});return broker;}catch(error){controller.abort();for(const socket of active)socket.destroy();await Promise.allSettled([...pending]);if(server.listening)await new Promise(r=>server.close(r));rmSync(directory,{recursive:true,force:true});throw error;}
+}
+export async function probeInstalledCodex(live,{origin,ca,executable=join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex'),args,env=process.env,cwd,destination,prompt,tokenFile,dataDir,case:c,serverName='zap',files,restored=false}) {
   privateFile(destination,true);privateFile(tokenFile);check(realpathSync(executable)===realpathSync(join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex')),'installed_binary_required');
   check(Array.isArray(files)&&files.length>=2&&files.every(f=>!existsSync(f.path)&&c.media.some(m=>m.id===f.attachmentId)),'fresh_original_destinations_required');
   const version=spawnSync(executable,['--version'],{encoding:'utf8'});check(version.status===0&&/^codex-cli \d+\.\d+\.\d+/.test(version.stdout),'installed_codex_required');
   const baseline=digest(readFileSync(executable)),configPath=join(homedir(),'.codex/config.toml'),before=existsSync(configPath)?readFileSync(configPath):null;
-  const result=await runCodex(executable,args,env,cwd,join(destination,randomUUID()+'.jsonl'),prompt);
+  const oracle=new Database(join(dataDir,'archive.sqlite'),{readonly:true});let expectedFiles;try{expectedFiles=files.map(file=>{const row=oracle.prepare("SELECT id,size,sha256 FROM attachments WHERE id=? AND state='available'").get(file.attachmentId);check(row,'sql_delivery_attachment');return {...file,size:row.size,sha256:row.sha256};});}finally{oracle.close();}
+  const broker=await createDeliveryBroker(live,{destination,origin,ca,tokenFile,files:expectedFiles});let result;try{result=await runCodex(executable,args,{...env,RUST_LOG:'off,rmcp::service=info'},cwd,join(destination,randomUUID()+'.jsonl'),prompt+'\nAfter the required two get_attachment calls, execute exactly this pre-existing helper command once: '+broker.command+'. Do not inspect helper source, credentials, environment or local originals. The helper contacts the parent driver to save the authenticated HTTPS originals. For context navigate before/after using each current non-null returned opaque cursor; do not send direction without a cursor.');assertDeliveryObserved(broker);}finally{await broker.close();}
   check(result.pid>0&&result.code===0&&digest(readFileSync(executable))===baseline,'current_codex_process');
-  check(typeof downloader==='string'&&result.events.some(e=>e.type==='item.completed'&&e.item?.type==='command_execution'&&e.item.exit_code===0&&e.item.command.includes(downloader)),'codex_downloader_executed');
+  check(result.events.some(e=>e.type==='item.completed'&&e.item?.type==='command_execution'&&e.item.exit_code===0&&e.item.command.includes(broker.helperPath)),'codex_generated_delivery_helper_executed');
   const calls=result.events.filter(e=>e.type==='item.completed'&&e.item?.type==='mcp_tool_call'&&e.item.server===serverName).map(e=>e.item);check(['find_conversations','search_messages','get_context','get_attachment'].every(tool=>calls.some(e=>e.tool===tool&&e.status==='completed'&&!e.error))&&calls.every(e=>['find_conversations','search_messages','get_context','get_attachment'].includes(e.tool)),'current_four_readonly_tool_calls');
   const negotiation=observeCodexNegotiation(result,live.startedAt,Date.now());check(negotiation,'current_native_negotiation_required');
   const db=new Database(join(dataDir,'archive.sqlite'),{readonly:true});try{
