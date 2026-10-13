@@ -13,7 +13,7 @@ import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './back
 import { createExportManager } from './export.js';
 import { createMcpAdapter, rotateMcpToken } from './mcp.js';
 import { createTransport, transportFromEnv, type TransportConfig } from './transport.js';
-import { shutdownService } from './operation.js';
+import { shutdownService, readOperationConfig, coordinatedSnapshot, recoverOperation } from './operation.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
@@ -256,6 +256,13 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
 async function cli() {
   const dataDir = process.env.ZAP_DATA_DIR;
   if (!dataDir) throw Error('Configure ZAP_DATA_DIR privado fora do checkout');
+  if (['operation-snapshot', 'operation-recover'].includes(process.argv[2])) {
+    if (process.argv.length !== 3 || !process.env.ZAP_OPERATION_CONFIG_FILE) throw Error('Configuração operacional privada obrigatória');
+    const config = readOperationConfig(process.env.ZAP_OPERATION_CONFIG_FILE);
+    if (resolve(config.dataDir) !== resolve(dataDir)) throw Error('Configuração de outro perfil');
+    if (process.argv[2] === 'operation-snapshot') await coordinatedSnapshot(config); else await recoverOperation(config);
+    console.log('Operação privada concluída; aceite externo não presumido'); return;
+  }
   if (process.argv[2] === 'mcp-token-rotate') {
     if (process.argv.length !== 4) throw Error('Uso: mcp-token-rotate ARQUIVO_PRIVADO_NOVO');
     const location = resolve(dataDir), root = realpathSync(fileURLToPath(new URL('../../', import.meta.url))), path = join(location, 'auth.sqlite');

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -75,7 +75,7 @@ async function operationFixture(t: { after(fn: () => unknown): void }) {
   t.after(() => rmSync(base, { recursive: true })); const s = createService({ dataDir }); createAuthState(s.authDb, { newProfile: true }); await s.setPassword('senha backup fixture'); await s.close();
   const events: string[] = []; let running = true;
   const controller = { async stop() { events.push('stop'); running = false; }, async start(mode: string) { events.push('start:' + mode); running = true; }, async inspect() { return { running, autostart: false, pid: running ? process.pid : 0, startTime: running ? 'fixture' : null, machineId: 'fixture', profileProcesses: running ? 1 : 0, mode: 'offline' }; } };
-  return { base, config: { dataDir, operationDir, destination: join(base, 'snapshot'), priorMode: 'offline', priorRelease: 'fixture', supervisor: { kind: 'systemd', unit: 'fixture.service', dataDir } }, controller, events };
+  return { base, config: { dataDir, operationDir, destination: join(base, 'snapshot'), priorMode: 'offline', priorRelease: 'fixture', supervisor: { kind: 'systemd', name: 'fixture.service', dataDir, machineId: '0'.repeat(32) } }, controller, events };
 }
 
 test('snapshot coordenado retoma antes da rede e serializa operações', async t => {
@@ -90,4 +90,19 @@ test('snapshot falho ou stop ambíguo retoma consulta sem publicar backup', asyn
   assert.equal((await f.controller.inspect()).running, true); assert.equal(existsSync(f.config.destination), false);
   const broken = { ...f.controller, async stop() { throw Error('stop denied'); } };
   await assert.rejects(m.coordinatedSnapshot(f.config, { controller: broken }), /stop denied/); assert.equal(existsSync(f.config.destination), false);
+});
+
+test('SIGKILL em cada estágio de snapshot exige recovery com mutex órfão', async t => {
+  const m = await operations();
+  for (const point of ['intended', 'stopped', 'snapshotted', 'resumed']) {
+    const f = await operationFixture(t), state = join(f.base, 'state.json'); writeFileSync(state, 'true', { mode: 0o600 });
+    const source = `import{coordinatedSnapshot}from'./dist/src/operation.js';import{readFileSync,writeFileSync}from'node:fs';const config=JSON.parse(process.env.CONFIG);const path=process.env.STATE;const controller={async stop(){writeFileSync(path,'false')},async start(){writeFileSync(path,'true')},async inspect(){const running=JSON.parse(readFileSync(path));return{running,autostart:false,pid:running?process.pid:0,startTime:null,machineId:'fixture',profileProcesses:running?1:0,mode:'offline'}}};await coordinatedSnapshot(config,{controller,fault:async p=>{if(p===process.env.POINT){console.log('ready');await new Promise(()=>{setInterval(()=>{},1000)})}}});`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', source], { env: { ...process.env, CONFIG: JSON.stringify(f.config), POINT: point, STATE: state }, stdio: ['ignore', 'pipe', 'pipe'] }); t.after(() => child.kill('SIGKILL'));
+    await new Promise<void>((accept, reject) => { const timer = setTimeout(() => reject(Error('crash fixture timeout')), 5000); child.stdout.on('data', b => { if (String(b).includes('ready')) { clearTimeout(timer); accept(); } }); child.once('exit', c => { clearTimeout(timer); reject(Error('crash fixture exited ' + c)); }); });
+    const exit = once(child, 'exit'); child.kill('SIGKILL'); await exit;
+    const controller = { ...f.controller, async start(mode: string) { await f.controller.start(mode); writeFileSync(state, 'true'); }, async inspect() { const running = JSON.parse(readFileSync(state, 'utf8')); return { ...(await f.controller.inspect()), running, pid: running ? process.pid : 0, profileProcesses: running ? 1 : 0 }; } };
+    await assert.rejects(m.coordinatedSnapshot(f.config, { controller }), /interrompida/);
+    assert.equal((await m.recoverOperation(f.config, { controller })).recovered, true); assert.equal(readFileSync(state, 'utf8'), 'true');
+    const reopened = createService({ dataDir: f.config.dataDir }); assert.equal((reopened.authDb.prepare('SELECT count(*) n FROM web_owner').get() as { n: number }).n, 1); await reopened.close();
+  }
 });
