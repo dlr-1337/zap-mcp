@@ -336,6 +336,24 @@ test('RPC promove com orçamento de quinze minutos sem ampliar os demais comando
     assert.equal(options.killSignal, 'SIGKILL'); assert.equal(options.shell, false); assert.equal(options.maxBuffer, 8 * 1024 * 1024);
   }
 });
+test('RPC repete somente inspeção recusada antes da conexão SSH após a janela do firewall', async t => {
+  const m = await load(), { config } = rpcFixture(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const refused = Object.assign(Error('connection refused'), { code: 255, stderr: 'ssh: connect to host fixture.invalid port 22: Connection refused\r\n' });
+  let attempts = 0;
+  const pending = m.rpc(config, 'control', { action: 'inspect' }, undefined, async () => { if (++attempts === 1) throw refused; return { stdout: '{"observed":true}' }; });
+  const outcome = pending.then((value: unknown) => ({ value }), (error: unknown) => ({ error }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(attempts, 1); t.mock.timers.tick(44999); await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(attempts, 1);
+  t.mock.timers.tick(1); assert.deepEqual(await outcome, { value: { observed: true } }); assert.equal(attempts, 2);
+  for (const [task, action, error] of [
+    ['control', 'start', refused], ['control', 'stop', refused], ['promote', undefined, refused],
+    ['control', 'inspect', Object.assign(Error('timeout'), { code: 255, killed: true, stderr: 'Connection timed out' })],
+    ['control', 'inspect', Object.assign(Error('helper rejected'), { code: 1, stderr: 'container_control_blocked\n' })]
+  ]) {
+    let calls = 0; await assert.rejects(m.rpc(config, task, { action }, undefined, async () => { calls++; throw error; }), caught => caught === error); assert.equal(calls, 1);
+  }
+});
 test('deadline do RPC deixa resultado remoto indeterminado sem retry nem alterar journal', { timeout: 5000 }, async t => {
   const m = await load(), { base, config } = rpcFixture(t), committed = join(base, 'remote-committed');
   const journal = join(config.operationDir, 'deploy-journal.json'), before = Buffer.from('{"stage":"restored"}'); writeFileSync(journal, before, { mode: 0o600 });

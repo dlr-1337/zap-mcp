@@ -1,11 +1,10 @@
 ---
 phase: 04-opera-o-e-restaura-o-na-vps
-reviewed: 2026-10-13T21:09:49Z
+reviewed: 2026-10-13T21:19:34Z
 depth: standard
-files_reviewed: 3
+files_reviewed: 2
 files_reviewed_list:
   - public/app.js
-  - public/index.html
   - test/ui.test.ts
 findings:
   critical: 0
@@ -17,14 +16,14 @@ status: clean
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-13T21:09:49Z
+**Reviewed:** 2026-10-13T21:19:34Z
 **Depth:** standard
-**Files Reviewed:** 3
+**Files Reviewed:** 2
 **Status:** clean
 
 ## Summary
 
-Revisão padrão do delta de interface 5ec7d3f..d47602b no HEAD d47602b, delimitada a public/app.js, public/index.html e test/ui.test.ts. Foram examinados status de backup, coleta pausada, distinção de falhas de login, limpeza no logout, proteção contra respostas atrasadas e contrato da API de status. Nenhum achado aberto. As revisões anteriores de negociação, IPC e deploy permanecem abaixo como histórico; o frontmatter delimita esta rodada.
+Revisão padrão do delta d47602b..ec6ff29 no HEAD ec6ff29, delimitada a public/app.js e test/ui.test.ts. Foram examinados o estado de backup nunca iniciado e a tradução allowlisted das causas de falha, com rastreamento do contrato em src/offsite.ts. Nenhum achado aberto. As revisões anteriores de UI, negociação, IPC e deploy permanecem abaixo como histórico; o frontmatter delimita esta rodada.
 
 Não foram fornecidos structural findings nem evidência de revisores externos. As contagens acima representam apenas achados abertos. Os IDs de revisões anteriores não foram reutilizados; o histórico anterior permanece em 04-REVIEW-DISPOSITION.md e relatórios históricos. Nesta rodada, somente este relatório foi alterado; nenhuma fonte, configuração pessoal, VPS ou dado real foi modificado, e nenhum commit foi criado pelo revisor.
 
@@ -32,7 +31,18 @@ Não foram fornecidos structural findings nem evidência de revisores externos. 
 
 Nenhum achado aberto. All reviewed files meet quality standards. No issues found.
 
-### Status operacional e login: delta revisado
+### Backup nunca iniciado e causas seguras: delta revisado
+
+**Files:** `public/app.js:458-462`, `test/ui.test.ts:514-526`.
+O backend cria o estado inicial com result pending e lastAttempt null; esse estado não prova execução de uma cópia. O renderer agora exige result pending e lastAttemptAt presente para mostrar “Backup em andamento”. Sem tentativa registrada, conserva “Nenhuma cópia conferida ainda”, sem fabricar progresso. Operações reais do backend persistem lastAttempt quando passam ao estado pending.
+
+Os sete códigos da tabela backupFailures correspondem ao conjunto safeCodes do backend. Object.hasOwn restringe a leitura a propriedades próprias; nomes herdados como toString não viram função/texto renderizado. Todo código não conhecido recebe frase genérica. O renderer exibe somente a tradução fixa, nunca concatena o código bruto, exception, host, path ou mensagem de backend. A saída continua por textContent, após a conferência comum de readVersion/statusVersion.
+
+A alteração preserva a limpeza em signedOut e a recusa de resposta de geração anterior. Não altera role status/alert, fuso America/Sao_Paulo, o rótulo do horário de conferência ou o atraso calculado pela criação do snapshot. O HTML e os fluxos de login não foram modificados neste delta.
+
+**Verificação atual:** Executado com Node 24.21.0 o teste UI afetado: **1/1 passou**, exit 0, zero falhas/cancelamentos/skips/todo. Confere pending sem tentativa, pending com tentativa, causa conhecida de espaço, código desconhecido sentinel, propriedade herdada toString, ausência de detalhe privado, reflow 320/1280 px e limpeza no logout. Conferida a presença dos novos controles no teste compilado. A suíte completa e os testes de login não foram repetidos nesta rodada.
+
+### Histórico do status operacional e login — clean
 
 **Files:** `public/app.js:173-197,450-506`, `public/index.html:27-35`, `test/ui.test.ts:502-529`.
 O parágrafo backup-status só é preenchido depois de request/json e da conferência de readVersion/statusVersion. O wrapper request recusa resposta de geração anterior e encerra a sessão em 401; signedOut incrementa as gerações e limpa o novo texto. Pagehide e a tentativa de logout invalidam readVersion antes que callbacks antigos possam preencher novamente a interface.
@@ -43,7 +53,7 @@ Pendência, última falha, ausência de cópia conferida e cópia anterior prese
 
 Login 401 orienta conferir a senha, 403 e outras recusas orientam recarregar a página, e 429 mantém a orientação de espera. Não há exposição do body de erro. O input de senha continua limpo e o erro permanece associado ao campo por aria-describedby e role alert.
 
-**Verificação atual:** Executados com Node 24.21.0 os dois testes UI afetados: **2/2 passaram**, exit 0, zero falhas/cancelamentos/skips/todo. Cobrem horário em São Paulo, sucesso/atraso/falha/pendência/ausência de cópia, sentinel privado não renderizado, role alert, coleta pausada, reflow em 320/1280 px, limpeza no logout e distinção 403/401. Respostas atrasadas foram rastreadas no mecanismo comum de gerações; não foi criada nem executada uma nova matriz de atraso específica do backup. Não foi repetida a suíte completa nem executada auditoria visual de produção.
+**Verificação da rodada anterior:** Executados com Node 24.21.0 os dois testes UI afetados: **2/2 passaram**, exit 0, zero falhas/cancelamentos/skips/todo. Cobrem horário em São Paulo, sucesso/atraso/falha/pendência/ausência de cópia, sentinel privado não renderizado, role alert, coleta pausada, reflow em 320/1280 px, limpeza no logout e distinção 403/401. Respostas atrasadas foram rastreadas no mecanismo comum de gerações; não foi criada nem executada uma nova matriz de atraso específica do backup. Não foi repetida a suíte completa nem executada auditoria visual de produção.
 
 ### Histórico do parser nativo — clean
 
@@ -78,6 +88,6 @@ Esta revisão não executou Codex instalado contra a VPS, atualização real, ba
 
 ---
 
-_Reviewed: 2026-10-13T21:09:49Z_
+_Reviewed: 2026-10-13T21:19:34Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_

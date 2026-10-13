@@ -1,5 +1,28 @@
 # Fase 04 — UI Review
 
+## Resultado vigente após segunda reavaliação — 2026-10-13
+
+**Correção final inspecionada:** `ec6ff29`, posterior ao delta `5ec7d3f..d47602b`. **Overall: 24/24 no alcance auditado.** As avaliações anteriores abaixo permanecem como histórico, não como advertências abertas.
+
+| Pilar | Nota atual | Evidência específica |
+|---|---|---|
+| Copywriting | 4/4 | C-01/C-02/C-03 resolvidos: coleta pausada, classes de erro no login e estado inicial de backup têm mensagens compatíveis com os dados. |
+| Visuals | 4/4 | Login desktop inspecionado com foco visível; novo texto reutiliza o painel existente, sem mudança de CSS. |
+| Color | 4/4 | Paleta e restrição de acento preservadas; não foi encontrado desvio no delta ou na imagem de login. |
+| Typography | 4/4 | Quatro tamanhos/dois pesos preservados; mensagens novas herdam o texto do painel. |
+| Spacing | 4/4 | Escala preservada; teste DOM da correção confere ausência de overflow em 320/1280px. |
+| Experience Design | 4/4 | E-01 fechado: último sucesso, atraso, tentativa pendente, ausência de tentativa e falhas com motivos seguros são exibidos; logout limpa o estado. |
+
+**E-01 residual resolvido:** `public/app.js:459-460` traduz os sete códigos conhecidos de `src/offsite.ts:54` em frases fixas pt-BR, com `Object.hasOwn` e fallback genérico. Valores desconhecidos/propriedades herdadas não viram texto. `:462` conserva último sucesso e alerta de atraso sem imprimir valores brutos. **C-03 resolvido:** andamento exige `result === 'pending'` e `lastAttemptAt`; sem tentativa, o texto informa apenas ausência de cópia conferida.
+
+O foco atualizado em `test/ui.test.ts:502-541` passou **2/2**, zero fail/cancel/skip/todo, segundo o log GREEN inspecionado. As assertions cobrem pending inicial sem tentativa, pending com timestamp, tradução de capacidade, fallback `toString`, sentinela privada, fuso, falha/atraso, pausa, reflow e limpeza no logout, além de 403/401 no login. Os demais seis motivos foram confrontados diretamente com a allowlist no código; não se atribui a eles teste DOM individual que não existe. A suíte **21/21** citada na reavaliação anterior antecede esta última extensão, e não é apresentada como nova execução do commit final.
+
+**Top 3 Priority Fixes atual:** nenhuma correção aberta; três prioridades originais corrigidas e dois residuais também corrigidos. **Recommendation Count atual:** zero correções prioritárias, zero recomendações cosméticas, zero BLOCKER demonstrado. Não foram criadas sugestões novas para preencher a lista.
+
+**Limites preservados:** correções verificadas em fonte e testes DOM de fixture existentes, sem nova execução pelo auditor ou captura de tela autenticada em produção. A única imagem de produção inspecionada continua sendo o login desktop seguro; CSS não mudou. Nenhuma captura nova, cookie, credencial, dado de conversa, configuração privada ou acesso à VPS nesta rodada. A nota não comprova implantação do commit final, update, backup externo, restauração, integração no cliente ou OPS-01 a OPS-04. Arquivos adicionais auditados: delta final `public/app.js`, trecho de `test/ui.test.ts` e log GREEN sanitizado; sem publicação de ponteiros privados.
+
+---
+
 ## Reavaliação da correção — 2026-10-13
 
 **Delta:** `5ec7d3f..d47602b`. **Resultado atual: 22/24** — Copywriting 3/4, Visuals 4/4, Color 4/4, Typography 4/4, Spacing 4/4, Experience Design 3/4. A avaliação inicial abaixo permanece como histórico.
