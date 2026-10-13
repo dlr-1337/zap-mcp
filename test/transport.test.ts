@@ -19,35 +19,38 @@ import yauzl from 'yauzl';
 
 const hostname = 'archive.example.test', password = 'senha somente da fixture';
 type Reply = { status: number; headers: IncomingHttpHeaders; bytes: Buffer; json(): any };
-async function fixture(t: TestContext, peers = ['127.0.0.1']) {
+async function fixture(t: TestContext, peers = ['127.0.0.1'], native = false, bytes = Buffer.from('ffd8ff' + '01'.repeat(512), 'hex')) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-transport-'));
   const cert = join(dir, 'cert.pem'), key = join(dir, 'key.pem');
-  const ssl = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', `/CN=${hostname}`, '-addext', `subjectAltName=DNS:${hostname}`], { stdio: 'ignore' });
+  const publicName = native ? 'localhost' : hostname;
+  const ssl = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', `/CN=${publicName}`, '-addext', `subjectAltName=DNS:${publicName}`], { stdio: 'ignore' });
   assert.equal(ssl.status, 0);
   let backendPort = 0, origin = '';
+  let onUpstream: (() => void) | undefined;
   const proxy = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (req, res) => {
+    if (native) { s.app(req, res); return; }
     // A real TLS terminator overwrites client forwarding rather than appending it.
     const headers: IncomingHttpHeaders = { ...req.headers, host: new URL(origin).host, 'x-forwarded-proto': 'https' };
     delete headers['forwarded']; delete headers['x-forwarded-host']; delete headers['x-forwarded-for'];
     const upstream = httpRequest({ hostname: '127.0.0.1', port: backendPort, path: req.url, method: req.method, headers }, answer => {
-      res.writeHead(answer.statusCode!, answer.headers); answer.pipe(res); res.on('close', () => answer.destroy());
+      onUpstream?.(); res.writeHead(answer.statusCode!, answer.headers); answer.on('error', () => res.destroy()); answer.pipe(res); res.on('close', () => answer.destroy());
     });
     upstream.on('error', () => res.destroy()); req.pipe(upstream);
   });
   proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
-  origin = `https://${hostname}:${(proxy.address() as AddressInfo).port}`;
+  origin = `https://${publicName}:${(proxy.address() as AddressInfo).port}`;
   const transport = { mode: 'proxy' as const, publicOrigin: origin, trustedProxyPeers: peers };
-  const s = createService({ dataDir: join(dir, 'data'), transport });
+  const s = createService({ dataDir: join(dir, 'data'), transport: native ? { mode: 'local' } : transport });
   const backend = s.app.listen(0, '127.0.0.1'); await once(backend, 'listening'); backendPort = (backend.address() as AddressInfo).port;
   t.after(async () => { proxy.closeAllConnections(); backend.closeAllConnections(); await Promise.all([new Promise<void>(ok => proxy.close(() => ok())), new Promise<void>(ok => backend.close(() => ok()))]); await s.close(); rmSync(dir, { recursive: true }); });
   await s.setPassword(password);
-  const bytes = Buffer.from('ffd8ff' + '01'.repeat(512), 'hex'), messageKey = { remoteJid: '1@s.whatsapp.net', id: 'fixture', fromMe: false };
+  const messageKey = { remoteJid: '1@s.whatsapp.net', id: 'fixture', fromMe: false };
   s.archive.ingestHistory({ messages: [{ key: messageKey, messageTimestamp: 1700000000, message: { imageMessage: { mimetype: 'image/jpeg', url: 'https://mmg.whatsapp.net/synthetic', mediaKey: Buffer.alloc(32), fileLength: bytes.length } } }] });
   const worker = startMediaWorker({ archive: s.archive, mediaDir: join(dir, 'data', 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop();
   const stored = s.archive.readStoredMessage(messageKey)!, id = stored.attachments[0]!.id;
   const call = (path: string, options: { method?: string; headers?: Record<string, string>; body?: unknown; ca?: Buffer; servername?: string } = {}) => new Promise<Reply>((ok, fail) => {
     const body = options.body === undefined ? undefined : JSON.stringify(options.body);
-    const req = httpsRequest({ hostname: '127.0.0.1', port: (proxy.address() as AddressInfo).port, servername: options.servername ?? hostname, ca: options.ca ?? readFileSync(cert), path, method: options.method ?? 'GET', headers: { Host: new URL(origin).host, ...(body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } }, res => {
+    const req = httpsRequest({ hostname: '127.0.0.1', port: (proxy.address() as AddressInfo).port, servername: options.servername ?? publicName, ca: options.ca ?? readFileSync(cert), path, method: options.method ?? 'GET', headers: { Host: new URL(origin).host, ...(body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } }, res => {
       const chunks: Buffer[] = []; res.on('data', c => chunks.push(c)); res.on('error', fail); res.on('end', () => { const bytes = Buffer.concat(chunks); ok({ status: res.statusCode!, headers: res.headers, bytes, json: () => JSON.parse(bytes.toString()) }); });
     }); req.on('error', fail); req.end(body);
   });
@@ -60,7 +63,7 @@ async function fixture(t: TestContext, peers = ['127.0.0.1']) {
     assert.equal(r.status, 200, 'Origin HTTPS deve permitir login'); assert.match(r.headers['set-cookie']![0], /; Secure/);
     return r.headers['set-cookie']![0].split(';')[0];
   };
-  return { s, dir, origin, call, direct, login, bytes, id, stored };
+  return { s, dir, origin, call, direct, login, bytes, id, stored, setUpstreamHook: (hook: () => void) => { onUpstream = hook; } };
 }
 
 test('proxy TLS permite login Secure e original íntegro na mesma origem', async t => {
@@ -114,9 +117,17 @@ test('modo local recusa forwarding e preserva HTTP e TLS nativo', async t => {
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   assert.equal((await fetch(origin + '/api/session')).status, 200);
   for (const headers of [{ 'X-Forwarded-Proto': 'https' }, { Forwarded: 'proto=https' }, { 'X-Forwarded-For': '127.0.0.1' }] as Record<string, string>[]) assert.equal((await fetch(origin + '/api/session', { headers })).status, 403);
-  const tls = createTransport();
-  const fake = { socket: { encrypted: true }, get: () => 'localhost:4443' } as unknown as Parameters<typeof tls.canonicalOrigin>[0];
-  assert.equal(tls.canonicalOrigin(fake), 'https://localhost:4443');
+  const native = await fixture(t, ['127.0.0.1'], true), cookie = await native.login();
+  assert.equal((await native.call('/api/status', { headers: { Cookie: cookie } })).status, 200);
+});
+
+test('revogação durante stream TLS interrompe bytes mantendo original', async t => {
+  const f = await fixture(t, ['127.0.0.1'], false, Buffer.alloc(8 * 1024 * 1024, 1));
+  rotateMcpToken(f.s.authDb, join(f.dir, 'token'));
+  const token = readFileSync(join(f.dir, 'token'), 'utf8').trim(); let rotated = false;
+  f.setUpstreamHook(() => { if (!rotated) { rotated = true; rotateMcpToken(f.s.authDb, join(f.dir, 'rotated')); } });
+  await assert.rejects(f.call('/mcp/attachments/' + f.id, { headers: { Authorization: 'Bearer ' + token } }));
+  assert.equal(rotated, true); assert.deepEqual(readFileSync(join(f.dir, 'data', 'media', f.id + '.bin')), f.bytes);
 });
 
 test('MCP negocia e publica somente URL canônica HTTPS atrás do proxy', async t => {

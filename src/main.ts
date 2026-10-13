@@ -54,7 +54,7 @@ export function createService({ dataDir, transport: config }: { dataDir: string;
   app.use((_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
-  app.use('/mcp', createMcpAdapter({ archive, authDb, mediaDir }));
+  app.use('/mcp', createMcpAdapter({ archive, authDb, mediaDir, transport }));
   app.use(express.json({ limit: '4kb' }));
   app.use(express.urlencoded({ extended: false, limit: '4kb' }));
   app.use(auth.middleware);

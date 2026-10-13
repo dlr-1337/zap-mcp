@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Temporal } from '@js-temporal/polyfill';
 import { searchTerms, parsePeriod, type Archive } from './archive.js';
 import { openVerifiedAttachment, streamVerifiedAttachment, classifyPreview } from './media.js';
+import { createTransport } from './transport.js';
 
 const idSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 const querySchema = z.string().refine(value => [...value].length <= 2000, 'Use até 2000 caracteres.');
@@ -59,7 +60,7 @@ export function guardMcpConsumption(access: ReturnType<typeof createMcpAccess>, 
   for (const reference of references) if (archive.isRestricted(reference)) throw Error('Conteúdo restrito indisponível');
 }
 
-export function createMcpAdapter({ archive, authDb, mediaDir }: { archive: Archive; authDb: Database.Database; mediaDir: string }) {
+export function createMcpAdapter({ archive, authDb, mediaDir, transport = createTransport() }: { archive: Archive; authDb: Database.Database; mediaDir: string; transport?: ReturnType<typeof createTransport> }) {
   const router = express.Router(), access = createMcpAccess(authDb);
   const candidates = new Map<string, { generation: string; filters: string; expiresAt: number; bytes: number; items: Record<string, unknown>[] }>();
   const sweep = (generation: string) => {
@@ -67,8 +68,9 @@ export function createMcpAdapter({ archive, authDb, mediaDir }: { archive: Archi
     // Discover persisted MCP namespaces too, so rotation after restart preserves only the current grant.
     for (const row of archive.db.prepare("SELECT DISTINCT session FROM query_snapshots WHERE session LIKE 'mcp:%' AND session<>?").all('mcp:' + generation) as { session: string }[]) archive.dropQueries(row.session);
   };
+  router.use(transport.guard);
   router.use((req, res, next) => {
-    const origin = `${(req.socket as { encrypted?: boolean }).encrypted ? 'https' : 'http'}://${req.get('Host')}`;
+    const origin = transport.canonicalOrigin(req);
     if (req.get('Origin') !== undefined && req.get('Origin') !== origin) { res.status(403).json({ error: 'Origem recusada' }); return; }
     const generation = access.authenticate(req.get('Authorization'));
     if (!generation) { res.status(401).json({ error: 'Autenticação MCP necessária' }); return; }
@@ -87,9 +89,18 @@ export function createMcpAdapter({ archive, authDb, mediaDir }: { archive: Archi
     if (!file) { res.status(404).json({ error: 'Original disponível não encontrado no acervo' }); return; }
     scope.references.add(file.attachment.reference);
     try { scope.check(); } catch { closeSync(file.fd); res.destroy(); return; }
-    res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="original"', 'Content-Length': String(file.size) });
+    let start = 0, end = file.size - 1;
+    if (req.headers.range) {
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+      if (!range || !range[1] && !range[2] || [range[1], range[2]].some(n => n && !Number.isSafeInteger(Number(n)))) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
+      if (!range[1]) { const tail = Number(range[2]); start = Math.max(0, file.size - tail); if (!tail) start = file.size; }
+      else { start = Number(range[1]); if (range[2]) end = Math.min(end, Number(range[2])); }
+      if (start > end || start < 0 || start >= file.size) { closeSync(file.fd); res.status(416).set('Content-Range', `bytes */${file.size}`).end(); return; }
+      res.status(206).set('Content-Range', `bytes ${start}-${end}/${file.size}`);
+    }
+    res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="original"', 'Content-Length': String(file.size ? end - start + 1 : 0), 'Accept-Ranges': 'bytes' });
     if (req.method === 'HEAD' || !file.size) { closeSync(file.fd); res.end(); return; }
-    const stream = streamVerifiedAttachment(archive, file);
+    const stream = streamVerifiedAttachment(archive, file, start, end);
     res.on('close', () => stream.destroy());
     stream.on('error', error => res.headersSent ? res.destroy() : next(error)); stream.pipe(res);
   });
