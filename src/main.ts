@@ -12,10 +12,12 @@ import { startMediaWorker, openVerifiedAttachment, streamVerifiedAttachment, rec
 import { createSnapshot, restoreSnapshot, verifyBackup, preflight } from './backup.js';
 import { createExportManager } from './export.js';
 import { createMcpAdapter, rotateMcpToken } from './mcp.js';
+import { createTransport, transportFromEnv, type TransportConfig } from './transport.js';
 
 export type StoredMessage = { reference: string; conversationId: string; conversationName: string | null; text: string; originalTimestamp: string };
 
-export function createService({ dataDir }: { dataDir: string }) {
+export function createService({ dataDir, transport: config }: { dataDir: string; transport?: TransportConfig }) {
+  const transport = createTransport(config);
   if (process.versions.node.split('.')[0] !== '24') throw Error('Node24 obrigatório');
   const root = realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
   const location = resolve(dataDir);
@@ -40,16 +42,15 @@ export function createService({ dataDir }: { dataDir: string }) {
   reconcileMedia(archive, mediaDir);
   authDb = new Database(join(dataDir, 'auth.sqlite')); opened.push(authDb);
   for (const db of [archiveDb, authDb]) db.pragma('foreign_keys = ON');
-  auth = createWebAuth(authDb);
+  auth = createWebAuth(authDb, transport);
   for (const name of ['archive.sqlite', 'auth.sqlite']) chmodSync(join(dataDir, name), 0o600);
   } catch (error) { for (const db of opened) db.close(); lock.release(); throw error; }
   const app = express();
   let exports: ReturnType<typeof createExportManager>;
   try { exports = createExportManager({ archive, dataDir, mediaDir }); } catch (e) { for (const db of opened) db.close(); lock.release(); throw e; }
   app.disable('x-powered-by');
-  app.use((req, res, next) => {
-    if (!/^(127\.0\.0\.1|localhost)(:[0-9]+)?$/.test(req.get('Host') ?? '') || !['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(req.socket.remoteAddress ?? '')) { res.status(403).json({ error: 'Transporte recusado' }); return; } next();
-  });
+  app.set('trust proxy', transport.trustProxy);
+  app.use(transport.guard);
   app.use((_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' }); next();
   });
@@ -257,7 +258,8 @@ async function cli() {
   if (process.argv[2] === 'verify-backup') { if (process.argv.length !== 5) throw Error('Uso: verify-backup SNAPSHOT RESTORE_NOVO'); await verifyBackup({ dataDir, snapshotDir: process.argv[3], destination: process.argv[4] }); console.log('Restore isolado conferido; recibo privado gravado no perfil fonte. Conta ainda não validada'); return; }
   if (process.argv[2] === 'preflight') { if (process.argv.length !== 3) throw Error('Uso: preflight'); preflight(dataDir); console.log('Pronto para um único coletor; conta e cobertura ainda não validadas'); return; }
   if (!collect && process.argv.length !== 3) throw Error('Argumentos inválidos');
-  const service = createService({ dataDir });
+  const transport = process.argv[2] === 'serve' ? transportFromEnv(process.env) : { mode: 'local' as const };
+  const service = createService({ dataDir, transport });
   if (process.argv[2] === 'profile-init') {
     try { createAuthState(service.authDb, { newProfile: true }); console.log('Perfil local preparado; nenhuma conta conectada'); } finally { await service.close(); }
   } else if (process.argv[2] === 'owner-set') {

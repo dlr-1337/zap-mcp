@@ -2,6 +2,7 @@ import session, { Store, type SessionData } from 'express-session';
 import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { createTransport } from './transport.js';
 
 declare module 'express-session' {
   interface SessionData { owner?: boolean; csrfToken?: string; authenticatedAt?: number; ownerGeneration?: string; }
@@ -49,7 +50,7 @@ export async function setOwnerPassword(db: Database.Database, password: string) 
   })();
 }
 
-export function createWebAuth(authDb: Database.Database) {
+export function createWebAuth(authDb: Database.Database, transport = createTransport()) {
   authDb.transaction(() => {
     const version = authDb.pragma('user_version', { simple: true }) as number;
     if (version === 0) authDb.exec('CREATE TABLE web_owner(id INTEGER PRIMARY KEY CHECK(id = 1), salt BLOB NOT NULL, hash BLOB NOT NULL); CREATE TABLE web_sessions(id TEXT PRIMARY KEY, data TEXT NOT NULL, touched_at INTEGER NOT NULL); CREATE TABLE web_config(key TEXT PRIMARY KEY, value TEXT NOT NULL); PRAGMA user_version = 1');
@@ -58,7 +59,7 @@ export function createWebAuth(authDb: Database.Database) {
   })();
   const store = new SQLiteStore(authDb);
   let active = 0;
-  const middleware = session({ name: 'zap.sid', secret: config(authDb, 'signing-secret')!, store, resave: false, saveUninitialized: false, rolling: true, cookie: { httpOnly: true, sameSite: 'strict', secure: false, maxAge: IDLE } });
+  const middleware = session({ name: 'zap.sid', secret: config(authDb, 'signing-secret')!, store, resave: false, saveUninitialized: false, rolling: true, cookie: { httpOnly: true, sameSite: 'strict', secure: transport.secure, maxAge: IDLE } });
   const requireOwner = (req: Request, res: Response, next: NextFunction) => {
     store.get(req.sessionID, (error, current) => {
       if (error) { next(error); return; }
@@ -67,7 +68,7 @@ export function createWebAuth(authDb: Database.Database) {
     });
   };
   const csrf = (req: Request, res: Response, next: NextFunction) => {
-    const origin = `http://${req.get('Host')}`;
+    const origin = transport.canonicalOrigin(req);
     if (req.get('Origin') !== origin || !req.session.csrfToken || typeof req.body?.csrfToken !== 'string' || req.body.csrfToken !== req.session.csrfToken) { res.status(403).json({ error: 'Solicitação recusada' }); return; } next();
   };
   const sessionInfo = (req: Request, res: Response) => {
@@ -97,7 +98,7 @@ export function createWebAuth(authDb: Database.Database) {
   };
   const logout = async (req: Request, res: Response) => {
     await new Promise<void>((ok, fail) => req.session.destroy(error => error ? fail(error) : ok()));
-    res.clearCookie('zap.sid', { httpOnly: true, sameSite: 'strict', secure: false }); res.json({ authenticated: false });
+    res.clearCookie('zap.sid', { httpOnly: true, sameSite: 'strict', secure: transport.secure === true || req.secure }); res.json({ authenticated: false });
   };
   return { middleware, requireOwner, csrf, sessionInfo, login, logout, store };
 }

@@ -12,6 +12,7 @@ import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { createService } from '../src/main.js';
 import { startMediaWorker } from '../src/media.js';
+import { createTransport, transportFromEnv } from '../src/transport.js';
 
 const hostname = 'archive.example.test', password = 'senha somente da fixture';
 type Reply = { status: number; headers: IncomingHttpHeaders; bytes: Buffer; json(): any };
@@ -32,8 +33,8 @@ async function fixture(t: TestContext, peers = ['127.0.0.1']) {
   });
   proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
   origin = `https://${hostname}:${(proxy.address() as AddressInfo).port}`;
-  const transport = { mode: 'proxy', publicOrigin: origin, trustedProxyPeers: peers };
-  const s = createService({ dataDir: join(dir, 'data'), transport } as Parameters<typeof createService>[0]);
+  const transport = { mode: 'proxy' as const, publicOrigin: origin, trustedProxyPeers: peers };
+  const s = createService({ dataDir: join(dir, 'data'), transport });
   const backend = s.app.listen(0, '127.0.0.1'); await once(backend, 'listening'); backendPort = (backend.address() as AddressInfo).port;
   t.after(async () => { proxy.closeAllConnections(); backend.closeAllConnections(); await Promise.all([new Promise<void>(ok => proxy.close(() => ok())), new Promise<void>(ok => backend.close(() => ok()))]); await s.close(); rmSync(dir, { recursive: true }); });
   await s.setPassword(password);
@@ -85,4 +86,32 @@ test('backend exige peer conhecido e cabeçalhos canônicos únicos', async t =>
 test('TLS recusa hostname divergente e CA falsa', async t => {
   const f = await fixture(t); await assert.rejects(f.call('/api/session', { servername: 'hostile.example' }), /Hostname\/IP|altnames/);
   await assert.rejects(f.call('/api/session', { ca: Buffer.alloc(0) }), /self-signed|certificate/);
+});
+
+test('configuração incompleta ou ambígua falha antes de abrir perfil', () => {
+  assert.deepEqual(transportFromEnv({}), { mode: 'local' });
+  for (const publicOrigin of ['http://archive.example.test', 'https://u:p@archive.example.test', 'https://archive.example.test/', 'https://archive.example.test/path', 'https://archive.example.test/?q=1', 'https://archive.example.test/#x', 'https://archive.example.test:443', ' https://archive.example.test']) {
+    assert.throws(() => transportFromEnv({ ZAP_PUBLIC_ORIGIN: publicOrigin, ZAP_TRUSTED_PROXY_PEERS: '127.0.0.1' }));
+  }
+  for (const peers of ['', '*', 'loopback', '127.0.0.0/8', '127.0.0.1,', '127.0.0.1, 127.0.0.2', '127.0.0.1,::ffff:127.0.0.1']) assert.throws(() => transportFromEnv({ ZAP_PUBLIC_ORIGIN: 'https://archive.example.test', ZAP_TRUSTED_PROXY_PEERS: peers }));
+  assert.throws(() => transportFromEnv({ ZAP_PUBLIC_ORIGIN: 'https://archive.example.test' }));
+  assert.throws(() => transportFromEnv({ ZAP_TRUSTED_PROXY_PEERS: '127.0.0.1' }));
+  const proxy = createTransport({ mode: 'proxy', publicOrigin: 'https://archive.example.test', trustedProxyPeers: ['127.0.0.1'] });
+  assert.equal(proxy.trustProxy('::ffff:127.0.0.1', 0), true); assert.equal(proxy.trustProxy('127.0.0.1', 1), false);
+  const dir = join(tmpdir(), 'zap-invalid-' + Date.now());
+  const cli = spawnSync(process.execPath, ['dist/src/main.js', 'serve'], { encoding: 'utf8', env: { ...process.env, ZAP_DATA_DIR: dir, ZAP_PUBLIC_ORIGIN: 'http://invalid.example', ZAP_TRUSTED_PROXY_PEERS: '127.0.0.1' } });
+  assert.equal(cli.status, 1); assert.equal(cli.stdout, ''); assert.equal(cli.stderr.includes('http://invalid.example'), false);
+  assert.throws(() => readFileSync(join(dir, 'auth.sqlite')));
+});
+
+test('modo local recusa forwarding e preserva HTTP e TLS nativo', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-local-')), s = createService({ dataDir: dir });
+  const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(ok => server.close(() => ok())); await s.close(); rmSync(dir, { recursive: true }); });
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  assert.equal((await fetch(origin + '/api/session')).status, 200);
+  for (const headers of [{ 'X-Forwarded-Proto': 'https' }, { Forwarded: 'proto=https' }, { 'X-Forwarded-For': '127.0.0.1' }] as Record<string, string>[]) assert.equal((await fetch(origin + '/api/session', { headers })).status, 403);
+  const tls = createTransport();
+  const fake = { socket: { encrypted: true }, get: () => 'localhost:4443' } as unknown as Parameters<typeof tls.canonicalOrigin>[0];
+  assert.equal(tls.canonicalOrigin(fake), 'https://localhost:4443');
 });
