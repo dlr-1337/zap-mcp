@@ -59,3 +59,14 @@ test('chave apenas na VPS ou acesso dependente do notebook permanece unverified'
   assert.equal(api.offsiteIndependent({ machineId: 'external', kind: 'local', ownerAccess: true }, { machineId: 'target' }), false);
   assert.equal(api.offsiteIndependent({ machineId: 'external', kind: 'ssh', ownerAccess: true }, { machineId: 'target' }), true);
 });
+
+test('configuração exposta ou embutida em checkout é blocked e não inicia probe', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-environment-config-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, 'config.json');
+  writeFileSync(file, JSON.stringify({ evidenceDir: dir, target: { host: 'synthetic-secret-host' } }), { mode: 0o644 });
+  const receipt = await api.discover({ configFile: file, evidenceDir: dir });
+  assert.equal(receipt.status, 'blocked');
+  assert.ok(Object.values(receipt.dependencies).every((v: any) => v.reason === 'configuration_invalid'));
+  assert.ok(!JSON.stringify(api.publicReceipt(receipt)).includes('synthetic-secret-host'));
+  assert.throws(() => api.validateConfig({ evidenceDir: process.cwd() }));
+});

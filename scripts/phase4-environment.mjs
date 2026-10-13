@@ -1,4 +1,4 @@
-import { accessSync, constants, lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, renameSync, unlinkSync } from 'node:fs';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdtempSync, renameSync, unlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,12 +11,13 @@ import assert from 'node:assert/strict';
 const runFile = promisify(execFile);
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 export const dependencyNames = ['source', 'target', 'publicOrigin', 'proxy', 'supervisor', 'persistentVolume', 'offsite', 'recoveryKeyReference'];
-const reasons = new Set(['configuration_missing', 'configuration_invalid', 'probe_failed', 'identity_mismatch', 'runtime_unsupported', 'facts_incomplete', 'capacity_insufficient', 'key_not_independent', 'fresh_probe_required', 'observed']);
+const reasons = new Set(['configuration_missing', 'configuration_invalid', 'probe_failed', 'identity_mismatch', 'runtime_unsupported', 'facts_incomplete', 'capacity_insufficient', 'key_not_independent', 'target_offsite_access_unverified', 'recovery_decryption_unverified', 'fresh_probe_required', 'observed']);
 const inside = (path, parent) => path === parent || path.startsWith(parent + sep);
 function requirePrivate(path, directory = false) {
   assert.ok(isAbsolute(path)); const st = lstatSync(path), canonical = realpathSync(path);
   assert.ok(!inside(canonical, root) && canonical === resolve(path) && !st.isSymbolicLink());
   assert.ok(directory ? st.isDirectory() : st.isFile());
+  if (!directory) assert.ok(st.size <= 262144);
   assert.equal(st.mode & 0o777, directory ? 0o700 : 0o600);
   assert.equal(st.uid, process.getuid()); return canonical;
 }
@@ -28,6 +29,7 @@ export function validateConfig(config) {
   requirePrivate(config.evidenceDir, true);
   for (const key of ['source', 'target', 'offsite']) {
     const host = config[key]; if (!host) continue;
+    assert.ok(Object.keys(host).every(k => ['kind', 'machineId', 'host', 'user', 'port', 'dataDir', 'appRoot', 'knownHostsFile', 'identityFile', 'storagePath'].includes(k)));
     assert.ok(host.kind === 'local' && key === 'source' || host.kind === 'ssh');
     assert.ok(typeof host.machineId === 'string' && /^[a-f0-9]{32}$/.test(host.machineId));
     if (host.kind === 'ssh') {
@@ -35,17 +37,32 @@ export function validateConfig(config) {
       requirePrivate(host.knownHostsFile); requirePrivate(host.identityFile);
       assert.ok(Number.isInteger(host.port ?? 22) && (host.port ?? 22) > 0 && (host.port ?? 22) <= 65535);
     }
-    if (key !== 'offsite') { safePath(host.dataDir); safePath(host.appRoot); }
+    if (key !== 'offsite') { safePath(host.dataDir); safePath(host.appRoot); assert.ok(!inside(host.dataDir, host.appRoot)); }
   }
   if (config.publicOrigin) { const u = new URL(config.publicOrigin); assert.ok(u.protocol === 'https:' && u.origin === config.publicOrigin && !u.username && !u.password); }
   if (config.proxy) { assert.ok(['nginx', 'caddy'].includes(config.proxy.kind)); safePath(config.proxy.configFile); assert.ok(typeof config.proxy.expectedConfigDigest === 'string' && /^[a-f0-9]{64}$/.test(config.proxy.expectedConfigDigest)); }
   if (config.supervisor) { assert.equal(config.supervisor.kind, 'systemd'); assert.match(config.supervisor.unit, /^[A-Za-z0-9_.@-]+\.service$/); }
   if (config.persistentVolume) { safePath(config.persistentVolume.path); safePath(config.persistentVolume.releaseRoot); }
+  if (config.offsite) { safePath(config.offsite.storagePath); assert.ok(config.offsite.kind === 'ssh'); }
+  if (config.recoveryKeyReference) { safePath(config.recoveryKeyReference.path); assert.ok(config.recoveryKeyReference.host === 'offsite'); }
+  if (config.capacity) assert.ok(Object.values(config.capacity).every(v => Number.isSafeInteger(v) && v >= 0));
   return config;
+}
+
+export function capacityRequired({ archiveBytes, archiveFiles, queueZipBytes, queueZipFiles, availableBytes, availableInodes }) {
+  for (const value of [archiveBytes, archiveFiles, queueZipBytes, queueZipFiles, availableBytes, availableInodes]) assert.ok(Number.isSafeInteger(value) && value >= 0);
+  const payload = archiveBytes * 5 + queueZipBytes, reserve = Math.max(256 * 1024 * 1024, Math.ceil(payload * 0.05));
+  const requiredBytes = payload + reserve, requiredInodes = archiveFiles * 5 + queueZipFiles + 32;
+  assert.ok(Number.isSafeInteger(requiredBytes) && Number.isSafeInteger(requiredInodes));
+  return { requiredBytes, requiredInodes, reserve, sufficient: availableBytes >= requiredBytes && availableInodes >= requiredInodes };
+}
+export function offsiteIndependent(offsite, target) {
+  return !!(offsite && target && offsite.kind === 'ssh' && offsite.ownerAccess === true && offsite.machineId !== target.machineId);
 }
 
 // This function is serialized into a fixed node probe; it never imports application startup.
 async function hostProbe(scope) {
+  const deadline = setTimeout(() => process.exit(1), 9500); deadline.unref();
   const fs = await import('node:fs/promises'), cp = await import('node:child_process'), util = await import('node:util');
   const exec = util.promisify(cp.execFile), os = await import('node:os'), path = await import('node:path');
   const out = { machineId: (await fs.readFile('/etc/machine-id', 'utf8')).trim(), os: os.platform(), node: process.version };
@@ -53,6 +70,16 @@ async function hostProbe(scope) {
   if (scope.dataDir) {
     const st = await fs.lstat(scope.dataDir), canonical = await fs.realpath(scope.dataDir);
     out.privateData = st.isDirectory() && !st.isSymbolicLink() && canonical === scope.dataDir && (st.mode & 0o777) === 0o700 && st.uid === process.getuid();
+    let bytes = 0, files = 0, scanned = 0;
+    const measure = async dir => {
+      for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+        if (++scanned > 100000) throw Error('inventory_limit');
+        const name = path.join(dir, entry.name), meta = await fs.lstat(name);
+        if (meta.isSymbolicLink() || !meta.isFile() && !meta.isDirectory()) throw Error('inventory_type');
+        if (meta.isDirectory()) await measure(name); else { bytes += meta.size; files++; }
+      }
+    };
+    await measure(scope.dataDir); out.archive = { bytes, files, measuredAt: new Date().toISOString() };
     out.processes = [];
     for (const pid of (await fs.readdir('/proc')).filter(p => /^\d+$/.test(p))) {
       try {
@@ -73,6 +100,7 @@ async function hostProbe(scope) {
   }
   if (scope.proxy) {
     const crypto = await import('node:crypto');
+    if ((await fs.stat(scope.proxy.configFile)).size > 262144) throw Error('proxy_limit');
     const file = await fs.readFile(scope.proxy.configFile);
     out.proxy = { digest: crypto.createHash('sha256').update(file).digest('hex') };
     // nginx reports its version on stderr; execFile still captures it privately.
@@ -82,6 +110,11 @@ async function hostProbe(scope) {
   if (scope.volume) {
     const st = await fs.lstat(scope.volume.path), canonical = await fs.realpath(scope.volume.path), disk = await fs.statfs(canonical, { bigint: true });
     out.volume = { path: canonical, private: st.isDirectory() && !st.isSymbolicLink() && canonical === scope.volume.path && (st.mode & 0o777) === 0o700 && st.uid === process.getuid(), availableBytes: String(disk.bavail * disk.bsize), availableInodes: String(disk.ffree), mount: await sub('findmnt', ['--json', '--target', canonical, '--output', 'TARGET,SOURCE,FSTYPE,OPTIONS']) };
+  }
+  if (scope.recoveryKey) {
+    const key = await fs.lstat(scope.recoveryKey.path);
+    out.keyAccessible = key.isFile() && !key.isSymbolicLink() && (key.mode & 0o777) === 0o600 && key.uid === process.getuid();
+    await fs.access(scope.recoveryKey.path, 4); // metadata/access only, never read a key.
   }
   return out;
 }
@@ -126,15 +159,24 @@ export async function discover({ configFile = process.env.ZAP_OPERATION_CONFIG_F
   requirePrivate(dir, true);
   const receipt = { version: 1, runId: randomUUID(), observedAt: new Date().toISOString(), status: 'blocked', dependencies: Object.fromEntries(dependencyNames.map(key => [key, item('missing', invalid ? 'configuration_invalid' : 'configuration_missing')])) };
   if (config) {
+    for (const key of dependencyNames) if (config[key]) receipt.dependencies[key] = item('unverified', 'facts_incomplete');
     for (const key of ['source', 'target']) if (config[key]) {
       try {
         const facts = await probeHost(config[key], { dataDir: config[key].dataDir, appRoot: config[key].appRoot, ...(key === 'target' ? { supervisor: config.supervisor, proxy: config.proxy, volume: config.persistentVolume } : {}) }, { signal });
         receipt.dependencies[key] = item(facts.os === 'linux' && facts.node === 'v24.21.0' && facts.fts && facts.privateData ? 'observed' : 'unverified', 'runtime_unsupported', facts);
         if (receipt.dependencies[key].status === 'observed') receipt.dependencies[key].reason = 'observed';
         if (key === 'target') {
-          if (config.supervisor) receipt.dependencies.supervisor = item(facts.supervisor?.LoadState === 'loaded' && facts.supervisor?.UnitFileState === 'enabled' && facts.supervisor?.ActiveState === 'active' ? 'observed' : 'unverified', 'facts_incomplete', facts.supervisor);
+          if (config.supervisor) receipt.dependencies.supervisor = item(facts.supervisor?.LoadState === 'loaded' && facts.supervisor?.UnitFileState === 'enabled' && facts.supervisor?.ActiveState === 'active' && facts.supervisor?.User === config.target.user && facts.processes.some(p => String(p.pid) === facts.supervisor.MainPID) ? 'observed' : 'unverified', 'facts_incomplete', facts.supervisor);
           if (config.proxy) receipt.dependencies.proxy = item(facts.proxy?.digest === config.proxy.expectedConfigDigest && !!facts.proxy.version ? 'observed' : 'unverified', 'facts_incomplete', facts.proxy);
-          if (config.persistentVolume) receipt.dependencies.persistentVolume = item('unverified', 'facts_incomplete', facts.volume);
+          if (config.persistentVolume) {
+            const archive = receipt.dependencies.source.evidence?.archive, volume = facts.volume;
+            let capacity;
+            try { capacity = capacityRequired({ archiveBytes: archive.bytes, archiveFiles: archive.files, queueZipBytes: config.capacity.queueZipBytes, queueZipFiles: config.capacity.queueZipFiles, availableBytes: Number(volume.availableBytes), availableInodes: Number(volume.availableInodes) }); } catch {}
+            const outside = volume && !inside(volume.path, config.persistentVolume.releaseRoot) && !inside(volume.path, config.target.appRoot);
+            const mount = volume && JSON.parse(volume.mount).filesystems?.[0];
+            const persistent = mount && !['tmpfs', 'ramfs', 'overlay'].includes(mount.fstype) && !mount.options.split(',').includes('ro');
+            receipt.dependencies.persistentVolume = item(capacity?.sufficient && volume.private && outside && persistent ? 'observed' : 'unverified', capacity && !capacity.sufficient ? 'capacity_insufficient' : 'facts_incomplete', { ...volume, capacity });
+          }
         }
       } catch { receipt.dependencies[key] = item('unverified', 'probe_failed'); }
     }
@@ -142,7 +184,19 @@ export async function discover({ configFile = process.env.ZAP_OPERATION_CONFIG_F
       try { const facts = await tlsProbe(config.publicOrigin, signal); receipt.dependencies.publicOrigin = item(facts.verified ? 'observed' : 'unverified', 'facts_incomplete', facts); }
       catch { receipt.dependencies.publicOrigin = item('unverified', 'probe_failed'); }
     }
+    if (config.offsite) {
+      try {
+        const facts = await probeHost(config.offsite, { volume: { path: config.offsite.storagePath }, recoveryKey: config.recoveryKeyReference }, { signal });
+        const independent = offsiteIndependent({ ...config.offsite, ownerAccess: true }, config.target);
+        receipt.dependencies.offsite = item('unverified', independent ? 'target_offsite_access_unverified' : 'key_not_independent', facts);
+        if (config.recoveryKeyReference) receipt.dependencies.recoveryKeyReference = item('unverified', independent && facts.keyAccessible ? 'recovery_decryption_unverified' : 'key_not_independent', { independentlyAccessible: independent && facts.keyAccessible });
+        // Host access and readable key metadata do not prove the encryption tool or recovery.
+        // The adapter is chosen only after its existing backend/version is inventoried.
+      } catch { receipt.dependencies.offsite = item('unverified', 'probe_failed'); }
+    }
   }
+  for (const dependency of Object.values(receipt.dependencies)) if (dependency.status === 'observed') dependency.reason = 'observed';
+  receipt.status = Object.values(receipt.dependencies).every(d => d.status === 'observed') ? 'ready' : 'blocked';
   save(receipt, dir); return receipt;
 }
 export async function assertReady(options = {}) {
@@ -153,9 +207,16 @@ export async function assertReady(options = {}) {
 }
 export async function selfTest() {
   const dir = mkdtempSync(join(tmpdir(), 'zap-environment-self-'));
-  const r = await discover({ evidenceDir: dir, configFile: undefined }); assert.equal(r.status, 'blocked');
-  assert.equal(publicReceipt({ ...r, private: 'sensitive' }).private, undefined);
-  return { passed: true };
+  try {
+    const r = await discover({ evidenceDir: dir, configFile: '' }); assert.equal(r.status, 'blocked');
+    const hostile = 'synthetic-secret/host?hash=credential';
+    r.dependencies.source = { status: 'unverified', reason: hostile, evidence: hostile };
+    assert.ok(!JSON.stringify(publicReceipt({ ...r, private: hostile })).includes(hostile));
+    assert.equal(capacityRequired({ archiveBytes: 1, archiveFiles: 1, queueZipBytes: 1, queueZipFiles: 1, availableBytes: 1, availableInodes: 1 }).sufficient, false);
+    assert.equal(offsiteIndependent({ kind: 'local', machineId: 'a', ownerAccess: true }, { machineId: 'b' }), false);
+    await assert.rejects(assertReady({ evidenceDir: dir, configFile: '' }));
+    return { passed: true };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.umask(0o077);
