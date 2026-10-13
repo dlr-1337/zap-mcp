@@ -1,91 +1,70 @@
 ---
 phase: 04-opera-o-e-restaura-o-na-vps
-reviewed: 2026-10-13T03:47:27Z
+reviewed: 2026-10-13T17:32:43Z
 depth: standard
-files_reviewed: 30
+files_reviewed: 4
 files_reviewed_list:
-  - .dockerignore
-  - .env.example
-  - Dockerfile
-  - README.md
-  - ops/README.md
-  - ops/compose.example.yml
-  - ops/verify-dependencies.mjs
-  - ops/zap-container-control.mjs
+  - scripts/phase4-acceptance.mjs
+  - test/operation-acceptance.test.ts
+  - scripts/phase2-acceptance.mjs
   - scripts/phase3-acceptance.mjs
-  - scripts/phase4-deploy.mjs
-  - scripts/phase4-environment.mjs
-  - src/auth.ts
-  - src/backup.ts
-  - src/main.ts
-  - src/mcp.ts
-  - src/media.ts
-  - src/offsite.ts
-  - src/operation.ts
-  - src/promotion.ts
-  - src/transport.ts
-  - src/whatsapp.ts
-  - test/collector.test.ts
-  - test/deploy.test.ts
-  - test/environment.test.ts
-  - test/mcp-acceptance.test.ts
-  - test/media.test.ts
-  - test/offsite.test.ts
-  - test/operation.test.ts
-  - test/promotion.test.ts
-  - test/transport.test.ts
 findings:
-  critical: 0
+  critical: 4
   warning: 0
   info: 0
-  total: 0
-status: clean
+  total: 4
+status: issues_found
 ---
 
-# Phase 4: Code Review Report
+# Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-13T03:47:27Z
+**Reviewed:** 2026-10-13T17:32:43Z
 **Depth:** standard
-**Files Reviewed:** 30
-**Status:** clean
-**Source HEAD:** ad9942b05633ac12b062072e83b28e07f97c07ce
-**Re-review:** terceira rodada, após correção CR-05 em ad9942b.
+**Files Reviewed:** 4
+**Status:** issues_found
 
 ## Summary
 
-Mantido exatamente o escopo de 30 arquivos da revisão original. As leituras completas e os rastreamentos das rodadas anteriores foram preservados para os 27 arquivos sem alterações nesta rodada. O helper atual foi novamente lido integralmente; o diff de helper, testes e documentação foi examinado junto aos chamadores de inventário/deployment/recovery e às validações de supervisor, sessão e armazenamento. Os relatórios do fixer foram tratados como alegações, verificadas contra a fonte e não como prova de correção.
+Revisão adversarial dos quatro arquivos explicitamente delimitados, na fonte 3065b55. O fluxo operacional mantém observações em WeakMap e rejeita recibos serializados, mas alguns gates ainda registram conclusões mais fortes do que as evidências verificadas. Há também exposição de fingerprints no recibo anterior e perda de configuração MCP durante seu cleanup.
 
-Não restam achados comprováveis de bug, segurança ou robustez nesse escopo e profundidade. As seis ocorrências das rodadas anteriores estão corrigidas; nenhum novo BLOCKER ou WARNING foi identificado. `clean` descreve somente esta revisão do código, sem concluir requisitos OPS ou validar a operação real.
+A revisão histórica de 30 arquivos registrava como resolvidos os problemas de retry de cifragem, retomada de release antiga, dependência de HTTPS no recovery, divergência helper/volume, mutex após estado inválido e binding do container. Esse histórico não representa uma revisão desses 30 arquivos nesta rodada.
+
+Somente fontes e dependências diretas necessárias foram examinadas. Não houve acesso a dados reais, VPS, configurações globais ou diretórios privados de deploy. Os 307 testes/CI informados pelo orquestrador não foram usados como prova de correção. Não foram fornecidos structural findings nem evidência externa.
 
 ## Narrative Findings (AI reviewer)
 
-Nenhum achado aberto. Os caminhos conectados dos achados anteriores foram conferidos:
+## Critical Issues
 
-| Ocorrência anterior | Conferência da correção |
-|---|---|
-| CR-01 — retry após falha de cifragem | produceOffsiteCopy reconhece o snapshot existente e confere intenção, perfil, manifesto e journal antes de cifrá-lo novamente sob mutex. Recupera retomada interrompida quando necessário; conserva ID, snapshot, publicação exclusiva e último bom. |
-| CR-02 — backup reativa release antiga | coordinatedSnapshot registra a release observada; resume passa journal.priorRelease ao helper e confere a retomada. recoverOperation rejeita release ativa divergente; swapRelease usa a release realmente anterior para fallback. |
-| CR-03 — recovery depende de HTTPS prévio | runDeployment(recover) usa assertRecoveryReady/inspect-runtime e valida binding/journal/schema antes de parar. Retoma código offline antes da validação HTTPS, registrando recovery-validation-failed se o endpoint continuar indisponível. Migrate/update mantêm assertReady completo. |
-| CR-04 — helper e volume divergentes | Driver/inventário exigem as mesmas referências canônicas e SSH/helper. Probe e respostas de controle passam por assertSupervisorFacts, que confere máquina, path hash, PID/contagem, modo, release e candidatos preparados. |
-| WR-01 — estado inválido retém mutex | loadState e seleção do ID estão dentro do try/finally imediatamente após acquireServiceLock; falha de leitura não sobrescreve estado inválido e a liberação da trava não depende da limpeza de temporários. |
-| CR-05 — inspect-runtime anuncia outro perfil | inspectContainers agora impõe Env único com ZAP_DATA_DIR canônico, único bind Source/Destination correspondente e recusa mounts extras graváveis ou que encubram o perfil. As invariantes estáticas de bind/origem/peer/rede/labels se aplicam a inspect, inspect-runtime, stop e start; apenas saúde/IP atual/versão do proxy dependem de inspect normal. |
+### CR-01: Gate de contexto do Codex ignora as mensagens e a navegação
 
-### Evidência independente desta rodada
+**Classification:** BLOCKER
+**File:** `scripts/phase4-acceptance.mjs:183`
+**Issue:** O probe exige uma chamada get_context para a referência conhecida, mas compara somente p.anchor com messageOracle. Não verifica p.messages, before, after, ordinal, anchorOrdinal nem os cursores; tampouco exige chamadas before/after. Um endpoint que retorna a âncora correta com messages vazio, mensagens de outra conversa ou navegação quebrada continua permitindo registrar permanentCodex/restoredCodex na linha 188. O teste operacional percorre a navegação do site e MCP sintético, mas não exercita essa validação do cliente instalado.
+**Fix:** Aplicar aqui o oráculo de janela/canonical order já implementado em scripts/phase3-acceptance.mjs:233-240: obter a conversa e posição canônicas do anchor por SQL, comparar todas as mensagens/metadados e partições before/after, exigir as chamadas de navegação quando houver vizinhos, e conferir argumentos e cursores consecutivos. Adicionar controles que preservem a âncora e corrompam somente mensagens/ordinais/direções; todos devem recusar o gate.
 
-Ensaio em memória chamou `control` e `assertSupervisorFacts` atuais, com runner Docker sintético. Container com Env apontando para o perfil A e mounts A+B foi recusado em **inspect, inspect-runtime, stop e start**, antes de qualquer comando mutante. Um container válido do perfil B, com machine-id read-only e tmpfs /tmp, continuou passando por inspect-runtime → start offline → stop quando somente o proxy estava ausente. Inspect normal recusou essa ausência, preservando seu contrato. Resultado observado: quatro ações negativas recusadas, zero mutações nesses casos e recuperação positiva permitida com ações sintéticas start/update/update/stop.
+### CR-02: Arquivos locais e substring de comando não comprovam entrega autenticada
 
-Também foram examinados os três testes CR-05 novos, incluindo as 18 mutações estáticas cruzadas com quatro ações, seus asserts de recusa anterior à mutação e o controle positivo de indisponibilidade exclusiva do proxy. Não houve enfraquecimento dos guards anteriores de UID não root, PID host, comando exato, allowlist, exclusividade ou validação do journal.
+**Classification:** BLOCKER
+**File:** `scripts/phase4-acceptance.mjs:173-184`
+**Issue:** A execução do downloader é inferida por command.includes(downloader), e a entrega por arquivos novos cujo tamanho/SHA coincide com o banco. Um comando bem-sucedido como `echo /synthetic/helper.mjs` satisfaz a primeira condição; um helper que copia os bytes do snapshot local satisfaz a segunda sem GET autenticado do endpoint permanente ou restaurado. A chamada get_attachment só confirma que um URL foi devolvido, não que ele foi consumido. O probe recebe o snapshot local e parâmetros de execução arbitrários, mas não observa/correlaciona tráfego de download. Portanto savedOriginals e os gates do Codex podem passar quando o caminho remoto de entrega falha. O teste sintético realizado nesta revisão confirmou a aceitação da substring por um echo.
+**Fix:** Construir um downloader controlado pelo driver, com argv/origin/IDs/destinos fixos e credencial recebida privadamente. Observar cada GET e seu término/status, identidade do anexo e bytes, correlacionando-os com o call get_attachment e o arquivo final, como a fase 3 faz em suas linhas 248-249. No endpoint remoto, usar observação confiável do proxy/helper ou um relay autenticado da execução, sem depender de declarações da ferramenta/modelo. Recusar no-op, cópia local, download de outro endpoint, arquivo parcial e IDs duplicados. Não registrar savedOriginals somente por existência/hash.
 
-HEAD e ausência de alterações nas fontes src/scripts/ops/test foram conferidos. A suíte padrão **257/257** no mesmo HEAD é evidência informada pelo parent; não foi repetida nesta revisão e não foi usada como substituto da análise. Diff sem erros de whitespace.
+### CR-03: Recibo público da fase 3 divulga fingerprints dos anexos
 
-### Limites
+**Classification:** BLOCKER
+**File:** `scripts/phase3-acceptance.mjs:43`
+**Issue:** publicReceipt inclui originals[].sha256 calculado a partir dos anexos reais. runAcceptance devolve esse objeto e o entrypoint o imprime no stdout na linha 293; esse canal pode alimentar logs ou artefatos públicos. Embora os arquivos privados de evidência tenham modo 0600, o recibo permite correlacionar conteúdo por fingerprint e contraria o limite de privacidade desta revisão. A fase 4 remove hashes do recibo, mas a fase 3 continua no escopo e pode ser executada diretamente. Um ensaio com arquivos exclusivamente sintéticos confirmou que o SHA é preservado no retorno público.
+**Fix:** Manter SHA e identificadores somente em evidence.json privado. No recibo allowlisted, substituir originals por contagem, bytes (se necessários) e um boolean de integridade verificada; remover sha256 do retorno e stdout. Acrescentar teste de privacidade da fase 3 com fingerprint sintético e conferir sua ausência em todo recibo serializado.
 
-Revisão read-only de fontes; apenas este REVIEW.md foi atualizado pelo reviewer. Sem alterações de implementação, commits, push, root/sudo, Docker real, rede externa, VPS, conta WhatsApp, Codex real, dados pessoais, sessões, chaves ou locators privados. Os ensaios usaram somente inventários fictícios em memória.
+### CR-04: Cleanup da fase 3 elimina a configuração MCP anterior
 
-Execução real 05-02, configuração/acesso/readback, supervisão e restauração na VPS continuam pendentes das provas operacionais. OPS-01/02/03/04 não estão concluídos por esta revisão, por fixtures ou pelo resultado da suíte local. Os relatórios e backups intermediários permanecem sob responsabilidade do parent.
+**Classification:** BLOCKER
+**File:** `scripts/phase3-acceptance.mjs:274-275`
+**Issue:** A linha 146 guarda originalConfig com WHERE key NOT LIKE 'mcp-%'. rotateMcpToken sobrescreve mcp-token-digest, mcp-generation e mcp-cursor-secret durante o ensaio; no finally, todas as entradas mcp-% são apagadas e apenas as demais restauradas. Se o clone offline já tinha um token válido, executar o aceite o revoga permanentemente, inclusive em falhas posteriores à rotação. Não há precondição exigindo ausência desses registros. A preservação do config.toml não preserva a autenticação do arquivo consultado.
+**Fix:** Capturar todas as linhas de web_config antes da rotação. Ao encerrar os listeners e revogar a credencial temporária, restaurar exatamente o conjunto original em uma transação; o token temporário deixará de ser válido porque seu digest/generation serão substituídos. Testar sucesso e falha após rotateMcpToken com configuração MCP sintética pré-existente, conferindo igualdade do banco e validade da credencial original após cleanup.
 
 ---
 
-_Reviewed: 2026-10-13T03:47:27Z_
-_Reviewer: gsd-code-reviewer_
+_Reviewed: 2026-10-13T17:32:43Z_
+_Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
