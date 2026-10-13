@@ -136,19 +136,44 @@ test('SIGKILL durante pull/publicação/readback mantém último bom e retoma me
 
 test('SIGKILL após ciphertext exclusivo reconcilia snapshot original sem falsa confirmação', async t => {
   const f = await fixture(t), m = await load();
-  for (const point of ['published', 'prepared']) {
+  for (const point of ['encrypt', 'publishing', 'published', 'prepared']) {
+    f.events.length = 0;
     const lastVerifiedAt = m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).lastVerifiedAt;
     const operationId = randomUUID();
     const script = `import{produceOffsiteCopy}from'./dist/src/offsite.js';let running=true;const controller={async stop(){running=false},async start(){running=true},async inspect(){return{running,autostart:false,pid:running?process.pid:0,startTime:null,machineId:'fixture',profileProcesses:running?1:0,mode:'offline'}}};await produceOffsiteCopy(JSON.parse(process.env.CONFIG),process.env.ID,{controller,fault:async p=>{if(p===process.env.POINT){console.log('ready');await new Promise(()=>setInterval(()=>{},1000))}}});`;
     const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, CONFIG: JSON.stringify(f.source), ID: operationId, POINT: point }, stdio: ['ignore', 'pipe', 'pipe'] }); t.after(() => child.kill('SIGKILL'));
     await new Promise<void>((accept, reject) => { const timer = setTimeout(() => { child.kill('SIGKILL'); reject(Error('producer timeout')); }, 5000); child.stdout.on('data', b => { if (String(b).includes('ready')) { clearTimeout(timer); accept(); } }); child.once('exit', c => { clearTimeout(timer); reject(Error('producer exited ' + c)); }); });
     const exit = once(child, 'exit'); child.kill('SIGKILL'); await exit;
+    const before = validateSnapshot(f.source.destination + '-' + operationId).digest;
     const result = await m.produceOffsiteCopy(f.source, operationId, { controller: f.controller }); assert.equal(result.receipt.operationId, operationId);
+    assert.equal(result.receipt.manifestHash, before); assert.deepEqual(f.events, [], 'retry não deve parar novamente a fonte');
     assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).lastVerifiedAt, lastVerifiedAt);
     const stateFile = join(f.pull.operationDir, 'offsite-state.json'); writeFileSync(stateFile, JSON.stringify({ version: 1, lastAttempt: null, operationId, result: 'pending', failedStage: null, safeFailureCode: null, lastVerifiedSuccess: null }), { mode: 0o600 });
     await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
     assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).result, 'success');
   }
+});
+
+test('cifragem transitória retoma snapshot original e mantém último bom imutável', async t => {
+  const f = await fixture(t), m = await load();
+  await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+  const path = join(f.pull.operationDir, 'offsite-state.json'), last = JSON.parse(readFileSync(path, 'utf8')).lastVerifiedSuccess;
+  const good = readFileSync(join(f.pull.destinationDir, last.operationId + '.age')); f.events.length = 0;
+  const cipher = m.createAgeCipher({ recipientFile: f.source.recipientFile, maxBytes: f.source.maxBytes });
+  let encrypts = 0, id: string | undefined, snapshotHash: string | undefined;
+  const transport = { ...adapter(m, f), async putNew(operationId: string, output: string) {
+    id ??= operationId; assert.equal(operationId, id);
+    const result = await m.produceOffsiteCopy(f.source, operationId, { controller: f.controller, cipher: { ...cipher, async encrypt(input: any, output: string, signal: AbortSignal) {
+      encrypts++; snapshotHash ??= validateSnapshot(f.source.destination + '-' + operationId).digest;
+      if (encrypts === 1) { input.destroy(); throw Error('transient encrypt failure'); }
+      await cipher.encrypt(input, output, signal);
+    } } });
+    assert.equal(result.receipt.manifestHash, snapshotHash); copyFileSync(result.file, output); chmodSync(output, 0o600);
+  } };
+  const result = await m.runOffsiteBackup(f.pull, { adapter: transport });
+  assert.equal(result.operationId, id); assert.equal(encrypts, 2); assert.deepEqual(f.events, ['stop', 'resume']);
+  assert.deepEqual(readFileSync(join(f.pull.destinationDir, last.operationId + '.age')), good);
+  assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).result, 'success');
 });
 
 test('pacote age recusa arquivo fora da allowlist symlink duplicata replay e destino ocupado', async t => {

@@ -8,15 +8,16 @@ import { pipeline } from 'node:stream/promises';
 import { ZipFile } from 'yazl';
 import yauzl from 'yauzl';
 import Database from 'better-sqlite3';
-import { coordinatedSnapshot, recoverOperation, privateFile, readPrivateJson, atomicPrivateJson, type OperationConfig, type Controller } from './operation.js';
-import { validateSnapshot, restoreSnapshot } from './backup.js';
+import { coordinatedSnapshot, recoverOperation, acquireOperation, privateFile, readPrivateJson, atomicPrivateJson, type OperationConfig, type Controller } from './operation.js';
+import { validateSnapshot, restoreSnapshot, profileReadonly } from './backup.js';
 import { acquireServiceLock } from './whatsapp.js';
 
 type Budget = { maxBytes: number; reserveBytes: number; maxFiles?: number };
 export type SourceOffsiteConfig = OperationConfig & Budget & { role: 'source'; recipientFile: string; recoveryFiles?: Partial<Record<RecoveryName, string>> };
 export type PullOffsiteConfig = Budget & { role: 'pull'; operationDir: string; destinationDir: string; identityFile: string; remote?: { host: string; user: string; port?: number; identityFile: string; knownHostsFile: string; nodePath: string; mainPath: string; configFile: string; dataDir: string } };
 type Receipt = { version: 1; operationId: string; snapshotCreatedAt: string; manifestHash: string; cipherHash: string };
-type State = { version: 1; lastAttempt: string | null; operationId: string | null; result: 'pending' | 'success' | 'failed'; failedStage: string | null; safeFailureCode: string | null; lastVerifiedSuccess: (Receipt & { verifiedAt: string }) | null; pending?: Receipt };
+type SnapshotIntent = { operationId: string; source: string; destination: string; profile: string; manifestHash: string };
+type State = { version: 1; lastAttempt: string | null; operationId: string | null; result: 'pending' | 'success' | 'failed'; failedStage: string | null; safeFailureCode: string | null; lastVerifiedSuccess: (Receipt & { verifiedAt: string }) | null; pending?: Receipt; snapshotIntent?: SnapshotIntent };
 type RecoveryName = 'promotion-state.json' | 'promotion-key.json' | 'promotion-receipt.json' | 'source-fence.json' | 'source-public-key.json';
 const recoveryNames: RecoveryName[] = ['promotion-state.json', 'promotion-key.json', 'promotion-receipt.json', 'source-fence.json', 'source-public-key.json'];
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -129,16 +130,42 @@ export async function produceOffsiteCopy(config: SourceOffsiteConfig, operationI
   const destination = config.destination + '-' + operationId;
   const precheck = () => { const measured = measure(privateFile(config.dataDir, true)); if (measured.bytes > config.maxBytes || measured.files > (config.maxFiles ?? 10000)) throw Object.assign(Error('Orçamento insuficiente'), { code: 'ENOSPC' }); space(dirname(destination), config.maxBytes * 3, measured.files * 3, config.reserveBytes); space(config.operationDir, config.maxBytes * 2, 8, config.reserveBytes); };
   try { precheck(); } catch (error) { const lock = acquireServiceLock(config.operationDir); try { const state = loadState(config.operationDir); state.lastAttempt = new Date().toISOString(); state.operationId = operationId; state.result = 'failed'; state.failedStage = 'capacity'; state.safeFailureCode = failureCode(error, 'capacity'); saveState(config.operationDir, state); } finally { lock.release(); } throw error; }
-  await coordinatedSnapshot({ ...config, destination }, { controller, fault: async stage => { if (stage === 'intended') { precheck(); const state = loadState(config.operationDir); state.lastAttempt = new Date().toISOString(); state.operationId = operationId; state.result = 'pending'; state.failedStage = null; state.safeFailureCode = null; saveState(config.operationDir, state); } }, transfer: async snapshotDir => {
+  const encryptSnapshot = async (snapshotDir: string) => {
     const state = loadState(config.operationDir); state.lastAttempt = new Date().toISOString(); state.operationId = operationId; state.result = 'pending'; state.failedStage = null; state.safeFailureCode = null; saveState(config.operationDir, state);
-    const temp = join(config.operationDir, '.cipher-' + randomUUID());
+    const verified = validateSnapshot(snapshotDir);
+    const intent = { operationId, source: resolve(config.dataDir), destination: resolve(snapshotDir), profile: verified.manifest.profile, manifestHash: verified.digest };
+    if (state.snapshotIntent?.operationId === operationId && JSON.stringify(state.snapshotIntent) !== JSON.stringify(intent)) throw Error('Intenção de snapshot divergente');
+    state.snapshotIntent = intent; saveState(config.operationDir, state);
+    const temp = join(config.operationDir, '.cipher-' + operationId);
+    // Only the mutex owner can reclaim a temp left by a killed encrypt for this ID.
+    if (existsSync(temp)) { safeRegular(temp); rmSync(temp); }
     try { const pkg = packageSnapshot(snapshotDir, operationId, config); await fault?.('encrypt'); await cipher.encrypt(pkg.input, temp, AbortSignal.timeout(120_000));
       if (validateSnapshot(snapshotDir).digest !== pkg.metadata.manifestHash) throw Error('Snapshot mudou durante cifragem');
       receipt = { version: 1, operationId, snapshotCreatedAt: pkg.metadata.snapshotCreatedAt, manifestHash: pkg.metadata.manifestHash, cipherHash: await digest(temp) };
       await fault?.('publishing'); publish(temp, file); await fault?.('published'); atomicPrivateJson(descriptor, receipt); state.pending = receipt; saveState(config.operationDir, state); await fault?.('prepared');
     } catch (error) { failed = error; state.result = 'failed'; state.failedStage = 'encrypt'; state.safeFailureCode = failureCode(error, 'encrypt'); saveState(config.operationDir, state); }
     finally { if (existsSync(temp)) rmSync(temp); }
-  } });
+  };
+  if (existsSync(destination)) {
+    const operationConfig = { ...config, destination };
+    let operation = acquireOperation(operationConfig, true);
+    try {
+      const state = loadState(config.operationDir), journal = operation.prior;
+      if (state.operationId !== operationId || !journal || journal.kind !== 'backup' || journal.destination !== resolve(destination) || !['snapshotted', 'resumed', 'completed', 'recovered'].includes(journal.stage)) throw Error('Snapshot sem intenção reconciliável');
+      const snapshot = validateSnapshot(destination);
+      safeRegular(join(config.dataDir, 'auth.sqlite'));
+      const auth = new Database(join(config.dataDir, 'auth.sqlite'), { readonly: true, fileMustExist: true });
+      try { if (profileReadonly(auth) !== snapshot.manifest.profile) throw Error('Snapshot de outro perfil'); } finally { auth.close(); }
+      // A crash may precede resume; reconcile the journal before encryption, without taking another snapshot.
+      if (!['completed', 'recovered'].includes(journal.stage)) {
+        operation.release(); await recoverOperation(operationConfig, { controller }); operation = acquireOperation(operationConfig, true);
+      }
+      await encryptSnapshot(destination);
+      const recovered = operation.prior!; recovered.stage = 'completed'; operation.save(recovered);
+    } finally { operation.release(); }
+  } else {
+    await coordinatedSnapshot({ ...config, destination }, { controller, fault: async stage => { if (stage === 'intended') { precheck(); const state = loadState(config.operationDir); state.lastAttempt = new Date().toISOString(); state.operationId = operationId; state.result = 'pending'; state.failedStage = null; state.safeFailureCode = null; saveState(config.operationDir, state); } }, transfer: encryptSnapshot });
+  }
   if (failed) throw failed; if (!receipt) throw Error('Ciphertext ausente'); return { file, receipt };
 }
 export async function acknowledgeOffsiteCopy(config: SourceOffsiteConfig, receipt: Receipt) {
