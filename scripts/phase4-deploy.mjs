@@ -11,11 +11,12 @@ import { request as httpRequest } from 'node:http';
 import { once } from 'node:events';
 import Database from 'better-sqlite3';
 import { createService } from '../dist/src/main.js';
-import { createAuthState } from '../dist/src/whatsapp.js';
+import { createAuthState, acquireServiceLock } from '../dist/src/whatsapp.js';
+import { setOwnerPassword } from '../dist/src/auth.js';
 import { startMediaWorker } from '../dist/src/media.js';
 import { privateFile, readPrivateJson, atomicPrivateJson, acquireOperation, newJournal, createSupervisor, assertQuiet, assertSupervisorFacts, coordinatedSnapshot } from '../dist/src/operation.js';
 import { createSnapshot, validateSnapshot } from '../dist/src/backup.js';
-import { createSourceFence } from '../dist/src/promotion.js';
+import { createSourceFence, assertPromotionAuthorization, verifyPromotionFence } from '../dist/src/promotion.js';
 import { readOffsiteConfig, runOffsiteBackup, produceOffsiteCopy, acknowledgeOffsiteCopy } from '../dist/src/offsite.js';
 import { assertReady, assertRecoveryReady } from './phase4-environment.mjs';
 import { Readable } from 'node:stream';
@@ -80,17 +81,22 @@ export async function swapRelease(config, { controller, ready, backup, state = (
   }
 }
 
-function tlsCall(origin, path, { ca, password, cookie, csrfToken, method = 'GET', body, headers = {} } = {}) {
+export function tlsCall(origin, path, { ca, cookie, method = 'GET', body, headers = {}, expectedBytes, timeoutMs = 30000 } = {}) {
+  assert.ok(expectedBytes === undefined || Number.isSafeInteger(expectedBytes) && expectedBytes >= 0);
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 30 * 60 * 1000);
   return new Promise((accept, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = tlsRequest(origin + path, { ca, rejectUnauthorized: true, method, headers: { ...(payload ? { 'Content-Type': 'application/json' } : {}), ...headers, ...(cookie ? { Cookie: cookie } : {}) } }, res => {
-      const bytes = []; let size = 0;
-      res.on('data', chunk => { size += chunk.length; if (size > 32 * 1024 * 1024) res.destroy(Error('probe_limit')); else bytes.push(chunk); });
-      res.on('error', reject); res.on('end', () => accept({ status: res.statusCode, headers: res.headers, bytes: Buffer.concat(bytes) }));
-    }); req.on('error', reject); req.setTimeout(15000, () => req.destroy(Error('probe_timeout'))); req.end(payload);
+      const bytes = expectedBytes === undefined ? [] : undefined, hash = bytes ? undefined : createHash('sha256'); let size = 0;
+      res.on('data', chunk => { size += chunk.length; if (!Number.isSafeInteger(size) || size > (expectedBytes ?? 32 * 1024 * 1024)) { reject(Error('probe_limit')); res.destroy(); } else if (bytes) bytes.push(chunk); else hash.update(chunk); });
+      res.on('aborted', () => reject(Error('probe_incomplete'))); res.on('error', reject);
+      res.on('end', () => expectedBytes !== undefined && size !== expectedBytes ? reject(Error('probe_size')) : accept({ status: res.statusCode, headers: res.headers, size, ...(bytes ? { bytes: Buffer.concat(bytes) } : { sha256: hash.digest('hex') }) }));
+    });
+    const deadline = setTimeout(() => req.destroy(Error('probe_timeout')), timeoutMs);
+    req.once('close', () => clearTimeout(deadline)); req.on('error', reject); req.setTimeout(15000, () => req.destroy(Error('probe_timeout'))); req.end(payload);
   });
 }
-async function verifyHttps(origin, password, originals, ca) {
+export async function verifyHttps(origin, password, originals, ca) {
   const challenge = await tlsCall(origin, '/api/session', { ca }); assert.equal(challenge.status, 200);
   const cookie = challenge.headers['set-cookie'][0].split(';')[0], csrf = JSON.parse(challenge.bytes).csrfToken;
   const login = await tlsCall(origin, '/login', { ca, cookie, method: 'POST', headers: { Origin: origin }, body: { password, csrfToken: csrf } });
@@ -98,12 +104,34 @@ async function verifyHttps(origin, password, originals, ca) {
   const ownerCookie = login.headers['set-cookie'][0].split(';')[0];
   const status = await tlsCall(origin, '/api/status', { ca, cookie: ownerCookie }); assert.equal(status.status, 200); assert.equal(JSON.parse(status.bytes).collectorEnabled, false);
   for (const file of originals) {
+    assert.match(file.id, /^[0-9a-f-]{36}$/); assert.ok(Number.isSafeInteger(file.size) && file.size >= 0); assert.match(file.sha256, /^[0-9a-f]{64}$/);
     const path = '/api/attachments/' + file.id;
     assert.equal((await tlsCall(origin, path, { ca })).status, 401);
-    const response = await tlsCall(origin, path, { ca, cookie: ownerCookie }); assert.equal(response.status, 200); assert.equal(response.bytes.length, file.size); assert.equal(digest(response.bytes), file.sha256);
-    if (file.size) assert.equal((await tlsCall(origin, path, { ca, cookie: ownerCookie, headers: { Range: 'bytes=0-0' } })).status, 206);
+    assert.equal((await tlsCall(origin, path, { ca, method: 'HEAD' })).status, 401);
+    const head = await tlsCall(origin, path, { ca, cookie: ownerCookie, method: 'HEAD' }); assert.equal(head.status, 200); assert.equal(head.headers['content-length'], String(file.size));
+    // Bound the stream by the manifest; budget 256 KiB/s plus setup, with an absolute deadline.
+    const timeoutMs = Math.min(30 * 60 * 1000, 30000 + Math.ceil(file.size / (256 * 1024)) * 1000);
+    const response = await tlsCall(origin, path, { ca, cookie: ownerCookie, expectedBytes: file.size, timeoutMs }); assert.equal(response.status, 200); assert.equal(response.size, file.size); assert.equal(response.sha256, file.sha256);
+    if (file.size) { const range = await tlsCall(origin, path, { ca, cookie: ownerCookie, expectedBytes: 1, headers: { Range: 'bytes=0-0' } }); assert.equal(range.status, 206); assert.equal(range.headers['content-range'], 'bytes 0-0/' + file.size); }
   }
   return true;
+}
+
+export async function rotateRestoredOwner(config, password, { controller = createSupervisor(config.supervisor), sourceController } = {}) {
+  assert.equal(config.dataDir, resolve(config.dataDir)); assert.equal(config.supervisor.dataDir, config.dataDir);
+  const quiet = async () => { const facts = await controller.inspect(); assert.equal(facts.machineId, config.supervisor.machineId); if (config.supervisor.helperPath) assertSupervisorFacts(config.supervisor, facts); assertQuiet(facts, true); };
+  await quiet(); const lock = acquireServiceLock(privateFile(config.dataDir, true)); let db;
+  try {
+    db = new Database(privateFile(join(config.dataDir, 'auth.sqlite')), { fileMustExist: true }); db.pragma('synchronous=FULL');
+    const proof = assertPromotionAuthorization(config.dataDir, db);
+    if (!proof.sourceFence) await verifyPromotionFence(proof.source, sourceController);
+    const before = profileState(config.dataDir); await setOwnerPassword(db, password); lock.assert();
+    assert.deepEqual(assertPromotionAuthorization(config.dataDir, db), proof);
+    const after = profileState(config.dataDir); after.databases['auth.sqlite'].web_owner = before.databases['auth.sqlite'].web_owner;
+    assert.deepEqual(after, before, 'owner rotation changed archive/WhatsApp session/originals');
+    if (!proof.sourceFence) await verifyPromotionFence(proof.source, sourceController);
+    await quiet(); lock.assert(); return { rotated: true };
+  } finally { db?.close(); lock.release(); }
 }
 
 // Only fixed task names and allowlisted paths reach the remote process; no shell command from config.
@@ -145,6 +173,12 @@ async function remoteTask(task, input) {
     const c = operation.readPrivateJson(input.promotionConfigFile); if (c.dataDir !== input.dataDir || c.snapshotDir !== input.snapshotDir) throw Error('promotion_config_mismatch');
     const promotion = await import(url.pathToFileURL(path.join(input.appRoot, 'dist/src/promotion.js')).href); await promotion.promoteProfile(c); return { promoted: true };
   }
+  if (task === 'rotate-owner') {
+    const c = operation.readPrivateJson(input.promotionConfigFile);
+    if (c.dataDir !== input.dataDir || c.snapshotDir !== input.snapshotDir || c.supervisor.machineId !== input.machineId || c.supervisor.helperPath !== input.helperPath) throw Error('promotion_config_mismatch');
+    let password = ''; process.stdin.setEncoding('utf8'); for await (const chunk of process.stdin) { password += chunk; if (Buffer.byteLength(password) > 4098) throw Error('password_rejected'); }
+    const mod = await import(url.pathToFileURL(path.join(input.appRoot, 'scripts/phase4-deploy.mjs')).href); return mod.rotateRestoredOwner(c, password.replace(/\r?\n$/, ''));
+  }
   if (task === 'fence') {
     const c = operation.readPrivateJson(input.promotionConfigFile);
     if (c.sourceFencePublicKey !== input.publicKey || c.dataDir !== input.dataDir || c.snapshotDir !== input.snapshotDir) throw Error('source_anchor_mismatch');
@@ -155,6 +189,7 @@ async function remoteTask(task, input) {
 }
 function validateConfig(config, recovery = false) {
   assert.equal(config.version, 1); privateFile(config.operationDir, true); privateFile(config.environmentFile); if (!recovery) privateFile(config.pullConfigFile); privateFile(config.ownerPasswordFile);
+  assert.ok(config.rotateOwnerOnMigration === undefined || typeof config.rotateOwnerOnMigration === 'boolean');
   const r = config.target; for (const p of ['dataDir', 'appRoot', 'nodePath', 'helperPath', 'snapshotDir', 'promotionConfigFile']) absolute(r[p]);
   assert.match(r.helperPath, /^\/usr\/local\/libexec\/[A-Za-z0-9_.-]+$/);
   assert.match(r.host, /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/); assert.match(r.user, /^[a-z_][a-z0-9_-]*$/); privateFile(r.identityFile); privateFile(r.knownHostsFile);
@@ -242,6 +277,7 @@ export async function runDeployment(mode, { configFile = process.env.ZAP_OPERATI
     assert.equal(fence.publicKey, config.sourceFencePublicKey);
     await rpc(config, 'fence', { publicKey: fence.publicKey, signedFence: readPrivateJson(fence.fenceFile) });
     await rpc(config, 'restore'); await rpc(config, 'promote');
+    if (config.rotateOwnerOnMigration) { assertQuiet(await controller.inspect(), true); await rpc(config, 'rotate-owner', {}, createReadStream(config.ownerPasswordFile)); assertQuiet(await controller.inspect(), true); }
     await controller.activate(config.candidateRelease, 'offline'); const state = await rpc(config, 'state'); await verifyHttps(config.publicOrigin, password, state.originals);
     await runOffsiteBackup(pull); // actual VPS -> notebook copy and current decrypt/readback ACK
     atomicPrivateJson(journalPath, { version: 1, kind: 'migration', stage: 'migration-offline', snapshot, startedAt: new Date().toISOString() });

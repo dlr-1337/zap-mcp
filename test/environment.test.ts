@@ -36,6 +36,17 @@ test('SSH usa identidade conhecida, sem aceitar chaves ou executar argv livres',
   assert.throws(() => api.probeCommand({ kind: 'ssh', host: '-oProxyCommand=bad' }, {}));
 });
 
+test('fonte local aceita caminho canônico com espaços sem aceitar path remoto inseguro', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-environment-space-')); t.after(() => rmSync(dir, { recursive: true }));
+  const source = { kind: 'local', machineId: 'a'.repeat(32), dataDir: '/home/owner/private archive', appRoot: '/home/owner/project 2' };
+  assert.doesNotThrow(() => api.validateConfig({ evidenceDir: dir, source }));
+  for (const appRoot of ['/home/owner/project 2/../other', '/home/owner/project 2/./', '/home/owner/project 2\n', '/home/owner/project $(id)', 'relative/project']) assert.throws(() => api.validateConfig({ evidenceDir: dir, source: { ...source, appRoot } }));
+  const key = join(dir, 'identity'), known = join(dir, 'known'); for (const path of [key, known]) writeFileSync(path, 'fixture', { mode: 0o600 });
+  const remote = { ...source, kind: 'ssh', host: 'fixture.invalid', user: 'owner', identityFile: key, knownHostsFile: known };
+  assert.throws(() => api.validateConfig({ evidenceDir: dir, source: remote }));
+  assert.throws(() => api.probeCommand({ ...remote, nodePath: '/home/owner/node 24' }, {}));
+});
+
 test('reserva exige acervo, cinco cópias, fila ZIP e inodes atuais', () => {
   const capacity = api.capacityRequired?.({ archiveBytes: 1000, archiveFiles: 8, queueZipBytes: 200, queueZipFiles: 2, availableBytes: 300_000_000, availableInodes: 100 });
   assert.equal(capacity?.sufficient, true);

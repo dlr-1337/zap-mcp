@@ -23,6 +23,7 @@ function requirePrivate(path, directory = false) {
   assert.equal(st.uid, process.getuid()); return canonical;
 }
 function safePath(path) { assert.ok(typeof path === 'string' && /^\/[A-Za-z0-9_./-]+$/.test(path) && !path.split('/').includes('..')); return path; }
+function localPath(path) { assert.ok(typeof path === 'string' && /^\/[A-Za-z0-9_./ -]+$/.test(path) && path === resolve(path)); return path; }
 function safeHost(host) { assert.ok(typeof host === 'string' && /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host)); return host; }
 export function validateConfig(config) {
   assert.ok(config && typeof config === 'object' && !Array.isArray(config));
@@ -39,7 +40,7 @@ export function validateConfig(config) {
       requirePrivate(host.knownHostsFile); requirePrivate(host.identityFile);
       assert.ok(Number.isInteger(host.port ?? 22) && (host.port ?? 22) > 0 && (host.port ?? 22) <= 65535);
     }
-    if (key !== 'offsite') { safePath(host.dataDir); safePath(host.appRoot); assert.ok(!inside(host.dataDir, host.appRoot)); }
+    if (key !== 'offsite') { const checkPath = host.kind === 'local' ? localPath : safePath; checkPath(host.dataDir); checkPath(host.appRoot); assert.ok(!inside(host.dataDir, host.appRoot)); }
   }
   if (config.publicOrigin) { const u = new URL(config.publicOrigin); assert.ok(u.protocol === 'https:' && u.origin === config.publicOrigin && !u.username && !u.password); }
   if (config.proxy) { assert.ok(['nginx', 'caddy', 'traefik'].includes(config.proxy.kind)); safePath(config.proxy.configFile); assert.ok(typeof config.proxy.expectedConfigDigest === 'string' && /^[a-f0-9]{64}$/.test(config.proxy.expectedConfigDigest)); }

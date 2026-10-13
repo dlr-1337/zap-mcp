@@ -8,8 +8,12 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:https';
 import { createServer as portProbe } from 'node:net';
 import { once } from 'node:events';
+import { Readable } from 'node:stream';
 import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
+import { startMediaWorker } from '../src/media.js';
+import { createSnapshot, restoreSnapshot } from '../src/backup.js';
+import { promoteProfile, assertPromotionAuthorization } from '../src/promotion.js';
 import { assertSupervisorFacts } from '../src/operation.js';
 
 const driver = '../../scripts/phase4-deploy.mjs';
@@ -57,12 +61,20 @@ test('falha no backup ou gate atual impede qualquer troca de código', async t =
   }
 });
 
-async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 'stopped', listener = true) {
+async function recoveryFixture(t: { after(fn: () => unknown): void }, stage = 'stopped', listener = true, originalSize = 0) {
   const m = await load(), base = mkdtempSync(join(tmpdir(), 'zap-deploy-recovery-'));
   const operationDir = join(base, 'operations'), evidenceDir = join(base, 'evidence'), dataDir = join(base, 'data');
   for (const p of [operationDir, evidenceDir]) mkdirSync(p, { mode: 0o700 });
   const original = createService({ dataDir }); createAuthState(original.authDb, { newProfile: true }); await original.setPassword('fixture recovery password');
-  original.archive.ingestUpsert({ type: 'notify', messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'recent', fromMe: false }, messageTimestamp: 1700000000, message: { conversation: 'recent record survives code recovery' } }] }); await original.close();
+  original.archive.ingestUpsert({ type: 'notify', messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'recent', fromMe: false }, messageTimestamp: 1700000000, message: { conversation: 'recent record survives code recovery' } }] });
+  if (originalSize) {
+    const chunk = Buffer.alloc(64 * 1024, 0x61), hash = createHash('sha256');
+    function* bytes() { for (let remaining = originalSize; remaining > 0; remaining -= chunk.length) yield chunk.subarray(0, Math.min(remaining, chunk.length)); }
+    for (const part of bytes()) hash.update(part);
+    original.archive.ingestUpsert({ type: 'notify', messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'large', fromMe: false }, messageTimestamp: 1700000000, message: { documentMessage: { url: 'https://mmg.whatsapp.net/fixture', mediaKey: Buffer.alloc(32), fileLength: originalSize, fileSha256: hash.digest(), fileName: 'large.bin' } } }] });
+    const worker = startMediaWorker({ archive: original.archive, mediaDir: join(dataDir, 'media'), downloadOriginal: async () => Readable.from(bytes()) }); await worker.drain(); await worker.stop();
+  }
+  await original.close();
   const baseline = m.profileState(dataDir), probe = portProbe(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening'); const port = (probe.address() as any).port; await new Promise<void>(yes => probe.close(() => yes()));
   const origin = 'https://localhost:' + port, cert = join(base, 'cert'), key = join(base, 'key');
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { stdio: 'ignore' });
@@ -106,6 +118,62 @@ test('recover retoma listener ausente e journal stopped sem exigir HTTPS/backup 
     assert.equal(result.validated, true); assert.deepEqual(f.m.profileState(f.dataDir), f.baseline);
     assert.ok(f.actions.includes('start')); assert.equal(JSON.parse(readFileSync(f.journalPath, 'utf8')).stage, 'recovered-offline');
   }
+});
+
+test('HTTPS verifica original acima de 32 MiB por stream e rejeita tamanho/hash divergente', async t => {
+  const f = await recoveryFixture(t, 'stopped', true, 33 * 1024 * 1024 + 17);
+  assert.equal(f.baseline.originals.length, 1);
+  assert.equal((await f.m.runDeployment('recover', f)).validated, true);
+  assert.equal(typeof f.m.verifyHttps, 'function');
+  const file = f.baseline.originals[0];
+  await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [{ ...file, size: file.size - 1 }], f.ca));
+  await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [{ ...file, size: file.size + 1 }], f.ca));
+  await assert.rejects(f.m.verifyHttps(f.config.publicOrigin, 'fixture recovery password', [{ ...file, sha256: '0'.repeat(64) }], f.ca));
+});
+
+test('probe HTTP streaming limita bytes e prazo absoluto mesmo com atividade contínua', async t => {
+  const f = await recoveryFixture(t, 'stopped', false), m = f.m;
+  assert.equal(typeof m.tlsCall, 'function');
+  const dir = join(f.dataDir, '..'), server = createServer({ key: readFileSync(join(dir, 'key')), cert: f.ca }, (_req, res) => {
+    res.writeHead(200); const timer = setInterval(() => res.write('a'), 5); res.on('close', () => clearInterval(timer));
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); });
+  const origin = 'https://localhost:' + (server.address() as any).port;
+  await assert.rejects(m.tlsCall(origin, '/', { ca: f.ca, expectedBytes: 1, timeoutMs: 1000 }), /probe_limit/);
+  await assert.rejects(m.tlsCall(origin, '/', { ca: f.ca, expectedBytes: 1000, timeoutMs: 40 }), /probe_timeout/);
+});
+
+test('rotação explícita após promoção muda somente owner do destino parado', async t => {
+  const m = await load(), base = mkdtempSync(join(tmpdir(), 'zap-deploy-owner-')); t.after(() => rmSync(base, { recursive: true }));
+  const source = join(base, 'source'), dataDir = join(base, 'target'), snapshotDir = join(base, 'snapshot'), operationDir = join(base, 'operations'); mkdirSync(operationDir, { mode: 0o700 });
+  const service = createService({ dataDir: source });
+  createAuthState(service.authDb, { newProfile: true }).state.keys.set({ session: { fixture: Buffer.from('WA session stays original') } }); await service.setPassword('original owner fixture'); await service.close();
+  const sourceBefore = m.profileState(source); await createSnapshot({ dataDir: source, destination: snapshotDir }); await restoreSnapshot({ snapshotDir, destination: dataDir });
+  const machineId = '0'.repeat(32), supervisor = { kind: 'systemd', name: 'fixture.service', dataDir, machineId }, facts = { running: false, autostart: false, pid: 0, startTime: null, profileProcesses: 0, mode: 'offline', machineId };
+  const controller = { async inspect() { return { ...facts }; } }, config = { dataDir, operationDir, destination: snapshotDir, snapshotDir, verificationDir: join(base, 'verified'), priorMode: 'offline', priorRelease: 'fixture', supervisor, source: { ...supervisor, dataDir: source } };
+  assert.equal(typeof m.rotateRestoredOwner, 'function');
+  const targetBefore = m.profileState(dataDir);
+  await assert.rejects(m.rotateRestoredOwner(config, 'new owner fixture', { controller, sourceController: controller }), /promoção|promotion/i);
+  assert.deepEqual(m.profileState(dataDir), targetBefore);
+  await promoteProfile(config as any, { sourceController: controller as any, targetController: controller as any });
+  facts.autostart = true; await assert.rejects(m.rotateRestoredOwner(config, 'new owner fixture', { controller, sourceController: controller })); facts.autostart = false;
+  assert.deepEqual(m.profileState(dataDir), targetBefore);
+  await m.rotateRestoredOwner(config, 'new owner fixture', { controller, sourceController: controller });
+  const targetAfter = m.profileState(dataDir); assert.notEqual(targetAfter.databases['auth.sqlite'].web_owner, sourceBefore.databases['auth.sqlite'].web_owner);
+  targetAfter.databases['auth.sqlite'].web_owner = targetBefore.databases['auth.sqlite'].web_owner;
+  assert.deepEqual(targetAfter, targetBefore); assert.deepEqual(m.profileState(source), sourceBefore);
+  const key = join(base, 'key'), cert = join(base, 'cert');
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { stdio: 'ignore' });
+  let restored: ReturnType<typeof createService> | undefined;
+  const server = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (req, res) => { req.headers['x-forwarded-proto'] = 'https'; restored!.app(req, res); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening'); const origin = 'https://localhost:' + (server.address() as any).port;
+  try {
+    restored = createService({ dataDir, transport: { mode: 'proxy', publicOrigin: origin, trustedProxyPeers: ['127.0.0.1'] } });
+    assert.doesNotThrow(() => assertPromotionAuthorization(dataDir, restored!.authDb));
+    await m.verifyHttps(origin, 'new owner fixture', [], readFileSync(cert));
+    await assert.rejects(m.verifyHttps(origin, 'original owner fixture', [], readFileSync(cert)));
+  } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); await restored?.close(); }
 });
 
 test('recover registra validação HTTPS falha depois de retomar código offline', async t => {
