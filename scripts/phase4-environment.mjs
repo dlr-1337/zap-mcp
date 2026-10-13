@@ -86,8 +86,10 @@ async function hostProbe(scope) {
     };
     await measure(scope.dataDir); out.archive = { bytes, files, measuredAt: new Date().toISOString() };
     out.processes = [];
+    const fsSync = await import('node:fs'), uid = process.getuid();
     for (const pid of (await fs.readdir('/proc')).filter(p => /^\d+$/.test(p))) {
       try {
+        if (fsSync.statSync('/proc/' + pid).uid !== uid) continue;
         const argv = (await fs.readFile('/proc/' + pid + '/cmdline', 'utf8')).split('\0');
         if (argv.some(a => a === path.join(scope.appRoot, 'dist/src/main.js')) || argv.includes('dist/src/main.js') && await fs.readlink('/proc/' + pid + '/cwd') === scope.appRoot) {
           out.processes.push({ pid: Number(pid), collect: argv.includes('--collect') });

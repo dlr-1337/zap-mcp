@@ -107,7 +107,7 @@ test('inventário confere hash canônico do helper e recusa PID/contagem inconsi
   await assert.rejects(api.probeHost(host, { ...scope, dataDir: dataDir + '/./' }, { runner: runner(facts) }));
 });
 
-async function serializedHelperProbe(t: { after(fn: () => unknown): void }, firstProxy: unknown, secondProxy: unknown, calls: number, recovery = false, wrongBinding = false) {
+async function serializedHelperProbe(t: { after(fn: () => unknown): void }, firstProxy: unknown, secondProxy: unknown, calls: number, recovery = false, wrongBinding = false, processFixture = false) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-environment-helper-')); t.after(() => rmSync(dir, { recursive: true }));
   const appRoot = join(dir, 'app'), dataDir = join(dir, 'data'), configFile = join(dir, 'proxy.json');
   for (const path of [appRoot, dataDir, join(appRoot, 'dist')]) mkdirSync(path, { mode: 0o700 });
@@ -117,8 +117,31 @@ async function serializedHelperProbe(t: { after(fn: () => unknown): void }, firs
   const facts = { running: false, autostart: false, pid: 0, startTime: null, machineId, profilePathHash: wrongBinding ? 'f'.repeat(64) : createHash('sha256').update(dataDir).digest('hex'), profileProcesses: 0, mode: 'offline', release: null };
   const scope = { dataDir, appRoot, supervisor: { kind: 'docker', helperPath }, ...(recovery ? { recovery: true } : { proxy: { kind: 'traefik', configFile } }) };
   const [, argv] = api.probeCommand({ kind: 'local', machineId }, scope);
+  const processMocks = processFixture ? `
+    const originalFs=await import('node:fs/promises'), originalSync=await import('node:fs'), ownUid=process.getuid();
+    const readFile=originalFs.readFile,readdir=originalFs.readdir,readlink=originalFs.readlink,statSync=originalSync.statSync;
+    const reads=[], cwdReads=[], stats=[], foreign=Array.from({length:15000},(_,i)=>String(10000+i));
+    const gone=()=>Object.assign(Error('synthetic PID disappeared'),{code:'ENOENT'});
+    mock.module('node:fs',{exports:{...originalSync,default:{...originalSync.default},statSync:(path,...args)=>{
+      const match=typeof path==='string'&&path.match(/^\\/proc\\/(\\d+)$/); if(!match)return statSync(path,...args);
+      const pid=Number(match[1]); stats.push(pid); if(pid===204)throw gone(); return {uid:pid>=10000?ownUid+1:ownUid};
+    }}});
+    mock.module('node:fs/promises',{exports:{...originalFs,default:{...originalFs.default},
+      readdir:async(path,...args)=>path==='/proc'?['self','201','202','203','204','205','206',...foreign]:readdir(path,...args),
+      readFile:async(path,...args)=>{
+        const match=typeof path==='string'&&path.match(/^\\/proc\\/(\\d+)\\/cmdline$/); if(!match)return readFile(path,...args);
+        const pid=Number(match[1]); reads.push(pid); if(pid>=10000)throw Error('foreign PID content must not be read'); if(pid===204||pid===205)throw gone();
+        return pid===201?['node',${JSON.stringify(join(appRoot, 'dist/src/main.js'))},'serve','--collect'].join('\\0'):pid===203?'node\\0unrelated.js\\0':['node','dist/src/main.js','serve'].join('\\0');
+      },
+      readlink:async(path,...args)=>{
+        const match=typeof path==='string'&&path.match(/^\\/proc\\/(\\d+)\\/cwd$/); if(!match)return readlink(path,...args);
+        const pid=Number(match[1]); cwdReads.push(pid); if(pid>=10000)throw Error('foreign PID cwd must not be read'); return pid===202?${JSON.stringify(appRoot)}:'/other/application';
+      }
+    }});
+  ` : '';
   const source = `
     import assert from 'node:assert/strict'; import { mock } from 'node:test'; import { promisify } from 'node:util';
+    ${processMocks}
     let calls=0; const helper=()=>{}, replies=${JSON.stringify([firstProxy, secondProxy])};
     helper[promisify.custom]=async(program,argv,options)=>{
       assert.equal(program,'/usr/bin/sudo'); assert.deepEqual(argv,['-n','/usr/local/libexec/fixture',${JSON.stringify(recovery ? 'inspect-runtime' : 'inspect')}]);
@@ -127,6 +150,7 @@ async function serializedHelperProbe(t: { after(fn: () => unknown): void }, firs
     };
     mock.module('node:child_process',{exports:{...await import('node:child_process'),execFile:helper}});
     await eval(${JSON.stringify(argv[1])}); assert.equal(calls,${calls},'helper inspections must be bounded to fresh observations');
+    ${processFixture ? "assert.equal(reads.filter(pid=>pid>=10000).length,0,'foreign UID must not trigger cmdline reads');assert.deepEqual(reads,[201,202,203,205,206]);assert.deepEqual(cwdReads,[202,206]);assert.equal(stats.length,15006);" : ''}
   `;
   const child = spawn(process.execPath, ['--experimental-test-module-mocks', '--input-type=module', '-e', source], { stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = ''; child.stdout.on('data', bytes => stdout += bytes); child.stderr.on('data', bytes => stderr += bytes);
@@ -153,4 +177,11 @@ test('probe serializado recovery dispensa proxy e vínculo estático inválido c
   const recovered = await serializedHelperProbe(t, null, null, 1, true); assert.equal(recovered.code, 0, recovered.stderr); assert.equal(JSON.parse(recovered.stdout).proxy, undefined);
   const invalid = await serializedHelperProbe(t, { verified: true, version: 'v3.6.25', peer: '172.18.0.2' }, null, 1, false, true);
   assert.equal(invalid.code, 1); assert.equal(invalid.stdout, '');
+});
+
+test('probe serializado filtra 15 mil PIDs estrangeiros por UID sem perder processos próprios ou falhar com desaparecidos', async t => {
+  const proxy = { verified: true, version: 'v3.6.25', peer: '172.18.0.2' }, result = await serializedHelperProbe(t, proxy, proxy, 1, false, false, true);
+  assert.equal(result.code, 0, result.stderr);
+  const facts = JSON.parse(result.stdout); assert.equal(facts.privateData, true); assert.equal(facts.fts, true);
+  assert.deepEqual(facts.processes, [{ pid: 201, collect: true }, { pid: 202, collect: false }]);
 });
