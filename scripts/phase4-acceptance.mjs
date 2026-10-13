@@ -21,7 +21,7 @@ import { readPrivateJson, privateFile, assertSupervisorFacts, assertQuiet } from
 import { readOffsiteConfig, recoverOffsiteCopy } from '../dist/src/offsite.js';
 import { calendarStart, zipOracle } from './phase2-acceptance.mjs';
 import { messageOracle, runCodex } from './phase3-acceptance.mjs';
-import { rpc, runDeployment, closeSshMaster, profileState } from './phase4-deploy.mjs';
+import { rpc, runDeployment, closeSshMaster, profileState, verifyHttps } from './phase4-deploy.mjs';
 
 const check = (v, name) => assert.ok(v, name), digest = b => createHash('sha256').update(b).digest('hex');
 const runs = new WeakSet(), observations = new WeakMap(), baselines = new WeakMap(), cloneBindings = new WeakMap();
@@ -135,6 +135,8 @@ export async function probeDeployment(live,{configFile,ca}) {
     const next=await rpc(config,'control',{action:'start',release:before.release,mode:'offline'});assertSupervisorFacts(config.target,next);check(next.running&&next.profileProcesses===1&&(next.pid!==before.pid||next.startTime!==before.startTime),'fresh_restart');stopped=false;
     check(same(await rpc(config,'state'),baseline),'restart_preserved');record(live,['restart']);
   }finally{try{if(stopped&&before)await rpc(config,'control',{action:'start',release:before.release,mode:'offline'});await closeSshMaster(config);}finally{lock.release();}}
+  // The fresh restart can precede proxy/backend readiness; keep the native preflight strict.
+  await verifyHttps(config.publicOrigin,readFileSync(privateFile(config.ownerPasswordFile),'utf8').trimEnd(),[],ca);
   const updated=await runDeployment('update',{configFile,ca});check(updated.updated,'update_required');
   const updateLock=acquireServiceLock(config.operationDir);try{const after=await rpc(config,'control',{action:'inspect'});assertSupervisorFacts(config.target,after);check(after.running&&after.release===config.candidateRelease&&after.release!==before.release,'fresh_updated_release_required');check(same(await rpc(config,'state'),baseline),'update_preserved');
     const tls=await httpsCall(config.publicOrigin,'/api/session',{ca});check(tls.status===200&&!/^(localhost|127\.)/.test(new URL(config.publicOrigin).hostname),'permanent_endpoint');record(live,['update','permanent']);
