@@ -4,10 +4,10 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: 5
 status: executing
-stopped_at: 04-05-02 executing: source fenced; final snapshot transfer in progress
-last_updated: "2026-10-13T13:54:38.626Z"
+stopped_at: 04-05-02 executing: real profile migrated/promoted; permanent HTTPS originals verification in progress
+last_updated: "2026-10-13T15:26:39.438Z"
 last_activity: 2026-10-13
-last_activity_desc: Real deployment prepared; source fenced and final snapshot transfer in progress
+last_activity_desc: Real profile migrated and promoted; target-only owner recovery applied; permanent HTTPS verification in progress
 state_head: 083366e667c543558ebb32750ff879bcd975fab7
 progress:
   total_phases: 4
@@ -34,9 +34,9 @@ Phase: 4 (Operação e restauração na VPS) — MIGRAÇÃO REAL EM ANDAMENTO
 Current Plan: 5
 Total Plans in Phase: 6
 Status: Executing
-Last activity: 2026-10-13 — Real deployment prepared; source fenced and final snapshot transfer in progress
+Last activity: 2026-10-13 — Real profile migrated and promoted; target-only owner recovery applied; permanent HTTPS verification in progress
 
-Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem uma de duas tarefas concluída; a tarefa real está em execução, com snapshot final sendo transferido. 04-06 não foi iniciado.
+Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem uma de duas tarefas concluída; a tarefa real está em execução, com perfil migrado/promovido e originais sendo conferidos pelo HTTPS permanente. 04-06 não foi iniciado.
 
 ## Performance Metrics
 
@@ -140,7 +140,7 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
 - Phase 4: resolver HTTPS/proxy/login web (Origin403/WINDOWS13) e revalidar consulta/download no endpoint permanente; piloto MCP local temporário encerrado.
-- 04-05-02: acesso operacional restrito e permanente funcionando; concessão temporária de root revogada. Runtime nativo, proxy/HTTPS/login e backup externo pré-migração com restauração verificados. Fonte finalmente fenced/parada; transferência do snapshot final em andamento. Consulta no acervo migrado, backup da VPS, restart/update, agenda e aceite final continuam pendentes; nenhum OPS concluído.
+- 04-05-02: acesso operacional restrito e permanente funcionando; concessão temporária de root revogada. Runtime nativo, proxy/HTTPS/login e backup externo pré-migração com restauração verificados. Fonte finalmente fenced/parada; transferência final, restore, promoção assinada e recuperação de senha somente no destino concluídos. Backend único offline responde HTTPS200; conferência dos895originais pelo endpoint está em andamento. Backup da VPS, restart/update, agenda e aceite final continuam pendentes; nenhum OPS concluído.
 
 ### Roadmap Evolution
 
@@ -160,9 +160,11 @@ Nenhum impedimento para iniciar o planejamento.
 ## Session Continuity
 
 Last session: 2026-10-13T02:53:01.342Z
-Stopped at: 04-05-02 executing: source fenced; final snapshot transfer in progress
+Stopped at: 04-05-02 executing: real profile migrated/promoted; permanent HTTPS originals verification in progress
 Resume file: .planning/phases/04-opera-o-e-restaura-o-na-vps/04-05-SUMMARY.md
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
 
 - Encerramento2026-10-11: verificador88/88,15 requisitos,28 testes focados; fonte conectada e cópia privada8.684/828 restaurada. Nenhuma intervenção do usuário pendente.
+
+- [Phase 04]: Transferência real1793arquivos concluída. Promoção remota continuou após deadline SSH e comprometeu nativamente; MAC/fence/quiet atuais foram validados antes da continuação, sem repetir promoção. Novo segredo aplicado somente ao owner do destino. Helper de boot instalado atomicamente com job/MainPID/ancestry guards; CI remoto c899187 aprovado, suite292/292. HTTPS startup502 transitório confirmado depois por200/backend único offline; ajuste bounded do probe em execução. Nenhum OPS concluído.
