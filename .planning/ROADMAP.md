@@ -115,7 +115,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 - [x] 04-04-PLAN.md
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 04-05-PLAN.md
+- [x] 04-05-PLAN.md
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 04-06-PLAN.md
@@ -142,4 +142,4 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | 3. Consulta e arquivos reais no Codex | 4/4 | Complete    | 2026-10-12 |
 | 4. Operação e restauração na VPS | 4/6 | Aguardando implantação real | - |
 
-**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. 28 requisitos concluídos nas fases 1–3; OPS-01 a OPS-04 permanecem pendentes. O SUMMARY halted de 04-05 registra uma de duas tarefas e não conclui esse plano.
+**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. 28 requisitos concluídos nas fases 1–3; OPS-01 a OPS-04 permanecem pendentes. 04-05 está concluído por migração/operação/backup reais;04-06 está em execução e mantém OPS pendentes até cliente/restauração/verificador.

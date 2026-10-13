@@ -94,7 +94,7 @@ status: complete
 |04-05-01 — release offline e recuperação|132eed5|478df8c|Concluída localmente|
 |04-05-02 — implantação/migração/update reais|Gates reais, sem fixture substituta|Correções e handoff em main; locators privados|Concluída operacionalmente; OPS aguardam04-06|
 
-## Verification
+## Verification local original (antes da operação real)
 
 - TypeScript build Node24.21.0 passou. Foco deploy/environment/operation **22/22**, zero fail/cancel/skip/todo; primeira rodada5,825s e final6,493s após os guards finais do inventário/pull. Tracer self-test repetido e passou antes do handoff.
 - Suíte padrão única `mise exec node@24.21.0 -- npm test`: **244/244**, zero fail/cancel/skip/todo,69,913s. Executada após implementação/guards do helper; guards finais JS de linkage/profile do readback foram verificados depois pelo foco22/22. Não apresentar foco como substituto da suíte padrão.

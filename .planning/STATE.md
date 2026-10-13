@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Operação e restauração na VPS
-current_plan: 5
+current_plan: 6
 status: executing
-stopped_at: 04-05-02 executing: migration/HTTPS originals/offsite/restart verified; real update in progress
-last_updated: "2026-10-13T15:26:39.438Z"
+stopped_at: 04-05 completed; 04-06 current real Codex and restored-backend acceptance executing
+last_updated: "2026-10-13T18:19:42.043Z"
 last_activity: 2026-10-13
-last_activity_desc: Real migration, all 895 HTTPS originals, external backup recovery and service restart verified; release update executing
+last_activity_desc: Real deployment and daily backup verified; WhatsApp connected without QR; Codex reference installed; real acceptance executing
 state_head: 083366e667c543558ebb32750ff879bcd975fab7
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 75
 ---
 
@@ -31,12 +31,12 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 ## Current Position
 
 Phase: 4 (Operação e restauração na VPS) — VERIFICAÇÃO OPERACIONAL EM ANDAMENTO
-Current Plan: 5
+Current Plan: 6
 Total Plans in Phase: 6
 Status: Executing
-Last activity: 2026-10-13 — Migração real, 895 originais via HTTPS, recuperação externa e reinício do serviço conferidos; atualização real em execução
+Last activity: 2026-10-13 — Operação04-05 concluída, sessão WhatsApp conectada sem QR e910 originais preservados; cliente/clone reais04-06 em execução
 
-Progress: [████████░░] 75% — 3/4 fases; 21/23 planos concluídos. 04-05 tem uma de duas tarefas concluída; a tarefa real continua em execução. Migração, promoção, nova senha somente no destino, 895 originais autenticados via HTTPS e primeira cópia externa recuperada passaram. O reinício do serviço exigiu uma retentativa automática, concluída com dados preservados; não houve reboot completo da VPS. A atualização real está em execução após novo backup externo verificado. A preparação local isolada de04-06 avançou, mas cliente permanente, clone por HTTPS e aceite OPS continuam pendentes de04-05 e dos probes reais.
+Progress: [████████░░] 75% — 3/4 fases; 22/23 planos concluídos. 04-05 concluído por efeitos reais; revisão de04-06 clean e suíte311/311. Referência MCP permanente instalada com bearer privado separado e demais configurações preservadas. Cliente instalado, restauração pelo mesmo HTTPS, cleanup e verificador continuam pendentes; OPS-01 a OPS-04 não concluídos.
 
 ## Performance Metrics
 
