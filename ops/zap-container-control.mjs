@@ -108,9 +108,16 @@ export async function control(config, action, release, mode, { runner = exec, pr
   };
   const run = async args => (await runner('/usr/bin/docker', args, { shell: false, timeout: 70_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } })).stdout;
   const inventory = async () => {
-    const ids = (await run(['ps', '--all', '--quiet'])).trim().split('\n').filter(Boolean);
-    assert.ok(ids.length <= 1000 && ids.every(id => /^[a-f0-9]{12,64}$/.test(id)));
-    return ids.length ? JSON.parse(await run(['inspect', '--type=container', ...ids])) : [];
+    const read = async () => {
+      const ids = (await run(['ps', '--all', '--quiet'])).trim().split('\n').filter(Boolean);
+      assert.ok(ids.length <= 1000 && ids.every(id => /^[a-f0-9]{12,64}$/.test(id)));
+      return ids.length ? JSON.parse(await run(['inspect', '--type=container', ...ids])) : [];
+    };
+    try { return await read(); } catch (error) {
+      if (error.code !== 1 || typeof error.stderr !== 'string' || !error.stderr.trim().split(/\r?\n/).every(line => /^Error(?: response from daemon)?: No such (?:container|object): [a-f0-9]{12,64}$/.test(line))) throw error;
+      // Another app may remove its container between ps and inspect; re-read all writers once.
+      return read();
+    }
   };
   const processes = () => typeof procPids === 'function' ? procPids() : procPids;
   let all, facts, boot, ownBoot = false;
