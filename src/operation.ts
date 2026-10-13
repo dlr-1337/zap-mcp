@@ -40,10 +40,11 @@ export function assertSupervisorFacts(config: Pick<SupervisorConfig, 'machineId'
 export type Controller = { stop(signal?: AbortSignal): Promise<void>; start(mode: Mode, signal?: AbortSignal, release?: string): Promise<void>; inspect(signal?: AbortSignal): Promise<SupervisorFacts> };
 export type OperationConfig = { dataDir: string; operationDir: string; destination: string; priorMode: Mode; priorRelease: string; supervisor: SupervisorConfig };
 export type Journal = { version: 1; operationId: string; kind: 'backup' | 'update' | 'handoff' | 'promotion'; source: string; priorMode: Mode; priorRelease: string; stage: string; destination: string; startedAt: string; resumedMode?: Mode; diagnostic?: string };
-export function privateFile(path: string, directory = false) {
+export function privateFile(path: string, directory = false, maxBytes = 262144) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw Error('Limite de arquivo privado inválido');
   const canonical = resolve(path), root = realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
   const stat = lstatSync(path);
-  if (canonical === root || canonical.startsWith(root + '/') || realpathSync(path) !== canonical || stat.isSymbolicLink() || stat.uid !== process.getuid!() || stat.mode & 0o077 || (directory ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1 || stat.size > 262144)) throw Error('Configuração operacional privada inválida');
+  if (canonical === root || canonical.startsWith(root + '/') || realpathSync(path) !== canonical || stat.isSymbolicLink() || stat.uid !== process.getuid!() || stat.mode & 0o077 || (directory ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1 || stat.size > maxBytes)) throw Error('Configuração operacional privada inválida');
   return canonical;
 }
 export function readPrivateJson(path: string): any { privateFile(path); return JSON.parse(readFileSync(path, 'utf8')); }

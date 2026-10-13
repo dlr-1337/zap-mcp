@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, statSync, chmodSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -8,6 +8,7 @@ import { once } from 'node:events';
 import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
 import { createSnapshot, restoreSnapshot, assertCollectorReady, verifyBackup } from '../src/backup.js';
+import { privateFile, readPrivateJson } from '../src/operation.js';
 
 const modulePath = '../src/promotion.js';
 async function promotion() { const m = await import(modulePath).catch(() => null); assert.ok(m?.promoteProfile, 'transactional promotion must exist'); return m; }
@@ -111,4 +112,29 @@ test('SIGKILL no fence persistido permite retomar emissão sem religar source', 
     assert.equal((await m.createSourceFence(config, f.controller)).fenced, true);
     const source = createService({ dataDir: f.source }); try { assert.deepEqual(source.authDb.prepare('SELECT * FROM web_owner').all(), f.owner); assert.throws(() => assertCollectorReady(f.source, source.authDb), /cercada/); } finally { await source.close(); }
   }
+});
+
+test('fence source aceita auth SQLite maior que 256 KiB mantendo owner e sessão', async t => {
+  const m = await promotion(), f = await fixture(t), sourceOps = join(f.base, 'large-source-ops'); mkdirSync(sourceOps, { mode: 0o700 });
+  const source = createService({ dataDir: f.source });
+  await createAuthState(source.authDb).state.keys.set({ session: { 'fixture-padding': Buffer.alloc(400 * 1024, 0x61) } });
+  const keys = source.authDb.prepare('SELECT * FROM whatsapp_keys').all(); assert.equal(source.authDb.pragma('integrity_check', { simple: true }), 'ok'); await source.close();
+  const path = join(f.source, 'auth.sqlite'); assert.ok(statSync(path).size > 262144); assert.equal(statSync(path).mode & 0o777, 0o600);
+  const config = { ...f.config, dataDir: f.source, operationDir: sourceOps, supervisor: f.config.source, targetDataDir: join(f.base, 'large-target'), targetMachineId: readFileSync('/etc/machine-id', 'utf8').trim() };
+  assert.equal((await m.createSourceFence(config, f.controller)).fenced, true);
+  const fenced = createService({ dataDir: f.source });
+  try { assert.deepEqual(fenced.authDb.prepare('SELECT * FROM web_owner').all(), f.owner); assert.deepEqual(fenced.authDb.prepare('SELECT * FROM whatsapp_keys').all(), keys); assert.throws(() => assertCollectorReady(f.source, fenced.authDb), /cercada|fenced/); } finally { await fenced.close(); }
+});
+
+test('limite explícito de arquivo binário preserva teto padrão de config e guardas privadas', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-private-binary-')); t.after(() => rmSync(dir, { recursive: true }));
+  const path = join(dir, 'large.json'); writeFileSync(path, JSON.stringify({ padding: 'a'.repeat(300 * 1024) }), { mode: 0o600 });
+  assert.throws(() => privateFile(path)); assert.throws(() => readPrivateJson(path));
+  const regular = (file: string, limit: unknown) => Reflect.apply(privateFile, undefined, [file, false, limit]);
+  assert.equal(regular(path, Number.MAX_SAFE_INTEGER), path);
+  for (const limit of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, 'large']) assert.throws(() => regular(path, limit));
+  chmodSync(path, 0o644); assert.throws(() => regular(path, Number.MAX_SAFE_INTEGER)); chmodSync(path, 0o600);
+  const alias = join(dir, 'alias'); symlinkSync(path, alias); assert.throws(() => regular(alias, Number.MAX_SAFE_INTEGER)); rmSync(alias);
+  linkSync(path, alias); assert.throws(() => regular(path, Number.MAX_SAFE_INTEGER)); rmSync(alias);
+  assert.throws(() => regular(process.cwd(), Number.MAX_SAFE_INTEGER));
 });

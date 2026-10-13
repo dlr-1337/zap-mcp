@@ -49,7 +49,7 @@ export async function createSourceFence(config: SourceFenceConfig, controller = 
   try {
     if (operation.prior && operation.prior.kind !== 'handoff' && !['completed', 'recovered'].includes(operation.prior.stage)) throw Error('Outra operação interrompida');
     operation.save(journal); await fault?.('intended'); const facts = await verifyPromotionFence(config.supervisor, controller); lock = acquireServiceLock(config.dataDir);
-    privateFile(join(config.dataDir, 'auth.sqlite')); db = new Sqlite(join(config.dataDir, 'auth.sqlite'), { fileMustExist: true }); db.pragma('synchronous=FULL');
+    privateFile(join(config.dataDir, 'auth.sqlite'), false, Number.MAX_SAFE_INTEGER); db = new Sqlite(join(config.dataDir, 'auth.sqlite'), { fileMustExist: true }); db.pragma('synchronous=FULL');
     const prior = db.prepare("SELECT value FROM web_config WHERE key='collector-fenced'").get() as { value: string } | undefined, oldFence = prior && JSON.parse(prior.value);
     const generation = oldFence?.generation ?? randomUUID(), profile = profileReadonly(db), target = hash(resolve(config.targetDataDir));
     if (oldFence && (oldFence.target !== target || oldFence.targetMachineId !== config.targetMachineId || oldFence.operationId !== journal.operationId)) throw Error('Source já cercada para outro handoff');
