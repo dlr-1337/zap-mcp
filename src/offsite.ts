@@ -12,7 +12,7 @@ import { coordinatedSnapshot, recoverOperation, acquireOperation, privateFile, r
 import { validateSnapshot, restoreSnapshot, profileReadonly } from './backup.js';
 import { acquireServiceLock } from './whatsapp.js';
 
-type Budget = { maxBytes: number; reserveBytes: number; maxFiles?: number };
+type Budget = { maxBytes: number; reserveBytes: number; maxFiles?: number; transferTimeoutMs?: number };
 export type SourceOffsiteConfig = OperationConfig & Budget & { role: 'source'; recipientFile: string; recoveryFiles?: Partial<Record<RecoveryName, string>> };
 export type PullOffsiteConfig = Budget & { role: 'pull'; operationDir: string; destinationDir: string; identityFile: string; remote?: { host: string; user: string; port?: number; identityFile: string; knownHostsFile: string; nodePath: string; mainPath: string; configFile: string; dataDir: string } };
 type Receipt = { version: 1; operationId: string; snapshotCreatedAt: string; manifestHash: string; cipherHash: string };
@@ -32,7 +32,7 @@ function sync(path: string) { const fd = openSync(path, constants.O_RDONLY | con
 function safeRegular(path: string) {
   const s = lstatSync(path); if (!s.isFile() || s.isSymbolicLink() || realpathSync(path) !== resolve(path) || s.nlink !== 1 || s.uid !== process.getuid!() || s.mode & 0o077) throw Error('Arquivo privado inválido'); return s;
 }
-function budget(config: Budget) { if (!Number.isSafeInteger(config.maxBytes) || config.maxBytes < 1024 || !Number.isSafeInteger(config.reserveBytes) || config.reserveBytes < 0 || !Number.isSafeInteger(config.maxFiles ?? 10000) || (config.maxFiles ?? 10000) < 16) throw Error('Orçamento de backup inválido'); }
+function budget(config: Budget) { if (!Number.isSafeInteger(config.maxBytes) || config.maxBytes < 1024 || !Number.isSafeInteger(config.reserveBytes) || config.reserveBytes < 0 || !Number.isSafeInteger(config.maxFiles ?? 10000) || (config.maxFiles ?? 10000) < 16 || config.transferTimeoutMs !== undefined && (!Number.isInteger(config.transferTimeoutMs) || config.transferTimeoutMs < 1000 || config.transferTimeoutMs > 900_000)) throw Error('Orçamento de backup inválido'); }
 function space(path: string, bytes: number, files: number, reserveBytes: number) {
   const disk = statfsSync(path, { bigint: true }), reserve = [256n * 1024n * 1024n, disk.blocks * disk.bsize / 20n, BigInt(reserveBytes)].reduce((a, b) => a > b ? a : b);
   if (disk.bavail * disk.bsize <= BigInt(bytes) + reserve || disk.files > 0n && disk.ffree <= BigInt(files + 32)) throw Object.assign(Error('Capacidade insuficiente'), { code: 'ENOSPC' });
@@ -256,11 +256,11 @@ export async function runOffsiteBackup(config: PullOffsiteConfig, { adapter = cr
     if (!existsSync(stored)) {
       let error: unknown;
       for (let attempt = 0; attempt < 3; attempt++) { const temp = join(work, 'incoming-' + attempt);
-        try { await adapter.putNew(operationId, temp, AbortSignal.timeout(120_000)); safeRegular(temp); if (lstatSync(temp).size > config.maxBytes) throw Error('Ciphertext excedeu orçamento'); await fault?.('publishing'); publish(temp, stored); error = undefined; break; }
+        try { await adapter.putNew(operationId, temp, AbortSignal.timeout(config.transferTimeoutMs ?? 120_000)); safeRegular(temp); if (lstatSync(temp).size > config.maxBytes) throw Error('Ciphertext excedeu orçamento'); await fault?.('publishing'); publish(temp, stored); error = undefined; break; }
         catch (e) { error = e; if (existsSync(temp)) rmSync(temp); }
       } if (error) throw error;
     }
-    const expectedHash = await digest(stored), readback = join(work, 'readback.age'); stage = 'readback'; await fault?.(stage); await adapter.getById(operationId, readback, AbortSignal.timeout(120_000));
+    const expectedHash = await digest(stored), readback = join(work, 'readback.age'); stage = 'readback'; await fault?.(stage); await adapter.getById(operationId, readback, AbortSignal.timeout(config.transferTimeoutMs ?? 120_000));
     if (await digest(readback) !== expectedHash) throw Error('Ciphertext recuperado divergente');
     stage = 'decrypt'; const restored = await recoverFile(config, operationId, readback, join(work, 'verified'), cipher, async p => { stage = p; await fault?.(p); });
     stage = 'acknowledge'; await fault?.(stage); await adapter.acknowledge(restored.receipt, AbortSignal.timeout(120_000));
@@ -271,4 +271,4 @@ export async function runOffsiteBackup(config: PullOffsiteConfig, { adapter = cr
 }
 
 export function readOffsiteConfig(path: string): SourceOffsiteConfig | PullOffsiteConfig { const c = readPrivateJson(path); budget(c); if (!['source', 'pull'].includes(c.role)) throw Error('Papel offsite inválido'); return c; }
-export async function streamProducedCopy(config: SourceOffsiteConfig, operationId: string) { const result = await produceOffsiteCopy(config, operationId); await pipeline(readStream(result.file), process.stdout, { signal: AbortSignal.timeout(120_000) }); }
+export async function streamProducedCopy(config: SourceOffsiteConfig, operationId: string) { const result = await produceOffsiteCopy(config, operationId); await pipeline(readStream(result.file), process.stdout, { signal: AbortSignal.timeout(config.transferTimeoutMs ?? 120_000) }); }

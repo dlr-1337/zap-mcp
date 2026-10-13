@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync, symlinkSync, readdirSync, createWriteStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createService } from '../src/main.js';
 import { createAuthState } from '../src/whatsapp.js';
 import { startMediaWorker } from '../src/media.js';
@@ -15,7 +17,7 @@ import { ZipFile } from 'yazl';
 
 const modulePath = '../src/offsite.js';
 async function load() { const m = await import(modulePath).catch(() => null); assert.ok(m?.runOffsiteBackup && m?.produceOffsiteCopy && m?.recoverOffsiteCopy, 'cópia age por pull e recuperação integral devem existir'); return m; }
-async function fixture(t: { after(fn: () => unknown): void }) {
+async function fixture(t: { after(fn: () => unknown): void }, bytes = Buffer.from('PRIVATE_SENTINEL_ORIGINAL')) {
   const base = mkdtempSync(join(tmpdir(), 'zap-offsite-'));
   t.after(() => rmSync(base, { recursive: true }));
   for (const name of ['source-ops', 'notebook-ops', 'copies', 'kit']) mkdirSync(join(base, name), { mode: 0o700 });
@@ -25,7 +27,6 @@ async function fixture(t: { after(fn: () => unknown): void }) {
   const recipientFile = join(base, 'recipient'); writeFileSync(recipientFile, recipient, { mode: 0o600 });
   const dataDir = join(base, 'source'), s = createService({ dataDir });
   createAuthState(s.authDb, { newProfile: true }); await s.setPassword('senha de fixture independente');
-  const bytes = Buffer.from('PRIVATE_SENTINEL_ORIGINAL');
   s.archive.ingestUpsert({ type: 'notify', messages: [{ key: { remoteJid: '1@s.whatsapp.net', id: 'offsite', fromMe: false }, messageTimestamp: 1700000000, message: { imageMessage: { url: 'https://mmg.whatsapp.net/file', mediaKey: Buffer.alloc(32), fileLength: bytes.length, fileSha256: createHash('sha256').update(bytes).digest(), caption: 'PRIVATE_SENTINEL_CAPTION' } } }] });
   const worker = startMediaWorker({ archive: s.archive, mediaDir: join(dataDir, 'media'), downloadOriginal: async () => Readable.from([bytes]) }); await worker.drain(); await worker.stop(); await s.close();
   const events: string[] = []; let running = true;
@@ -203,4 +204,90 @@ test('estado offsite inválido libera mutex e permite nova chamada no mesmo proc
     writeFileSync(path, valid);
     const result = await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) }); assert.equal(result.verified, true);
   }
+});
+
+test('prazo privado inválido recusa fonte e receptor antes de parar ou criar arquivos', async t => {
+  const f = await fixture(t), m = await load();
+  await assert.rejects(m.produceOffsiteCopy({}, randomUUID(), { controller: f.controller }), /Orçamento/);
+  await assert.rejects(m.runOffsiteBackup({}, { adapter: adapter(m, f) }), /Orçamento/);
+  for (const value of [null, '1000', 0, 999, 900001, 1000.5, Infinity, NaN]) {
+    await assert.rejects(m.produceOffsiteCopy({ ...f.source, transferTimeoutMs: value }, randomUUID(), { controller: f.controller }), /Orçamento/);
+    await assert.rejects(m.runOffsiteBackup({ ...f.pull, transferTimeoutMs: value }, { adapter: adapter(m, f) }), /Orçamento/);
+    assert.deepEqual(f.events, []);
+    assert.deepEqual(readdirSync(f.source.operationDir), []);
+    assert.deepEqual(readdirSync(f.pull.operationDir), []);
+    assert.deepEqual(readdirSync(f.pull.destinationDir), []);
+  }
+  for (const value of [1000, 900000]) {
+    const file = join(f.base, 'valid-budget-' + value); writeFileSync(file, JSON.stringify({ ...f.pull, transferTimeoutMs: value }), { mode: 0o600 });
+    assert.equal(m.readOffsiteConfig(file).transferTimeoutMs, value);
+  }
+});
+
+test('prazo de transferência aborta três streams reais sem ACK e mantém último bom', async t => {
+  const f = await fixture(t), m = await load();
+  await m.runOffsiteBackup(f.pull, { adapter: adapter(m, f) });
+  const statePath = join(f.pull.operationDir, 'offsite-state.json'), last = JSON.parse(readFileSync(statePath, 'utf8')).lastVerifiedSuccess;
+  const good = readFileSync(join(f.pull.destinationDir, last.operationId + '.age')); f.events.length = 0;
+  const ids: string[] = [], signals: AbortSignal[] = [];
+  const slow = { ...adapter(m, f), async putNew(id: string, output: string, signal: AbortSignal) {
+    ids.push(id); signals.push(signal);
+    const prepared = await m.produceOffsiteCopy(f.source, id, { controller: f.controller }), bytes = readFileSync(prepared.file);
+    assert.equal((await f.controller.inspect()).running, true);
+    const input = Readable.from((async function* () { yield bytes.subarray(0, 16); await delay(1500, undefined, { signal }); yield bytes.subarray(16); })());
+    await pipeline(input, createWriteStream(output, { flags: 'wx', mode: 0o600 }), { signal });
+  } };
+  await assert.rejects(m.runOffsiteBackup({ ...f.pull, transferTimeoutMs: 1000 }, { adapter: slow }), /deadline_exceeded/);
+  assert.equal(ids.length, 3); assert.equal(new Set(ids).size, 1); assert.ok(signals.every(s => s.aborted && s.reason.name === 'TimeoutError'));
+  assert.deepEqual(f.events, ['stop', 'resume']); assert.equal((await f.controller.inspect()).running, true);
+  assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')).lastVerifiedSuccess, last);
+  assert.equal(m.backupStatus(statePath).safeFailureCode, 'deadline_exceeded');
+  assert.deepEqual(readFileSync(join(f.pull.destinationDir, last.operationId + '.age')), good);
+  assert.equal(existsSync(join(f.pull.destinationDir, ids[0] + '.age')), false);
+  assert.equal(readdirSync(f.pull.destinationDir).some(name => name.startsWith('.offsite-pull-')), false);
+});
+
+test('prazo padrão preserva transferência e readback que levam mais de um segundo', async t => {
+  const f = await fixture(t), m = await load(), transport = adapter(m, f);
+  await m.runOffsiteBackup(f.pull, { adapter: { ...transport,
+    async putNew(id: string, output: string, signal: AbortSignal) { await delay(1500, undefined, { signal }); await transport.putNew(id, output, signal); },
+    async getById(id: string, output: string, signal: AbortSignal) { await delay(1500, undefined, { signal }); await transport.getById(id, output); }
+  } });
+  assert.equal(m.backupStatus(join(f.pull.operationDir, 'offsite-state.json')).result, 'success');
+});
+
+test('prazo de readback recusa ACK e permite retomar a mesma cópia publicada', async t => {
+  const f = await fixture(t), m = await load(), transport = adapter(m, f);
+  await m.runOffsiteBackup(f.pull, { adapter: transport }); f.events.length = 0;
+  const statePath = join(f.pull.operationDir, 'offsite-state.json'), last = JSON.parse(readFileSync(statePath, 'utf8')).lastVerifiedSuccess;
+  const config = { ...f.pull, transferTimeoutMs: 1000 };
+  await assert.rejects(m.runOffsiteBackup(config, { adapter: { ...transport,
+    async getById(id: string, output: string, signal: AbortSignal) { await delay(1500, undefined, { signal }); await transport.getById(id, output); }
+  } }), /deadline_exceeded/);
+  const failed = JSON.parse(readFileSync(statePath, 'utf8'));
+  assert.deepEqual(failed.lastVerifiedSuccess, last); assert.equal(failed.failedStage, 'readback');
+  assert.equal(m.backupStatus(join(f.source.operationDir, 'offsite-state.json')).result, 'failed');
+  const result = await m.runOffsiteBackup(config, { adapter: transport });
+  assert.equal(result.operationId, failed.operationId); assert.deepEqual(f.events, ['stop', 'resume', 'network']);
+  assert.equal(m.backupStatus(statePath).result, 'success');
+});
+
+test('produtor aplica prazo privado ao ciphertext real bloqueado sem repetir snapshot', async t => {
+  const f = await fixture(t, randomBytes(1024 * 1024)), m = await load(), operationId = randomUUID();
+  f.source.transferTimeoutMs = 1000;
+  const prepared = await m.produceOffsiteCopy(f.source, operationId, { controller: f.controller }), before = readFileSync(prepared.file);
+  f.events.length = 0;
+  const script = `import{streamProducedCopy}from'./dist/src/offsite.js';try{await streamProducedCopy(JSON.parse(process.env.CONFIG),process.env.ID)}catch(e){console.error(e.name);process.exitCode=1}`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, CONFIG: JSON.stringify(f.source), ID: operationId }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => child.kill('SIGKILL'));
+  let bytesRead = 0, error = '', forced = false;
+  child.stdout.once('data', chunk => { bytesRead += chunk.length; child.stdout.pause(); });
+  child.stderr.on('data', chunk => { error += String(chunk); if (error.includes('AbortError')) child.stdout.destroy(); });
+  const timer = setTimeout(() => { forced = true; child.kill('SIGKILL'); }, 4000);
+  const [code, signal] = await once(child, 'exit'); clearTimeout(timer);
+  assert.equal(forced, false, 'o prazo de produção deve abortar antes do watchdog: ' + error);
+  assert.equal(code, 1); assert.equal(signal, null); assert.match(error, /AbortError/); assert.ok(bytesRead > 0);
+  assert.deepEqual(readFileSync(prepared.file), before);
+  const retried = await m.produceOffsiteCopy(f.source, operationId, { controller: f.controller });
+  assert.equal(retried.receipt.manifestHash, prepared.receipt.manifestHash); assert.deepEqual(f.events, []);
 });
