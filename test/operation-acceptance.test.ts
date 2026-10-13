@@ -61,3 +61,19 @@ test('conteúdo do stdout ou transcript não pode forjar negociação nativa do 
   assert.equal(acceptance.parseNativeNegotiation('PRIVATE_SENTINEL ' + fake, startedAt, now + 1), undefined);
   assert.equal(acceptance.parseNativeNegotiation(fake.replace(' INFO ', ' DEBUG '), startedAt, now + 1), undefined);
 });
+test('CR-01 correct anchor cannot hide empty context or corrupted windows and cursors', async t => {
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path');const {createService}=await import('../src/main.js');const phase3Path='../../scripts/phase3-acceptance.mjs';const phase3=await import(phase3Path);
+ const dir=mkdtempSync(join(tmpdir(),'zap-context-oracle-')),s=createService({dataDir:join(dir,'data')});t.after(async()=>{await s.close();rmSync(dir,{recursive:true});});
+ for(let i=0;i<9;i++)s.writeMessage({reference:'m'+i,conversationId:'fixture',conversationName:'fixture',text:'testword',originalTimestamp:new Date(1700000000000+i*1000).toISOString()});
+ const dto=(i:number)=>phase3.messageOracle(s.archiveDb,'m'+i);
+ const page=(ordinal:number,end:number,direction:string|null)=>({anchor:dto(4),anchorReference:'m4',anchorOrdinal:4,ordinal,endOrdinal:end,direction,snapshotId:'fixture-snapshot',messages:Array.from({length:end-ordinal},(_,i)=>dto(ordinal+i)),before:Array.from({length:Math.max(0,Math.min(end,4)-ordinal)},(_,i)=>dto(ordinal+i)),after:Array.from({length:Math.max(0,end-Math.max(ordinal,5))},(_,i)=>dto(Math.max(ordinal,5)+i)),previousCursor:ordinal>0?'before-'+ordinal:null,nextCursor:end<9?'after-'+end:null});
+ const call=(p:any,args:any)=>({tool:'get_context',arguments:{reference:'m4',...args},result:{structured_content:p}});
+ const valid=[call(page(3,6,null),{}),call(page(1,3,'before'),{direction:'before',cursor:'before-3'}),call(page(6,8,'after'),{direction:'after',cursor:'after-6'})];
+ assert.doesNotThrow(()=>acceptance.assertCodexContexts(s.archiveDb,valid,'m4'));
+ for(const mutation of [(a:any[])=>a[0].result.structured_content.messages=[],(a:any[])=>a[0].result.structured_content.messages[0]=dto(8),(a:any[])=>a[0].result.structured_content.ordinal=2,(a:any[])=>a[1].arguments.cursor='forged',(a:any[])=>a[1].result.structured_content.before=[],(a:any[])=>a.splice(1,1),(a:any[])=>a[2].result.structured_content.direction='before']){const bad=structuredClone(valid);mutation(bad);assert.throws(()=>acceptance.assertCodexContexts(s.archiveDb,bad,'m4'),'anchor alone must not authorize context');}
+});
+test('CR-02 driver requires an actual authenticated HTTPS delivery broker', async t => {
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path');const dir=mkdtempSync(join(tmpdir(),'zap-delivery-'));t.after(()=>rmSync(dir,{recursive:true}));
+ const broker=await acceptance.createDeliveryBroker(acceptance.beginRun(),{destination:dir,origin:'https://localhost',tokenFile:join(dir,'token'),files:[]});
+ assert.ok(broker,'driver-owned IPC/GET broker must exist');
+});
