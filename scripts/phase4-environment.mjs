@@ -29,21 +29,22 @@ export function validateConfig(config) {
   requirePrivate(config.evidenceDir, true);
   for (const key of ['source', 'target', 'offsite']) {
     const host = config[key]; if (!host) continue;
-    assert.ok(Object.keys(host).every(k => ['kind', 'machineId', 'host', 'user', 'port', 'dataDir', 'appRoot', 'knownHostsFile', 'identityFile', 'storagePath'].includes(k)));
-    assert.ok(host.kind === 'local' && key === 'source' || host.kind === 'ssh');
+    assert.ok(Object.keys(host).every(k => ['kind', 'machineId', 'host', 'user', 'port', 'dataDir', 'appRoot', 'knownHostsFile', 'identityFile', 'storagePath', 'configFile', 'nodePath'].includes(k)));
+    assert.ok(host.kind === 'local' && ['source', 'offsite'].includes(key) || host.kind === 'ssh');
     assert.ok(typeof host.machineId === 'string' && /^[a-f0-9]{32}$/.test(host.machineId));
     if (host.kind === 'ssh') {
       safeHost(host.host); assert.match(host.user, /^[a-z_][a-z0-9_-]{0,31}$/);
+      if (host.nodePath) safePath(host.nodePath);
       requirePrivate(host.knownHostsFile); requirePrivate(host.identityFile);
       assert.ok(Number.isInteger(host.port ?? 22) && (host.port ?? 22) > 0 && (host.port ?? 22) <= 65535);
     }
     if (key !== 'offsite') { safePath(host.dataDir); safePath(host.appRoot); assert.ok(!inside(host.dataDir, host.appRoot)); }
   }
   if (config.publicOrigin) { const u = new URL(config.publicOrigin); assert.ok(u.protocol === 'https:' && u.origin === config.publicOrigin && !u.username && !u.password); }
-  if (config.proxy) { assert.ok(['nginx', 'caddy'].includes(config.proxy.kind)); safePath(config.proxy.configFile); assert.ok(typeof config.proxy.expectedConfigDigest === 'string' && /^[a-f0-9]{64}$/.test(config.proxy.expectedConfigDigest)); }
-  if (config.supervisor) { assert.equal(config.supervisor.kind, 'systemd'); assert.match(config.supervisor.unit, /^[A-Za-z0-9_.@-]+\.service$/); }
+  if (config.proxy) { assert.ok(['nginx', 'caddy', 'traefik'].includes(config.proxy.kind)); safePath(config.proxy.configFile); assert.ok(typeof config.proxy.expectedConfigDigest === 'string' && /^[a-f0-9]{64}$/.test(config.proxy.expectedConfigDigest)); }
+  if (config.supervisor) { assert.ok(['systemd', 'docker'].includes(config.supervisor.kind)); if (config.supervisor.kind === 'systemd') assert.match(config.supervisor.unit, /^[A-Za-z0-9_.@-]+\.service$/); else { assert.match(config.supervisor.helperPath, /^\/usr\/local\/libexec\/[A-Za-z0-9_.-]+$/); assert.match(config.supervisor.name, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/); } }
   if (config.persistentVolume) { safePath(config.persistentVolume.path); safePath(config.persistentVolume.releaseRoot); }
-  if (config.offsite) { safePath(config.offsite.storagePath); assert.ok(config.offsite.kind === 'ssh'); }
+  if (config.offsite) { safePath(config.offsite.storagePath); if (config.offsite.kind === 'local') requirePrivate(config.offsite.configFile); }
   if (config.recoveryKeyReference) { safePath(config.recoveryKeyReference.path); assert.ok(config.recoveryKeyReference.host === 'offsite'); }
   if (config.capacity) assert.ok(Object.values(config.capacity).every(v => Number.isSafeInteger(v) && v >= 0));
   return config;
@@ -92,11 +93,21 @@ async function hostProbe(scope) {
     const { createRequire } = await import('node:module'), req = createRequire(path.join(scope.appRoot, 'package.json'));
     const Database = req('better-sqlite3'), db = new Database(':memory:');
     try { db.exec('CREATE VIRTUAL TABLE probe USING fts5(text)'); out.sqlite = db.prepare('SELECT sqlite_version() AS version').get().version; out.fts = true; } finally { db.close(); }
+    try {
+      const auth = new Database(path.join(scope.dataDir, 'auth.sqlite'), { readonly: true });
+      try { const crypto = await import('node:crypto'); const row = auth.prepare('SELECT creds FROM whatsapp_profile WHERE id=1').get(); const pub = row && JSON.parse(row.creds).signedIdentityKey?.public; if (pub?.type === 'Buffer' && Buffer.from(pub.data, 'base64').length === 32) out.profile = crypto.createHash('sha256').update(Buffer.from(pub.data, 'base64')).digest('hex'); } finally { auth.close(); }
+    } catch { /* empty target preparation has no account yet */ }
   }
   if (scope.supervisor) {
+    if (scope.supervisor.kind === 'docker') {
+      const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, 'inspect']));
+      if (facts.machineId !== out.machineId) throw Error('supervisor_host');
+      out.supervisor = facts; out.supervisor.version = 'bounded-docker-helper';
+    } else {
     const text = await sub('systemctl', ['show', scope.supervisor.unit, '--no-pager', '--property=LoadState,ActiveState,UnitFileState,MainPID,User']);
     out.supervisor = Object.fromEntries(text.trim().split('\n').map(line => line.split('=')));
     out.supervisor.version = (await sub('systemctl', ['--version'])).split('\n')[0];
+    }
   }
   if (scope.proxy) {
     const crypto = await import('node:crypto');
@@ -104,8 +115,11 @@ async function hostProbe(scope) {
     const file = await fs.readFile(scope.proxy.configFile);
     out.proxy = { digest: crypto.createHash('sha256').update(file).digest('hex') };
     // nginx reports its version on stderr; execFile still captures it privately.
-    const result = await exec(scope.proxy.kind, scope.proxy.kind === 'nginx' ? ['-v'] : ['version'], { timeout: 8000, killSignal: 'SIGKILL', maxBuffer: 65536, shell: false });
-    out.proxy.version = (result.stdout || result.stderr).trim();
+    if (scope.proxy.kind === 'traefik') {
+      // The root-owned helper checks the existing proxy container/network and returns only version/peer.
+      const facts = JSON.parse(await sub('/usr/bin/sudo', ['-n', scope.supervisor.helperPath, 'inspect']));
+      out.proxy.version = facts.proxy?.version; out.proxy.peer = facts.proxy?.peer; out.proxy.verified = facts.proxy?.verified === true;
+    } else { const result = await exec(scope.proxy.kind, scope.proxy.kind === 'nginx' ? ['-v'] : ['version'], { timeout: 8000, killSignal: 'SIGKILL', maxBuffer: 65536, shell: false }); out.proxy.version = (result.stdout || result.stderr).trim(); }
   }
   if (scope.volume) {
     const st = await fs.lstat(scope.volume.path), canonical = await fs.realpath(scope.volume.path), disk = await fs.statfs(canonical, { bigint: true });
@@ -125,7 +139,8 @@ export function probeCommand(host, scope) {
   safeHost(host.host);
   // SSH invokes a remote shell: only a constant expression plus base64 reaches it.
   const encoded = Buffer.from(code).toString('base64');
-  return ['ssh', ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'IdentitiesOnly=yes', '-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1', '-o', 'UserKnownHostsFile=' + host.knownHostsFile, '-i', host.identityFile, '-p', String(host.port ?? 22), '-l', host.user, '--', host.host, "node -e 'eval(Buffer.from(\"" + encoded + "\",\"base64\").toString())'"]];
+  const node = host.nodePath ? safePath(host.nodePath) : 'node';
+  return ['ssh', ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'IdentitiesOnly=yes', '-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1', '-o', 'UserKnownHostsFile=' + host.knownHostsFile, '-i', host.identityFile, '-p', String(host.port ?? 22), '-l', host.user, '--', host.host, node + " -e 'eval(Buffer.from(\"" + encoded + "\",\"base64\").toString())'"]];
 }
 export async function probeHost(host, scope, { signal, runner = runFile } = {}) {
   const [command, argv] = probeCommand(host, scope);
@@ -166,8 +181,8 @@ export async function discover({ configFile = process.env.ZAP_OPERATION_CONFIG_F
         receipt.dependencies[key] = item(facts.os === 'linux' && facts.node === 'v24.21.0' && facts.fts && facts.privateData ? 'observed' : 'unverified', 'runtime_unsupported', facts);
         if (receipt.dependencies[key].status === 'observed') receipt.dependencies[key].reason = 'observed';
         if (key === 'target') {
-          if (config.supervisor) receipt.dependencies.supervisor = item(facts.supervisor?.LoadState === 'loaded' && facts.supervisor?.UnitFileState === 'enabled' && facts.supervisor?.ActiveState === 'active' && facts.supervisor?.User === config.target.user && facts.processes.some(p => String(p.pid) === facts.supervisor.MainPID) ? 'observed' : 'unverified', 'facts_incomplete', facts.supervisor);
-          if (config.proxy) receipt.dependencies.proxy = item(facts.proxy?.digest === config.proxy.expectedConfigDigest && !!facts.proxy.version ? 'observed' : 'unverified', 'facts_incomplete', facts.proxy);
+          if (config.supervisor) { const ok = config.supervisor.kind === 'docker' ? facts.supervisor?.machineId === config.target.machineId && (facts.supervisor.running && facts.supervisor.profileProcesses === 1 || !facts.supervisor.running && facts.supervisor.profileProcesses === 0 && !facts.supervisor.autostart) : facts.supervisor?.LoadState === 'loaded' && facts.supervisor?.UnitFileState === 'enabled' && facts.supervisor?.ActiveState === 'active' && facts.supervisor?.User === config.target.user && facts.processes.some(p => String(p.pid) === facts.supervisor.MainPID); receipt.dependencies.supervisor = item(ok ? 'observed' : 'unverified', 'facts_incomplete', facts.supervisor); }
+          if (config.proxy) receipt.dependencies.proxy = item(facts.proxy?.digest === config.proxy.expectedConfigDigest && !!facts.proxy.version && (config.proxy.kind !== 'traefik' || facts.proxy.verified) ? 'observed' : 'unverified', 'facts_incomplete', facts.proxy);
           if (config.persistentVolume) {
             const archive = receipt.dependencies.source.evidence?.archive, volume = facts.volume;
             let capacity;
@@ -184,7 +199,26 @@ export async function discover({ configFile = process.env.ZAP_OPERATION_CONFIG_F
       try { const facts = await tlsProbe(config.publicOrigin, signal); receipt.dependencies.publicOrigin = item(facts.verified ? 'observed' : 'unverified', 'facts_incomplete', facts); }
       catch { receipt.dependencies.publicOrigin = item('unverified', 'probe_failed'); }
     }
-    if (config.offsite) {
+    if (config.offsite?.kind === 'local') {
+      try {
+        const machineId = readFileSync('/etc/machine-id', 'utf8').trim(); assert.equal(machineId, config.offsite.machineId); assert.notEqual(machineId, config.target.machineId);
+        requirePrivate(config.offsite.storagePath, true); requirePrivate(config.recoveryKeyReference.path);
+        const { readOffsiteConfig, recoverOffsiteCopy } = await import('../dist/src/offsite.js');
+        const pull = readOffsiteConfig(config.offsite.configFile); assert.equal(pull.role, 'pull'); assert.equal(pull.identityFile, config.recoveryKeyReference.path); assert.equal(pull.destinationDir, config.offsite.storagePath);
+        const statePath = join(pull.operationDir, 'offsite-state.json'); requirePrivate(statePath);
+        const state = JSON.parse(readFileSync(statePath, 'utf8')), id = state.lastVerifiedSuccess?.operationId;
+        assert.ok(id && state.result === 'success');
+        const work = mkdtempSync(join(config.offsite.storagePath, '.environment-readback-'));
+        try {
+          const recovered = await recoverOffsiteCopy(pull, id, join(work, 'verified'));
+          const { validateSnapshot } = await import('../dist/src/backup.js');
+          assert.equal(validateSnapshot(recovered.snapshotDir).manifest.profile, receipt.dependencies.source.evidence?.profile);
+          assert.ok(Date.now() - Date.parse(recovered.receipt.snapshotCreatedAt) <= 86400000);
+          receipt.dependencies.offsite = item('observed', 'observed', { recovered: true, observedAt: new Date().toISOString(), snapshotCreatedAt: recovered.receipt.snapshotCreatedAt });
+          receipt.dependencies.recoveryKeyReference = item('observed', 'observed', { independentlyAccessible: true, decryptedActualCopy: true });
+        } finally { rmSync(work, { recursive: true }); }
+      } catch { receipt.dependencies.offsite = item('unverified', 'target_offsite_access_unverified'); receipt.dependencies.recoveryKeyReference = item('unverified', 'recovery_decryption_unverified'); }
+    } else if (config.offsite) {
       try {
         const facts = await probeHost(config.offsite, { volume: { path: config.offsite.storagePath }, recoveryKey: config.recoveryKeyReference }, { signal });
         const independent = offsiteIndependent({ ...config.offsite, ownerAccess: true }, config.target);

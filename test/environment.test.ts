@@ -70,3 +70,16 @@ test('configuração exposta ou embutida em checkout é blocked e não inicia pr
   assert.ok(!JSON.stringify(api.publicReceipt(receipt)).includes('synthetic-secret-host'));
   assert.throws(() => api.validateConfig({ evidenceDir: process.cwd() }));
 });
+
+test('Docker Traefik e pull local exigem config privada e cópia real decriptável', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'zap-environment-topology-')); t.after(() => rmSync(dir, { recursive: true }));
+  const pullFile = join(dir, 'pull.json'), key = join(dir, 'identity');
+  writeFileSync(pullFile, JSON.stringify({ role: 'pull', operationDir: dir, destinationDir: dir, identityFile: key, maxBytes: 1024, reserveBytes: 0 }), { mode: 0o600 });
+  writeFileSync(key, 'invalid fixture key', { mode: 0o600 });
+  const config = { evidenceDir: dir, proxy: { kind: 'traefik', configFile: '/private/proxy.json', expectedConfigDigest: 'a'.repeat(64) }, supervisor: { kind: 'docker', name: 'fixture', helperPath: '/usr/local/libexec/zap-container-control' }, offsite: { kind: 'local', machineId: 'a'.repeat(32), storagePath: dir, configFile: pullFile }, recoveryKeyReference: { host: 'offsite', path: key } };
+  assert.doesNotThrow(() => api.validateConfig(config));
+  const file = join(dir, 'config.json'); writeFileSync(file, JSON.stringify(config), { mode: 0o600 });
+  const result = await api.discover({ configFile: file });
+  assert.equal(result.status, 'blocked'); assert.equal(result.dependencies.offsite.status, 'unverified'); assert.equal(result.dependencies.recoveryKeyReference.status, 'unverified');
+  assert.throws(() => api.validateConfig({ ...config, supervisor: { ...config.supervisor, helperPath: '/tmp/untrusted' } }));
+});

@@ -1,0 +1,61 @@
+# Contracts only. Render to a private root-owned file outside Git after inventory.
+services:
+  zap:
+    image: ${ZAP_IMAGE_DIGEST:?immutable image required}
+    user: "12001:12001"
+    pid: host
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp:mode=1777,size=64m]
+    command: [node, dist/src/main.js, serve]
+    restart: "no"
+    stop_grace_period: 65s
+    environment:
+      ZAP_DATA_DIR: ${ZAP_DATA_DIR:?absolute private path required}
+      ZAP_BACKUP_STATE_FILE: ${ZAP_BACKUP_STATE_FILE:?private state path required}
+      ZAP_BIND_HOST: 0.0.0.0
+      ZAP_PORT: "3000"
+      ZAP_PUBLIC_ORIGIN: ${ZAP_PUBLIC_ORIGIN:?HTTPS origin required}
+      ZAP_TRUSTED_PROXY_PEERS: ${ZAP_TRUSTED_PROXY_PEERS:?exact observed proxy peer required}
+    volumes:
+      - type: bind
+        source: /etc/machine-id
+        target: /etc/machine-id
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${ZAP_DATA_DIR}
+        target: ${ZAP_DATA_DIR}
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${ZAP_OPERATION_DIR:?private operation directory required}
+        target: ${ZAP_OPERATION_DIR}
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${ZAP_SNAPSHOT_ROOT:?private promotion snapshot parent required}
+        target: ${ZAP_SNAPSHOT_ROOT}
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [proxy]
+    labels:
+      zap.archive: ${ZAP_ARCHIVE_LABEL:?private stable archive label required}
+      zap.release: ${ZAP_RELEASE_COMMIT:?exact commit required}
+      traefik.enable: "true"
+      traefik.http.routers.zap.rule: Host(`${ZAP_HOST:?canonical authority required}`)
+      traefik.http.routers.zap.entrypoints: https
+      traefik.http.routers.zap.tls: "true"
+      traefik.http.routers.zap.middlewares: zap-forwarding
+      traefik.http.services.zap.loadbalancer.server.port: "3000"
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.Forwarded: ""
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.X-Forwarded-For: ""
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.X-Forwarded-Host: ""
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.X-Forwarded-Port: ""
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.X-Forwarded-Server: ""
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.X-Real-IP: ""
+      traefik.http.middlewares.zap-forwarding.headers.customrequestheaders.X-Forwarded-Proto: https
+networks:
+  proxy:
+    external: true
+    name: ${ZAP_PROXY_NETWORK:?existing private network required}

@@ -24,7 +24,7 @@ export function shutdownService({ server, close, controller = new AbortControlle
 }
 
 export type Mode = 'offline' | 'collect';
-export type SupervisorConfig = { kind: 'systemd' | 'docker'; name: string; offlineName?: string; user?: boolean; dataDir: string; machineId: string; ssh?: { host: string; user: string; port?: number; identityFile: string; knownHostsFile: string } };
+export type SupervisorConfig = { kind: 'systemd' | 'docker'; name: string; offlineName?: string; helperPath?: string; release?: string; user?: boolean; dataDir: string; machineId: string; ssh?: { host: string; user: string; port?: number; identityFile: string; knownHostsFile: string } };
 export type SupervisorFacts = { running: boolean; autostart: boolean; pid: number; startTime: string | null; machineId: string; profileProcesses: number; mode: Mode };
 export type Controller = { stop(signal?: AbortSignal): Promise<void>; start(mode: Mode, signal?: AbortSignal): Promise<void>; inspect(signal?: AbortSignal): Promise<SupervisorFacts> };
 export type OperationConfig = { dataDir: string; operationDir: string; destination: string; priorMode: Mode; priorRelease: string; supervisor: SupervisorConfig };
@@ -104,23 +104,25 @@ export function createSupervisor(config: SupervisorConfig): Controller {
   const naming = config.kind === 'systemd' ? /^[A-Za-z0-9_.@-]+\.service$/ : /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
   if (!['systemd', 'docker'].includes(config.kind) || !naming.test(config.name) || config.offlineName && !naming.test(config.offlineName) || !/^[a-f0-9]{32}$/.test(config.machineId) || !/^\/[A-Za-z0-9_./ -]+$/.test(config.dataDir) || config.dataDir.split('/').includes('..')) throw Error('Supervisor inválido');
   const remote = config.ssh;
+  if (config.helperPath && (config.kind !== 'docker' || !/^\/usr\/local\/libexec\/[A-Za-z0-9_.-]+$/.test(config.helperPath) || !/^[a-f0-9]{40}$/.test(config.release ?? ''))) throw Error('Helper de supervisor inválido');
   if (remote) {
     if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(remote.host) || !/^[a-z_][a-z0-9_-]{0,31}$/.test(remote.user) || !Number.isInteger(remote.port ?? 22) || (remote.port ?? 22) < 1 || (remote.port ?? 22) > 65535) throw Error('SSH inválido');
     privateFile(remote.identityFile); privateFile(remote.knownHostsFile);
   }
   const run = async (file: string, args: string[], signal?: AbortSignal) => {
-    if (!remote) return (await promisify(execFile)(file, args, { signal, timeout: 10_000, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
-    const source = `const{promisify}=require('node:util');const{execFile}=require('node:child_process');promisify(execFile)(${JSON.stringify(file)},${JSON.stringify(args)},{timeout:8000,killSignal:'SIGKILL',maxBuffer:262144,shell:false}).then(r=>process.stdout.write(r.stdout)).catch(()=>process.exit(1));`;
-    return remoteNode(source, signal);
+    const timeout = config.helperPath ? 75_000 : 10_000;
+    if (!remote) return (await promisify(execFile)(file, args, { signal, timeout, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
+    const source = `const{promisify}=require('node:util');const{execFile}=require('node:child_process');promisify(execFile)(${JSON.stringify(file)},${JSON.stringify(args)},{timeout:${timeout - 1000},killSignal:'SIGKILL',maxBuffer:262144,shell:false}).then(r=>process.stdout.write(r.stdout)).catch(()=>process.exit(1));`;
+    return remoteNode(source, signal, timeout);
   };
-  const remoteNode = async (source: string, signal?: AbortSignal) => {
+  const remoteNode = async (source: string, signal?: AbortSignal, timeout = 10_000) => {
     const encoded = Buffer.from(source).toString('base64');
-    return (await promisify(execFile)('/usr/bin/ssh', ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'IdentitiesOnly=yes', '-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1', '-o', 'UserKnownHostsFile=' + remote!.knownHostsFile, '-i', remote!.identityFile, '-p', String(remote!.port ?? 22), '-l', remote!.user, '--', remote!.host, `node -e 'eval(Buffer.from("${encoded}","base64").toString())'`], { signal, timeout: 10_000, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
+    return (await promisify(execFile)('/usr/bin/ssh', ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'IdentitiesOnly=yes', '-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1', '-o', 'UserKnownHostsFile=' + remote!.knownHostsFile, '-i', remote!.identityFile, '-p', String(remote!.port ?? 22), '-l', remote!.user, '--', remote!.host, `node -e 'eval(Buffer.from("${encoded}","base64").toString())'`], { signal, timeout, killSignal: 'SIGKILL', maxBuffer: 262144, shell: false })).stdout;
   };
   return {
-    async stop(signal) { await this.inspect(signal); for (const name of [...new Set([config.name, config.offlineName ?? config.name])]) await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', config.kind === 'systemd' ? [...(config.user ? ['--user'] : []), 'stop', name] : ['stop', '--time', '30', name], signal); },
-    async start(mode, signal) { const prior = await this.inspect(signal); if (prior.running && prior.mode !== mode) throw Error('Outro modo de serviço já ativo'); const name = mode === 'offline' ? config.offlineName : config.name; if (!name) throw Error('Supervisor de consulta offline não configurado'); await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', [...(config.kind === 'systemd' && config.user ? ['--user'] : []), 'start', name], signal); const facts = await this.inspect(signal); if (!facts.running || facts.mode !== mode) throw Error('Modo retomado divergente'); },
-    async inspect(signal) { if (!remote) return supervisorProbe(config); const source = `(${supervisorProbe.toString()})(${JSON.stringify(config)}).then(v=>console.log(JSON.stringify(v))).catch(()=>process.exit(1));`; return JSON.parse(await remoteNode(source, signal)); }
+    async stop(signal) { await this.inspect(signal); if (config.helperPath) { await run('/usr/bin/sudo', ['-n', config.helperPath, 'stop'], signal); return; } for (const name of [...new Set([config.name, config.offlineName ?? config.name])]) await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', config.kind === 'systemd' ? [...(config.user ? ['--user'] : []), 'stop', name] : ['stop', '--time', '30', name], signal); },
+    async start(mode, signal) { const prior = await this.inspect(signal); if (prior.running && prior.mode !== mode) throw Error('Outro modo de serviço já ativo'); if (config.helperPath) { if (prior.running) return; await run('/usr/bin/sudo', ['-n', config.helperPath, 'start', config.release!, mode], signal); } else { const name = mode === 'offline' ? config.offlineName : config.name; if (!name) throw Error('Supervisor de consulta offline não configurado'); await run(config.kind === 'systemd' ? '/usr/bin/systemctl' : '/usr/bin/docker', [...(config.kind === 'systemd' && config.user ? ['--user'] : []), 'start', name], signal); } const facts = await this.inspect(signal); if (!facts.running || facts.mode !== mode) throw Error('Modo retomado divergente'); },
+    async inspect(signal) { if (config.helperPath) { const facts = JSON.parse(await run('/usr/bin/sudo', ['-n', config.helperPath, 'inspect'], signal)); if (facts.machineId !== config.machineId || facts.profilePathHash !== createHash('sha256').update(resolve(config.dataDir)).digest('hex') || !Number.isInteger(facts.profileProcesses) || facts.profileProcesses < 0 || facts.profileProcesses > 1) throw Error('Helper de outro perfil'); return facts; } if (!remote) return supervisorProbe(config); const source = `(${supervisorProbe.toString()})(${JSON.stringify(config)}).then(v=>console.log(JSON.stringify(v))).catch(()=>process.exit(1));`; return JSON.parse(await remoteNode(source, signal)); }
   };
 }
 export function assertQuiet(facts: SupervisorFacts, fenced = false) { if (facts.running || facts.pid !== 0 || facts.profileProcesses !== 0 || fenced && facts.autostart) throw Error('Origem ativa, autostart ou estado ambíguo'); }

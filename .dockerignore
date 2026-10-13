@@ -1,0 +1,17 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+!test/
+!test/**
+!public/
+!public/**
+!ops/
+!ops/verify-dependencies.mjs
+!.planning/
+!.planning/phases/
+!.planning/phases/03-consulta-e-arquivos-reais-no-codex/
+!.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-DEPENDENCY-REVALIDATION.json

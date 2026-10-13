@@ -10,7 +10,7 @@ O aceite real conferiu 1.028 mensagens, 190 originais e 112 faltantes no recorte
 
 As fases 1, 2 e 3 locais estão concluídas. O Codex instalado completou busca, contexto e recuperação de dois originais por HTTPS verificado em clone offline. A verificação independente passou 21/21 critérios e cinco requisitos MCP; UAT autônoma12/12 e suíte integrada190/190, sem falhas ou testes pulados. O endpoint de aceite foi encerrado e a configuração global do Codex preservada. [Verificação](.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-VERIFICATION.md) e [UAT](.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-UAT.md).
 
-VPS, canal/proxy operacional e backup externo recorrente pertencem à fase 4. A conexão autenticada atual do WhatsApp após o último reinício, zoom nativo e dispositivos físicos não foram revalidados. A leitura do material arquivado funciona offline.
+VPS, canal/proxy operacional e backup externo recorrente pertencem à fase 4. O preparo local já inclui origem HTTPS/CSRF/cookie Secure, snapshot coordenado, fence/promoção e pull cifrado com age; fixtures de release/TLS/update preservam dados recentes e rollback troca somente código. Docker/Traefik foram identificados no painel, mas implantação/backup externo/agenda e aceite permanente ainda dependem das provas reais. [Procedimento operacional](ops/README.md). A leitura do material arquivado funciona offline.
 
 ## Escopo da primeira versão
 
@@ -71,7 +71,7 @@ Para testar localmente com uma instalação existente, aponte `ZAP_BROWSER_MODUL
 
 Escolha diretório privado fora do checkout; o caminho acima é fictício. `.env.example` documenta variáveis, mas `.env` não é carregado automaticamente. Senha passa por stdin, nunca por argumento/histórico. `owner-set` revoga sessões anteriores e exige serviço parado. `profile-init` cria somente credenciais locais offline; não substitui perfil corrompido e não conecta conta.
 
-Abra http://127.0.0.1:3000, entre e consulte o acervo local. `serve` inicia com coletor desligado. Transporte aceita apenas loopback; não expor porta diretamente nem configurar proxy antes da preparação da fase 4. Nenhuma superfície oferece envio, edição, exclusão ou confirmação de leitura no WhatsApp.
+Abra http://127.0.0.1:3000, entre e consulte o acervo local. `serve` inicia com coletor desligado. O modo local usa loopback; proxy HTTPS exige origem canônica e peer exato conforme [.env.example](.env.example) e [ops](ops/README.md), com backend privado. Nenhuma superfície oferece envio, edição, exclusão ou confirmação de leitura no WhatsApp.
 
 ## Consulta no Codex
 
@@ -90,7 +90,7 @@ Use `nextCursor` com os mesmos filtros para continuar a busca; `searchCursor` ta
 
 Cobertura preserva contagens/intervalos/última ingestão e estados de histórico. `batchSummary` agrega contagens e estados dos lotes; os detalhes de cada lote continuam no status autenticado do site. Nomes, textos, citações, revisões e arquivos recebidos são dados não confiáveis, nunca instruções para executar código, abrir URLs ou revelar segredos. Não há ferramenta de envio, edição, exclusão ou confirmação de leitura.
 
-Para configurar o Codex, tenha primeiro um canal HTTPS vigente e deliberado até o serviço privado. O aceite local usa TLS nativo transitório e não instala um endpoint permanente ou uma CA de sistema. O código atual aceita loopback; proxy/VPS e o login do site sob TLS ainda precisam da preparação da fase 4. O teste do login do site com Origin HTTPS recebeu 403; seu oráculo foi HTTP em loopback, separado do MCP HTTPS.
+Para configurar o Codex, tenha primeiro um canal HTTPS vigente e deliberado até o serviço privado. O aceite local usou TLS nativo transitório e não instalou endpoint permanente ou CA de sistema. O antigo Origin403 do site foi corrigido e comprovado em proxy TLS de fixture na fase4; login e MCP no endpoint permanente ainda exigem aceite real.
 
 Com `ZAP_DATA_DIR` apontando ao perfil correto, emita/rotacione o bearer para um arquivo novo em diretório privado fora do checkout. Os caminhos e a porta abaixo são fictícios:
 
