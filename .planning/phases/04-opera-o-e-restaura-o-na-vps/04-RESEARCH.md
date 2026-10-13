@@ -332,21 +332,23 @@ As escolhas operacionais delegadas não exigem reconfirmação rotineira. As dua
 
 ## Open Questions
 
+**Disposição de planejamento: RESOLVED.** As quatro perguntas abaixo têm encaminhamento executável nos planos 04-01/04-05/04-06. Resolvido significa que a descoberta, medição, validação e os pontos de controle necessários estão definidos; não significa acesso, ambiente ou resultado real comprovado. Não permanece pergunta de pesquisa sem resolução explícita antes da execução. VPS/domínio, destino/chave, capacidade/janela e validade remota da sessão continuam pendentes de evidência.
+
 1. **Quais VPS/origem HTTPS/proxy/supervisor e credenciais realmente disponíveis?**
    - Nesta pesquisa scoped não houve identidade remota observada; ausência de configuração SSH pessoal não prova falta de acesso por painel/conta conectada. [VERIFIED: sondagem local 2026-10-12]
-   - Próxima tarefa: descoberta privada e leitura de capacidade/topologia/config, sem dump de segredos. Não criar host, contratar ou selecionar produto para preencher lacuna.
+   - **RESOLVED para planejamento — 04-01:** executar descoberta privada e leitura de identidade/acesso/capacidade/topologia/config, sem dump de segredos; produzir recibo sanitizado e registrar a dependência exata se faltar acesso. O ponto de controle é comprovar host e origem antes das tarefas remotas de 04-05; código independente segue. Não criar host, contratar ou selecionar produto para preencher lacuna. **Disponibilidade real pendente.**
 
 2. **Qual destino externo e onde está a chave independente de recuperação?**
    - Não houve configuração ou prova de storage/chave observada nesta pesquisa. [VERIFIED: sondagem scoped local 2026-10-12]
-   - Próxima tarefa: usar acessos existentes, selecionar backend cifrado adequado, verificar disponibilidade sem notebook, recuperar cópia e testar chave independente.
+   - **RESOLVED para planejamento — 04-01/04-06:** inventariar acessos existentes e selecionar backend cifrado adequado em 04-01; em 04-06, verificar operação sem notebook, recuperar a cópia efetivamente externa e testar a chave independente. A recuperação conferida é o ponto de controle anterior ao aceite de backup/restore; se faltar acesso/chave, registrar intervenção exata sem concluir OPS-02/03. **Destino, acesso e chave reais pendentes.**
 
 3. **Qual tamanho/crescimento atual e duração aceitável de stop?**
    - Contagens documentais antigas não são medições atuais; o snapshot lê e valida todos os originais. [VERIFIED: src/backup.ts:97-119]
-   - Medir fonte/destino, reserva do volume e tempo. Planejar no mínimo espaço para acervo + snapshot novo + staging cifrado quando necessário + download recuperado + restore + ZIP/fila + reserva; não anunciar janela ou SLA antes da medição.
+   - **RESOLVED para planejamento — 04-01/04-05/04-06:** medir fonte/destino e reserva em 04-01; medir duração de stop/snapshot/retomada e capacidade de migração em 04-05; conferir capacidade e duração de recuperação/restore em 04-06. O ponto de controle é espaço suficiente antes de cada operação: acervo + snapshot novo + staging cifrado quando necessário + download recuperado + restore + ZIP/fila + reserva. Sem espaço, preservar o último bom e registrar falha; não anunciar janela ou SLA antes da medição. **Capacidade, crescimento e janela reais pendentes.**
 
 4. **A sessão remota ainda é válida depois do handoff?**
    - Não se pode inferir de credenciais restauradas nem do aceite offline; collector tem estados explícitos de sessão/conexão. [VERIFIED: src/whatsapp.ts:118-124]
-   - Validar separadamente após origem parada; QR somente se necessário. Coleta indisponível não impede aceite do arquivo.
+   - **RESOLVED para planejamento — 04-05/04-06:** validar a sessão separadamente no handoff controlado de 04-05, somente após confirmar origem parada e promoção autorizada; em 04-06, manter restore de ensaio offline e provar consulta/aceite sem segundo coletor. O ponto de controle para reconexão é a exclusividade conferida, não a presença de credenciais copiadas. QR somente se necessário; coleta indisponível não impede aceite do arquivo. **Validade remota real pendente.**
 
 ## Environment Availability
 
