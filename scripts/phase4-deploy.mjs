@@ -240,7 +240,7 @@ export async function closeSshMaster(config) {
   if (failed) throw Error('ssh_control_close_failed'); return { closed: true };
 }
 export async function rpc(config, task, extra = {}, input, runner = exec) {
-  const r = config.target, payload = { ...r, ...extra }, source = '(' + remoteTask.toString() + ')(' + JSON.stringify(task) + ',' + JSON.stringify(payload) + ').then(r=>process.stdout.write(JSON.stringify(r))).catch(()=>process.exitCode=1)';
+  const r = config.target, payload = { ...r, ...extra }, source = '(' + remoteTask.toString() + ')(' + JSON.stringify(task) + ',' + JSON.stringify(payload) + ').then(r=>process.stdout.write(JSON.stringify(r))).catch(e=>{process.stderr.write(JSON.stringify({error:"remote_task_failed",code:Number.isInteger(e.code)?e.code:null,killed:e.killed===true,signal:["SIGKILL","SIGTERM"].includes(e.signal)?e.signal:null,helperRefused:e.stderr==="container_control_blocked\\n"}));process.exitCode=1})';
   const command = r.nodePath + " -e 'eval(Buffer.from(\"" + Buffer.from(source).toString('base64') + "\",\"base64\").toString())'";
   const argv = sshArguments(config, command);
   // Promotion verifies the full archive; an SSH deadline does not cancel its remote outcome.

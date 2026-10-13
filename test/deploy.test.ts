@@ -376,6 +376,11 @@ test('RPCs JSON e binários reutilizam conexão OpenSSH real e fecham master pri
     await new Promise<void>((yes, no) => { const timer = setTimeout(() => no(Error('sshd startup timeout: ' + logs)), 5000); daemon.stderr.on('data', () => { if (logs.includes('Server listening on')) { clearTimeout(timer); yes(); } }); daemon.once('exit', () => { clearTimeout(timer); no(Error('sshd exited: ' + logs)); }); });
     lock = acquireServiceLock(operationDir);
     assert.equal((await m.rpc(config, 'receive', { destination: config.target.snapshotDir, name: null })).created, true);
+    await assert.rejects(m.rpc(config, 'unknown'), (error: any) => {
+      assert.deepEqual(JSON.parse(error.stderr), { error: 'remote_task_failed', code: null, killed: false, signal: null, helperRefused: false });
+      for (const value of [base, key, config.target.host]) assert.ok(!error.stderr.includes(value));
+      return error.code === 1;
+    });
     const content = Buffer.alloc(128 * 1024, 0x61), destination = join(config.target.snapshotDir, 'manifest.json');
     await m.rpc(config, 'receive', { destination: config.target.snapshotDir, name: 'manifest.json' }, Readable.from([content])); assert.deepEqual(readFileSync(destination), content);
     await assert.rejects(m.rpc(config, 'receive', { destination: config.target.snapshotDir, name: 'manifest.json' }, Readable.from([Buffer.from('overwrite rejected')]))); assert.deepEqual(readFileSync(destination), content);
