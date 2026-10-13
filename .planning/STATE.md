@@ -4,16 +4,16 @@ current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: 5
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-10-13T02:20:48.802Z"
+stopped_at: 04-05-01 verified; 04-05-02 awaits temporary SSH confirmation and real gates
+last_updated: "2026-10-13T02:53:01.394Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 4 planning complete
-state_head: 1afd8a9a00ef5ce03146ea1ecb02a438025f21b6
+state_head: 781027180ae2bd0d7e8ceddfd1c65df04b7d04c8
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 75
 ---
 
@@ -125,6 +125,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 03]: CI do PR #3 e do push89d94ec concluído190/190 no Ubuntu/Node24.21.0, zero fail/cancelled/skipped/todo. Correção test-only do preflight de cleanup isolou Codex pessoal; produto/driver/pins/workflow não mudaram. Fase4 continua não iniciada.
 - [Phase 03]: PR #3 integrado por merge commit905028a; CI da main38314994967 aprovado. Checkout main sincronizado, histórico original protegido no backup local; código de execução/pins/serviço/dados privados preservados. Próxima capacidade permanece fase4.
 - [Phase 04]: Plan04-04 implementa pull cifrado com age e ACK apos restore; teste PN/LID corrigido por reserva proporcional, suite padrao239/239. Backup externo e OPS seguem pendentes da implantacao real.
+- [Phase 04]: 04-05-01 pronto: suite244/244 e Docker nao root/helper restrito conferidos. 04-05-02 aguarda SSH autorizado, configs privadas e backup externo real; fonte intacta e fase06 nao iniciada.
 
 ### Pending Todos
 
@@ -138,6 +139,7 @@ Nenhum impedimento para iniciar o planejamento.
 - Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
 - Phase 4: resolver HTTPS/proxy/login web (Origin403/WINDOWS13) e revalidar consulta/download no endpoint permanente; piloto MCP local temporário encerrado.
+- 04-05-02: painel e dominio preparados; confirmacao especifica para cadastrar SSH temporario pendente por politica Computer Use. Configs privadas, transferencia e backup/restauracao reais ainda nao executados; nenhum OPS concluido.
 
 ### Roadmap Evolution
 
@@ -153,9 +155,9 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-12T23:40:12.891Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-opera-o-e-restaura-o-na-vps/04-CONTEXT.md
+Last session: 2026-10-13T02:53:01.342Z
+Stopped at: 04-05-01 verified; 04-05-02 awaits temporary SSH confirmation and real gates
+Resume file: .planning/phases/04-opera-o-e-restaura-o-na-vps/04-05-SUMMARY.md
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
 
