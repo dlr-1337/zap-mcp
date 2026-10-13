@@ -293,6 +293,42 @@ test('diagnóstico de fixture SSH conserva causa sem paths privados nem comandos
   for (const value of [base, key, command, 'somefingerprint']) assert.ok(!diagnostic.includes(value));
 });
 
+function rpcFixture(t: { after(fn: () => unknown): void }) {
+  const base = mkdtempSync(join(tmpdir(), 'zap-rpc-deadline-')), operationDir = join(base, 'ops'); mkdirSync(operationDir, { mode: 0o700 });
+  t.after(() => rmSync(base, { recursive: true }));
+  const privateInput = (name: string) => { const path = join(base, name); writeFileSync(path, 'fixture', { mode: 0o600 }); return path; };
+  return { base, config: { operationDir, target: { host: 'fixture.invalid', user: 'owner', nodePath: process.execPath, dataDir: join(base, 'data'), appRoot: '/srv/releases/fixture', helperPath: '/usr/local/libexec/fixture', identityFile: privateInput('key'), knownHostsFile: privateInput('known') } } };
+}
+test('RPC promove com orçamento de quinze minutos sem ampliar os demais comandos', async t => {
+  const m = await load(), { config } = rpcFixture(t);
+  for (const task of ['promote', 'restore', 'state', 'control', 'preparation', 'fence', 'rotate-owner']) {
+    let options: any;
+    const runner = async (program: string, argv: string[], received: any) => {
+      assert.equal(program, '/usr/bin/ssh'); assert.ok(argv.includes('StrictHostKeyChecking=yes')); options = received;
+      return { stdout: '{"observed":true}' };
+    };
+    assert.deepEqual(await m.rpc(config, task, {}, undefined, runner), { observed: true });
+    assert.equal(options.timeout, task === 'promote' ? 900000 : 90000);
+    assert.equal(options.killSignal, 'SIGKILL'); assert.equal(options.shell, false); assert.equal(options.maxBuffer, 8 * 1024 * 1024);
+  }
+});
+test('deadline do RPC deixa resultado remoto indeterminado sem retry nem alterar journal', { timeout: 5000 }, async t => {
+  const m = await load(), { base, config } = rpcFixture(t), committed = join(base, 'remote-committed');
+  const journal = join(config.operationDir, 'deploy-journal.json'), before = Buffer.from('{"stage":"restored"}'); writeFileSync(journal, before, { mode: 0o600 });
+  let attempts = 0, remote: ReturnType<typeof spawn> | undefined, ended: Promise<any> | undefined;
+  const expired = Object.assign(Error('RPC deadline expired'), { killed: true, signal: 'SIGKILL' });
+  const runner = async () => {
+    attempts++;
+    remote = spawn(process.execPath, ['-e', 'setTimeout(()=>require("node:fs").writeFileSync(process.argv[1],"committed",{mode:384}),100)', committed], { stdio: 'ignore' });
+    t.after(() => { if (remote?.exitCode === null) remote.kill('SIGKILL'); }); ended = once(remote, 'exit');
+    await once(remote, 'spawn'); throw expired;
+  };
+  await assert.rejects(m.rpc(config, 'promote', {}, undefined, runner), error => error === expired);
+  assert.equal(attempts, 1); assert.deepEqual(readFileSync(journal), before);
+  assert.deepEqual(await ended, [0, null]); assert.equal(readFileSync(committed, 'utf8'), 'committed');
+  assert.deepEqual(readFileSync(journal), before, 'falha local não permite declarar cancelamento ou sucesso remoto');
+});
+
 test('RPCs JSON e binários reutilizam conexão OpenSSH real e fecham master privado', async t => {
   const m = await load(); for (const name of ['sshArguments', 'rpc', 'closeSshMaster']) assert.equal(typeof m[name], 'function');
   const sshd = ['/usr/bin/sshd', '/usr/sbin/sshd'].find(existsSync), root = process.getuid!() === 0;

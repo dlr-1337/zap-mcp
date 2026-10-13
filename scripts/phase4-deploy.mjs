@@ -243,7 +243,8 @@ export async function rpc(config, task, extra = {}, input, runner = exec) {
   const r = config.target, payload = { ...r, ...extra }, source = '(' + remoteTask.toString() + ')(' + JSON.stringify(task) + ',' + JSON.stringify(payload) + ').then(r=>process.stdout.write(JSON.stringify(r))).catch(()=>process.exitCode=1)';
   const command = r.nodePath + " -e 'eval(Buffer.from(\"" + Buffer.from(source).toString('base64') + "\",\"base64\").toString())'";
   const argv = sshArguments(config, command);
-  if (!input) return JSON.parse((await runner('/usr/bin/ssh', argv, { timeout: 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false })).stdout);
+  // Promotion verifies the full archive; an SSH deadline does not cancel its remote outcome.
+  if (!input) return JSON.parse((await runner('/usr/bin/ssh', argv, { timeout: task === 'promote' ? 900_000 : 90_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024, shell: false })).stdout);
   const child = spawn('/usr/bin/ssh', argv, { stdio: ['pipe', 'pipe', 'ignore'], signal: AbortSignal.timeout(120_000), killSignal: 'SIGKILL' });
   const { pipeline } = await import('node:stream/promises'); const done = new Promise((yes, no) => { child.on('error', no); child.on('exit', code => code === 0 ? yes() : no(Error('transfer_failed'))); });
   child.stdout.resume(); await Promise.all([pipeline(input, child.stdin), done]); return { received: true };
