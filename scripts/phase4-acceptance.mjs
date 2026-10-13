@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, lstatSync, realpathSync, existsSync, createWriteStream, linkSync, unlinkSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, lstatSync, realpathSync, existsSync, createWriteStream, linkSync, unlinkSync, openSync, closeSync, fstatSync, constants } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
@@ -8,7 +8,6 @@ import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { createServer as createUnixServer } from 'node:net';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
 import Database from 'better-sqlite3';
@@ -189,24 +188,25 @@ export async function createDeliveryBroker(live,{destination,origin,ca,tokenFile
  check(runs.has(live),'live_run_required');privateFile(destination,true);privateFile(tokenFile);check(new URL(origin).protocol==='https:'&&new URL(origin).origin===origin,'fixed_delivery_origin');
  check(Array.isArray(files)&&files.length===2&&new Set(files.map(f=>f.attachmentId)).size===2&&new Set(files.map(f=>f.path)).size===2,'two_distinct_delivery_ids');
  files=files.map(f=>{check(/^[a-f0-9-]{36}$/.test(f.attachmentId)&&Number.isSafeInteger(f.size)&&f.size>0&&/^[a-f0-9]{64}$/.test(f.sha256)&&!existsSync(f.path),'known_new_delivery');privateFile(dirname(f.path),true);return Object.freeze({...f});});
- check(Buffer.byteLength(join(tmpdir(),'zap-ipc-XXXXXX','s'))<=103,'unix_socket_path_limit');
- const secret=readFileSync(tokenFile,'utf8').trim(),directory=mkdtempSync(join(tmpdir(),'zap-ipc-')),socketPath=join(directory,'s'),helperPath=join(directory,'receive.mjs'),nonce=randomUUID();check(Buffer.byteLength(socketPath)<=103,'unix_socket_path_limit');
- const controller=new AbortController(),active=new Set(),pending=new Set(),observed=[];let consumed=false;
+ const secret=readFileSync(tokenFile,'utf8').trim(),directory=mkdtempSync(join(tmpdir(),'zap-ipc-')),requestPath=join(directory,'request.json'),responsePath=join(directory,'response.json'),helperPath=join(directory,'receive.mjs'),nonce=randomUUID();
+ const controller=new AbortController(),observed=[];let consumed=false,closed=false;
  const receive=async f=>{check(!existsSync(f.path),'delivery_destination_was_locally_created');const temporary=f.path+'.part-'+randomUUID();let req;try{
   const res=await new Promise((yes,no)=>{req=request(new URL('/mcp/attachments/'+f.attachmentId,origin),{ca,rejectUnauthorized:true,agent:false,signal:controller.signal,headers:{Authorization:'Bearer '+secret}},yes);req.setTimeout(30000,()=>req.destroy(Error('delivery_timeout')));req.on('error',no);req.end();});
   check(res.statusCode===200&&req.socket.authorized===true&&!res.headers.location&&(!res.headers['content-length']||Number(res.headers['content-length'])===f.size),'delivery_tls_status_origin');
   let size=0;const hash=createHash('sha256'),measured=new Transform({transform(b,_encoding,done){size+=b.length;if(size>f.size){done(Error('delivery_oversize'));return;}hash.update(b);done(null,b);}});
   await pipeline(res,measured,createWriteStream(temporary,{flags:'wx',mode:0o600}));const sha256=hash.digest('hex');check(size===f.size&&sha256===f.sha256,'delivery_complete_sql_bytes');linkSync(temporary,f.path);unlinkSync(temporary);observed.push({id:f.attachmentId,status:res.statusCode,size,sha256,completed:true,at:Date.now()});
  }finally{req?.destroy();if(existsSync(temporary))unlinkSync(temporary);}};
- const server=createUnixServer(socket=>{active.add(socket);socket.on('error',()=>{});socket.on('close',()=>active.delete(socket));socket.setTimeout(120000,()=>socket.destroy());let raw='',handled=false;
-  socket.on('data',chunk=>{raw+=chunk;if(raw.length>4096){socket.destroy();return;}if(!raw.includes('\n')||handled)return;handled=true;
-   const operation=(async()=>{try{const input=JSON.parse(raw);check(!consumed&&Object.keys(input).sort().join(',')==='attachmentIds,nonce'&&input.nonce===nonce&&same(input.attachmentIds,files.map(f=>f.attachmentId)),'fixed_ipc_scope');consumed=true;for(const f of files)await receive(f);socket.end(JSON.stringify({delivered:2})+'\n');}catch{socket.end(JSON.stringify({error:'delivery_refused'})+'\n');}})();pending.add(operation);operation.finally(()=>pending.delete(operation));
-  });
- });
- try{await new Promise((yes,no)=>{server.once('error',no);server.listen(socketPath,yes);});chmodSync(socketPath,0o600);
- const helper=`import{connect}from'node:net';const scope=${JSON.stringify({nonce,attachmentIds:files.map(f=>f.attachmentId)})};const s=connect(${JSON.stringify(socketPath)});let raw='';const timer=setTimeout(()=>{s.destroy();process.exitCode=1;},120000);s.on('connect',()=>s.write(JSON.stringify(scope)+String.fromCharCode(10)));s.on('data',b=>raw+=b);s.on('error',()=>{process.exitCode=1;});s.on('close',()=>{clearTimeout(timer);try{const r=JSON.parse(raw);if(r.delivered!==2)throw Error();process.stdout.write(JSON.stringify({delivered:2}));}catch{process.stderr.write('Delivery refused');process.exitCode=1;}});`;
+ // Filesystem signaling works with command networking disabled; only parent GETs create witnesses.
+ const polling=(async()=>{while(!closed){if(!consumed&&existsSync(requestPath)){try{
+  privateFile(directory,true);const fd=openSync(requestPath,constants.O_RDONLY|constants.O_NOFOLLOW);let input;try{const s=fstatSync(fd);check(s.isFile()&&s.uid===process.getuid()&&s.nlink===1&&!(s.mode&0o077)&&s.size<=4096,'private_ipc_request');input=JSON.parse(readFileSync(fd,'utf8'));}finally{closeSync(fd);}
+  check(Object.keys(input).sort().join(',')==='attachmentIds,nonce'&&input.nonce===nonce&&same(input.attachmentIds,files.map(f=>f.attachmentId)),'fixed_ipc_scope');check(!existsSync(responsePath),'response_was_locally_created');consumed=true;
+  let result;try{for(const f of files)await receive(f);result={nonce,delivered:2};}catch{result={nonce,error:'delivery_refused'};}
+  if(!closed){const temp=join(directory,randomUUID()+'.json');try{writeFileSync(temp,JSON.stringify(result),{flag:'wx',mode:0o600});linkSync(temp,responsePath);}finally{if(existsSync(temp))unlinkSync(temp);}}
+ }catch{}finally{if(existsSync(requestPath))unlinkSync(requestPath);}}await new Promise(r=>setTimeout(r,25));}})();
+ try{
+ const helper=`import{writeFileSync,readFileSync,existsSync,linkSync,unlinkSync}from'node:fs';const scope=${JSON.stringify({nonce,attachmentIds:files.map(f=>f.attachmentId)})};const requestPath=${JSON.stringify(requestPath)};const responsePath=${JSON.stringify(responsePath)};const temporary=requestPath+'.part';try{if(existsSync(responsePath))throw Error();writeFileSync(temporary,JSON.stringify(scope),{flag:'wx',mode:384});linkSync(temporary,requestPath);unlinkSync(temporary);const deadline=Date.now()+120000;while(!existsSync(responsePath)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));const r=JSON.parse(readFileSync(responsePath,'utf8'));if(r.nonce!==scope.nonce||r.delivered!==2)throw Error();process.stdout.write(JSON.stringify({delivered:2}));}catch{process.stderr.write('Delivery refused');process.exitCode=1;}finally{if(existsSync(temporary))unlinkSync(temporary);}`;
  writeFileSync(helperPath,helper,{mode:0o700,flag:'wx'});const quote=x=>"'"+x.replaceAll("'","'\''")+"'";
- const broker={helperPath,command:quote(process.execPath)+' '+quote(helperPath),async close(){controller.abort();for(const socket of active)socket.destroy();await Promise.allSettled([...pending]);await new Promise(r=>server.close(r));rmSync(directory,{recursive:true,force:true});}};deliveryWitnesses.set(broker,{files,observed});return broker;}catch(error){controller.abort();for(const socket of active)socket.destroy();await Promise.allSettled([...pending]);if(server.listening)await new Promise(r=>server.close(r));rmSync(directory,{recursive:true,force:true});throw error;}
+ const broker={helperPath,command:quote(process.execPath)+' '+quote(helperPath),async close(){closed=true;controller.abort();await polling;rmSync(directory,{recursive:true,force:true});}};deliveryWitnesses.set(broker,{files,observed});return broker;}catch(error){closed=true;controller.abort();await polling;rmSync(directory,{recursive:true,force:true});throw error;}
 }
 export async function probeInstalledCodex(live,{origin,ca,executable=join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex'),args,env=process.env,cwd,destination,prompt,tokenFile,dataDir,case:c,serverName='zap',files,restored=false}) {
   privateFile(destination,true);privateFile(tokenFile);check(realpathSync(executable)===realpathSync(join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex')),'installed_binary_required');
