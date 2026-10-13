@@ -73,7 +73,7 @@ export function runCodex(executable, args, env, cwd, transcript, prompt) {
       appendFileSync(transcript, '\n' + stderr);
       if (failure) { reject(failure); return; }
       const events = output.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
-      accept({ pid: child.pid, code, output: output + stderr, events });
+      accept({ pid: child.pid, code, output: output + stderr, stderr, events });
       } catch (error) { reject(error); }
     }); child.stdin.end(prompt);
   });

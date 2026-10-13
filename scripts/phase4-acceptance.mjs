@@ -160,9 +160,10 @@ export async function probeBackendCleanup(live,{configFile,ca}) {
   record(live,['cleanup']);}finally{try{await closeSshMaster(config);}finally{lock.release();}}
 }
 export function parseNativeNegotiation(logs,startedAt,endedAt=Date.now()) {
-  return logs.split('\n').map(line=>({line,time:Date.parse(line.match(/20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/)?.[0]??'')})).filter(e=>e.time>=startedAt&&e.time<=endedAt).map(e=>/rmcp::service[^\n]*Service initialized as client[^\n]*peer_info[^\n]*(?:ServerPeerInfo|InitializeResult)[^\n]*(?:protocol_version|protocolVersion)[^\n]*?(20\d\d-\d\d-\d\d)[^\n]*name: \"zap-archive\"/.exec(e.line)).find(Boolean);
+  return logs.replace(/\x1b\[[0-9;]*m/g,'').split('\n').filter(line=>/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z\s+INFO\s+rmcp::service\b/.test(line)).map(line=>({line,time:Date.parse(line.match(/20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/)?.[0]??'')})).filter(e=>e.time>=startedAt&&e.time<=endedAt).map(e=>/rmcp::service[^\n]*Service initialized as client[^\n]*peer_info[^\n]*(?:ServerPeerInfo|InitializeResult)[^\n]*(?:protocol_version|protocolVersion)[^\n]*?(20\d\d-\d\d-\d\d)[^\n]*name: \"zap-archive\"/.exec(e.line)).find(Boolean);
 }
-export async function probeInstalledCodex(live,{origin,ca,executable=join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex'),args,env=process.env,cwd,destination,prompt,tokenFile,dataDir,case:c,serverName='zap',files,negotiationLogFile,restored=false,downloader}) {
+export function observeCodexNegotiation(result,startedAt,endedAt=Date.now()) { return parseNativeNegotiation(result.stderr ?? '',startedAt,endedAt); }
+export async function probeInstalledCodex(live,{origin,ca,executable=join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex'),args,env=process.env,cwd,destination,prompt,tokenFile,dataDir,case:c,serverName='zap',files,restored=false,downloader}) {
   privateFile(destination,true);privateFile(tokenFile);check(realpathSync(executable)===realpathSync(join(homedir(),'.local/share/mise/installs/codex/latest/bin/codex')),'installed_binary_required');
   check(Array.isArray(files)&&files.length>=2&&files.every(f=>!existsSync(f.path)&&c.media.some(m=>m.id===f.attachmentId)),'fresh_original_destinations_required');
   const version=spawnSync(executable,['--version'],{encoding:'utf8'});check(version.status===0&&/^codex-cli \d+\.\d+\.\d+/.test(version.stdout),'installed_codex_required');
@@ -171,8 +172,7 @@ export async function probeInstalledCodex(live,{origin,ca,executable=join(homedi
   check(result.pid>0&&result.code===0&&digest(readFileSync(executable))===baseline,'current_codex_process');
   check(typeof downloader==='string'&&result.events.some(e=>e.type==='item.completed'&&e.item?.type==='command_execution'&&e.item.exit_code===0&&e.item.command.includes(downloader)),'codex_downloader_executed');
   const calls=result.events.filter(e=>e.type==='item.completed'&&e.item?.type==='mcp_tool_call'&&e.item.server===serverName).map(e=>e.item);check(['find_conversations','search_messages','get_context','get_attachment'].every(tool=>calls.some(e=>e.tool===tool&&e.status==='completed'&&!e.error))&&calls.every(e=>['find_conversations','search_messages','get_context','get_attachment'].includes(e.tool)),'current_four_readonly_tool_calls');
-  let logs=result.output;if(negotiationLogFile){privateFile(negotiationLogFile);check(lstatSync(negotiationLogFile).mtimeMs>=live.startedAt,'fresh_negotiation_log');logs+='\n'+readFileSync(negotiationLogFile,'utf8');}
-  const negotiation=parseNativeNegotiation(logs,live.startedAt,Date.now());check(negotiation,'current_native_negotiation_required');
+  const negotiation=observeCodexNegotiation(result,live.startedAt,Date.now());check(negotiation,'current_native_negotiation_required');
   const db=new Database(join(dataDir,'archive.sqlite'),{readonly:true});try{
     const period={start:calendarStart(c.from),end:calendarStart(new Date(Date.parse(c.to+'T12:00:00Z')+86400000).toISOString().slice(0,10))};
     const terms=c.term.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().match(/[\p{L}\p{N}]+/gu);check(terms?.length,'known_query_terms');
