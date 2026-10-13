@@ -1,17 +1,17 @@
 ---
-status: verifying
+status: awaiting_human_verify
 trigger: "Phase 4 default suite: PN/LID attachment second cycle reconcile -> redownload -> drain -> stop reaches calls=4 but final attachment read fails ENOENT; focused media suite passes."
 created: 2026-10-13T02:05:31Z
-updated: 2026-10-13T02:14:24Z
+updated: 2026-10-13T02:17:23Z
 ---
 
 ## Current Focus
 
 bug_class: concurrency
 hypothesis: Two unknown-length downloads receive uneven reservations; first consumes the full initial spare capacity, second receives only a transient filesystem increase, and shrinking that increase zeros the second reservation and triggers ENOSPC while ample physical space remains.
-test: All six driving/control cases green after source-only revert/reapply; media/recovery 39/39 and ten repeated driving sets 60/60.
-expecting: Default complete npm test at the committed source HEAD confirms no regressions outside the adjacent suite.
-next_action: Commit only src/media.ts, test/media.test.ts and this debug file, then run mise exec node@24.21.0 -- npm test once and save private diagnostics at .planning/research/.cache/pn-lid-retry-full-final.log.
+test: Source-only revert/reapply, six driving/control cases, media/recovery 39/39, repeated driving sets 60/60 and default complete npm test 239/239 all verified.
+expecting: Parent integrates the source correction into the ongoing phase-4 workflow and preserves the live-account acceptance boundary.
+next_action: Hand off source commit f94b8236787c12bb87b615644ce69c5f76303cdf, private logs and this sanitized investigation record to the parent; archive only after required workflow confirmation, outside this owned-file task.
 candidate_causes:
   - code: Worker drain/stop ordering may cancel a newly dispatched second-cycle download.
   - data: PN/LID rekey may preserve a wrong final storage locator or envelope reference.
@@ -77,6 +77,11 @@ started: Observed by parent after phase 4 plan 04-04; prior baseline was 225/225
   found: Adjacent run passes 39/39 (28 media, 11 recovery), including known+unknown disk movement, reserve threshold, actual ENOSPC, exhausted unknown budget, concurrent PN/LID publication/locator/bytes, SQL failure, corrupt/missing finals, stopped/retired leases, offline reading and isolated restore. Ten repeated six-case runs pass 60/60 with zero failures/cancellations/skips. git diff --check passes. Only the three owned files changed.
   implication: Known commitments and true disk-pressure protection remain covered independently from the driving test; proportional shrink is safe and repeatable in synthetic local verification. Commit the minimal fix and run the required complete default suite on that HEAD.
 
+- timestamp: 2026-10-13T02:17:23Z
+  checked: Sole complete default npm test run on committed source HEAD f94b8236787c12bb87b615644ce69c5f76303cdf.
+  found: mise exec node@24.21.0 -- npm test exits 0; 239/239 tests pass, zero failures/cancellations/skips, 71445.452754 ms. All six driving/control cases pass within this default run. Git HEAD remains the tested source commit with a clean tree at completion. Private synthetic log is .planning/research/.cache/pn-lid-retry-full-final.log.
+  implication: Authorized source regression repair is fully self-verified. Only a documentary result update follows; source/test bytes remain exactly those tested. No real workflow/account deployment claim is made, and session archival awaits the parent workflow confirmation.
+
 ## Resolution
 
 root_cause: Existing unknown-size reservation clamping uses insertion order and gives the earliest reservation all remaining capacity; small normal free-space declines zero later reservations, which falsely emit ENOSPC and cancel active downloads.
@@ -88,8 +93,9 @@ verification:
   adjacent_tests: { result: pass, suites_run: [media, recovery], tests: 39, failures: 0, skipped: 0 }
   stability_tests: { result: pass, repetitions: 10, tests_per_repetition: 6, total: 60, failures: 0, outer_timeout_seconds: 60 }
   revert_and_reconfirm: { result: pass, bug_returned_on_revert: true, fixed_on_reapply: true, failures_without_source_fix: 4 }
-  full_suite: { result: pending, command: mise exec node@24.21.0 -- npm test }
+  full_suite: { result: pass, command: mise exec node@24.21.0 -- npm test, tested_commit: f94b8236787c12bb87b615644ce69c5f76303cdf, tests: 239, failures: 0, cancelled: 0, skipped: 0, duration_ms: 71445.452754 }
   guardrail_verdict: accepted
+commit: f94b8236787c12bb87b615644ce69c5f76303cdf
 files_changed: [src/media.ts, test/media.test.ts, .planning/debug/pn-lid-retry-final.md]
 oracle_type: specified
 
