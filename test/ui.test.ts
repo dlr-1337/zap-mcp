@@ -12,7 +12,7 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createService } from '../src/main.js';
 
-const requireBrowser = createRequire(process.env.ZAP_BROWSER_MODULE ?? '/home/otavio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
+const requireBrowser = createRequire(process.env.ZAP_BROWSER_MODULE ?? import.meta.url);
 const { chromium } = requireBrowser('playwright');
 test('pagehide e logout recusado liberam buscas candidatos e listagem sem callbacks tardios', async t => {
   const { s, page, login } = await uiFixture(t);
@@ -162,7 +162,7 @@ test('exportação mostra período efetivo e recupera polling sem misturar abas 
 async function uiFixture(t: any) {
   const dir = mkdtempSync(join(tmpdir(), 'zap-ui-')), s = createService({ dataDir: dir });
   const server = s.app.listen(0, '127.0.0.1'); await once(server, 'listening');
-  const browser = await chromium.launch({ executablePath: process.env.ZAP_BROWSER_EXECUTABLE ?? '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const browser = await chromium.launch({ executablePath: process.env.ZAP_BROWSER_EXECUTABLE, headless: true, args: ['--no-sandbox', '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   t.after(async () => { await browser.close(); server.close(); await once(server, 'close'); await s.close(); rmSync(dir, { recursive: true }); });
   await s.setPassword('senha sintética'); const page = await browser.newPage(); page.setDefaultTimeout(10000);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

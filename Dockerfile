@@ -3,7 +3,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY ops/verify-dependencies.mjs ./ops/
-COPY .planning/phases/03-consulta-e-arquivos-reais-no-codex/03-DEPENDENCY-REVALIDATION.json ./ops/dependency-audit.json
+COPY ops/dependency-pins.json ./ops/
 RUN node ops/verify-dependencies.mjs
 RUN npm ci --ignore-scripts --no-audit --no-fund
 # Native code is built on this target; no host node_modules enters the image.
@@ -19,7 +19,7 @@ FROM node:24.21.0-bookworm-slim@sha256:51b1100cc2a83d370c6a60952e3f2989c8a43159d
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist/src ./dist/src
-COPY package.json ./
+COPY package.json LICENSE ./
 COPY public ./public
 # Git checkouts made with a private umask still need readable code for the app UID.
 RUN chmod -R a+rX /app

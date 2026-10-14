@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url)));
-const audit = JSON.parse(readFileSync(new URL('./dependency-audit.json', import.meta.url)));
-assert.equal(audit.status, 'passed');
-for (const p of audit.packages) {
+const pins = JSON.parse(readFileSync(new URL('./dependency-pins.json', import.meta.url)));
+assert.ok(Array.isArray(pins.packages) && pins.packages.length > 0);
+for (const p of pins.packages) {
   const actual = lock.packages['node_modules/' + p.name];
   assert.equal(actual?.version, p.version); assert.equal(actual.integrity, p.integrity);
 }
@@ -20,4 +20,4 @@ await Promise.all(Array.from({ length: 6 }, async () => {
     assert.equal(meta.dist.integrity, p.integrity); assert.equal(meta.dist.tarball, p.resolved);
   }
 }));
-console.log(JSON.stringify({ passed: true, entries: packages.length, inheritedAuditPins: audit.packages.length }));
+console.log(JSON.stringify({ passed: true, entries: packages.length, pinnedPackages: pins.packages.length }));

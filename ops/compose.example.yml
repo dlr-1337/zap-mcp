@@ -1,4 +1,4 @@
-# Contracts only. Render to a private root-owned file outside Git after inventory.
+# Exemplo para Traefik existente. Preencha e valide em arquivo privado fora do Git.
 services:
   zap:
     image: ${ZAP_IMAGE_DIGEST:?immutable image required}

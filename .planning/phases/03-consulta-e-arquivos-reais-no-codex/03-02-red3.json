@@ -1,9 +1,0 @@
-{
-  "command": "TMPDIR=<diretorio-privado-de-verificacao> mise exec node@24.21.0 -- node --test --test-reporter=tap --test-name-pattern='MCP argumentos excessivos' dist/test/mcp.test.js",
-  "exitCode": 1,
-  "output": "TAP version 13\n# Subtest: MCP argumentos excessivos não fazem erro de schema ultrapassar orçamento\nnot ok 1 - MCP argumentos excessivos não fazem erro de schema ultrapassar orçamento\n  ---\n  duration_ms: 68.804139\n  type: 'test'\n  location: '<checkout>/dist/test/mcp.test.js:365:1'\n  failureType: 'testCodeFailure'\n  error: 'Até o erro deve caber no orçamento completo'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  actual: false\n  operator: '=='\n  stack: |-\n    TestContext.<anonymous> (file:///home/otavio/Documents/ChatGPT/zap-mcp%202/dist/test/mcp.test.js:369:12)\n    process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 437.505643\n",
-  "targetTest": "MCP argumentos excessivos não fazem erro de schema ultrapassar orçamento",
-  "expected": "Schema error envelope <=32768 bytes",
-  "actual": "Oversized unknown argument name produces oversized SDK validation error",
-  "semanticAssessment": "HTTP query ran successfully; planned complete-envelope budget assertion failed on large schema error. No fixture, syntax or load fault."
-}

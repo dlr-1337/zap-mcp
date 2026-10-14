@@ -1,5 +1,6 @@
-# Evidências e respostas temporárias da pesquisa GSD; os documentos finais são versionados.
-.planning/research/.cache/
+# Material interno de planejamento e ferramentas.
+/.planning/
+/.impeccable/
 
 # Dependências e arquivos gerados.
 node_modules/

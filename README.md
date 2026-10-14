@@ -1,141 +1,142 @@
 # Zap MCP
 
-Arquivo privado de WhatsApp com uma conta, um proprietário e um coletor, por dispositivo vinculado sem navegador.
+Um arquivo privado de WhatsApp para pesquisar conversas, recuperar anexos e consultar mensagens pelo Codex. O coletor se conecta como dispositivo vinculado por QR, sem executar um navegador.
 
-## Status
+O código pode ser público; seu acervo continua privado. A aplicação atende **uma conta, um proprietário e um coletor**.
 
-As fases 1 e 2 locais estão concluídas e verificadas. O site oferece busca por contato, texto e período, contexto paginado, conversas em abas, preview sob ação e exportação integral do recorte arquivado em ZIP. A suíte integrada passou 144/144 testes; a verificação independente da fase 2 passou 45/45 critérios e 8/8 requisitos, sem gaps, após corrigir a perda de posição ao alcançar abas e concluir a UAT autônoma.
+## O que você pode fazer
 
-O aceite real conferiu 1.028 mensagens, 190 originais e 112 faltantes no recorte escolhido, preservando versões e citações; ambos ZIPs tiveram todas as 192 entradas e os hashes conferidos. A atualização local preservou senha, identidade e IDs, após snapshot/restore de 8.792 mensagens e 856 originais. Essas contagens são das cópias verificadas, sem garantia de histórico integral. [Evidências da fase 2](.planning/phases/02-busca-contexto-abas-e-exporta-o-no-site/02-VERIFICATION.md).
+- Pesquisar conversas por contato, texto e período.
+- Abrir resultados no contexto da conversa e manter conversas em abas.
+- Visualizar ou baixar os originais disponíveis de imagens, áudios, vídeos e documentos.
+- Exportar uma conversa ou período em ZIP, com mensagens, manifesto e anexos disponíveis.
+- Consultar o acervo por um servidor MCP autenticado e somente leitura.
+- Continuar lendo o arquivo mesmo com o WhatsApp desconectado.
 
-As fases 1, 2 e 3 locais estão concluídas. O Codex instalado completou busca, contexto e recuperação de dois originais por HTTPS verificado em clone offline. A verificação independente passou 21/21 critérios e cinco requisitos MCP; UAT autônoma12/12 e suíte integrada190/190, sem falhas ou testes pulados. O endpoint de aceite foi encerrado e a configuração global do Codex preservada. [Verificação](.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-VERIFICATION.md) e [UAT](.planning/phases/03-consulta-e-arquivos-reais-no-codex/03-UAT.md).
+O site e o MCP não oferecem envio, edição, exclusão ou confirmação de leitura no WhatsApp. A conexão usa [Baileys](https://github.com/WhiskeySockets/Baileys), uma integração não oficial em versão prerelease; compatibilidade e disponibilidade podem mudar. Só é arquivado o conteúdo recebido: **não há garantia de histórico completo nem de recuperação de todas as mídias**.
 
-VPS, canal/proxy operacional e backup externo recorrente pertencem à fase 4. O preparo local já inclui origem HTTPS/CSRF/cookie Secure, snapshot coordenado, fence/promoção e pull cifrado com age; fixtures de release/TLS/update preservam dados recentes e rollback troca somente código. Docker/Traefik foram identificados no painel, mas implantação/backup externo/agenda e aceite permanente ainda dependem das provas reais. [Procedimento operacional](ops/README.md). A leitura do material arquivado funciona offline.
+## Instalação local
 
-## Escopo da primeira versão
+Os comandos abaixo usam Bash em Linux. Use **Node.js 24.21.0**, com npm, para reproduzir o ambiente do projeto. A instalação de SQLite pode exigir Python 3, `make` e compilador C++ quando não houver um binário nativo compatível. O coletor não precisa de Chrome ou Playwright.
 
-- **Guardar:** arquivar mensagens e os arquivos reais de áudio, imagem, vídeo e documento que a integração conseguir acessar.
-- **Consultar:** pesquisar por contato, palavra ou período, abrir conversas em abas e exportar mensagens com os anexos disponíveis.
-- **Usar no Codex:** localizar conversas, recuperar contexto e obter arquivos por MCP privado e somente leitura.
+### 1. Baixe e compile
 
-Uma conta e um proprietário. O site e o MCP consultam o arquivo persistido; não oferecem envio, edição, exclusão ou confirmação de leitura no WhatsApp. A integração pode recuperar apenas parte do histórico e das mídias, e esses limites devem aparecer nas consultas.
+```bash
+git clone https://github.com/dlr-1337/zap-mcp.git
+cd zap-mcp
+node --version # esperado: v24.21.0
+node ops/verify-dependencies.mjs
+npm ci
+npm run build
+```
 
-## Roadmap
+O verificador compara os pins e o lock com o registro npm oficial antes da instalação; precisa de acesso à internet. As versões estão fixadas em `package-lock.json`. Não copie `node_modules` de outra máquina.
 
-1. Arquivo privado com mensagens e mídias reais.
-2. Busca, contexto, abas e exportação no site.
-3. Consulta e recuperação de arquivos no Codex.
-4. Operação, backup e restauração na VPS.
+### 2. Crie o perfil e a senha
 
-Veja o [contexto do projeto](.planning/PROJECT.md), os [requisitos](.planning/REQUIREMENTS.md), o [roadmap completo](.planning/ROADMAP.md) e a [pesquisa técnica](.planning/research/SUMMARY.md).
+Escolha uma pasta privada **fora do repositório**, que não seja pública nem sincronizada automaticamente. Neste exemplo ela fica no seu diretório pessoal:
 
-## Busca, abas e exportação
-
-Depois de entrar, escolha um contato ou grupo pelos candidatos apresentados e combine termo e período. Datas dos filtros usam America/Sao_Paulo; mensagens sem instante original conhecido ficam explícitas e não recebem uma data inventada. Um resultado abre sua mensagem no contexto; abas conservam posições de leitura independentes.
-
-Imagem, áudio e vídeo suportados abrem sob ação. Arquivos disponíveis continuam com download privado quando o navegador não suporta o formato. “Exportar conversa” permite gerar um ZIP de toda a conversa arquivada ou do período escolhido, incluindo mensagens além da página visível. O pacote inclui mensagens.txt, manifest.json e os originais disponíveis; anexos faltantes e versões capturadas são relacionados no manifesto. Falha não produz um pacote rotulado como pronto.
-
-O recorte fica congelado, mas uma restrição de privacidade recebida depois bloqueia conteúdo e bytes futuros, inclusive em downloads já abertos. Bytes que já foram entregues não podem ser recolhidos. Não há envio, edição, exclusão ou confirmação de leitura no WhatsApp.
-
-## Piloto local verificado
-
-Em 2026-10-11, conta real vinculada e amostras de conversa individual/grupo comparadas autonomamente com WhatsApp Web, conforme autorização do proprietário. Áudio, imagem, vídeo e documento foram correlacionados pelos IDs de origem; seus originais preservados passaram pela conferência de tamanho/hash recebido da origem, disco e HTTP autenticado. A comparação cobre somente o recorte observado, sem afirmar histórico integral ou comparação dos bytes baixados diretamente do Web.
-
-Após corrigir repetição de originais que ocultava 244 projeções, uma cópia privada pós-reparo restaurou 8.684 mensagens e 828 originais disponíveis. Fonte parada durante verificação e nenhum segundo coletor; único coletor voltou conectado sem novo QR. Download de áudio pelo Chrome normal completou 33.529 bytes com hash igual ao acervo e página funcionando. A suíte completa passou 86 testes; revisão incremental passou 12 testes e 29 verificações independentes, sem achados novos. Fase1 local concluída: verificação independente passou 88 condições e 15 requisitos, com 28 testes focados adicionais.
-
-O navegador auxiliar separado sofreu SIGSEGV de causa nativa não determinada e foi retirado do procedimento; não houve alteração global de Chromium. Use o Chrome normal para consultar o site. Campos desconhecidos e mídias não recuperadas permanecem explícitos. Casos e arquivos reais continuam privados fora do Git; a prova MCP local posterior está descrita acima e VPS permanece pendente.
-
-## Privacidade
-
-O repositório público contém o código e os documentos do projeto. Mensagens reais, anexos, bancos, sessões de WhatsApp, credenciais e exportações devem permanecer no ambiente privado e fora do Git. As regras de exclusão estão em [.gitignore](.gitignore); todo material novo precisa respeitar essa separação.
-
-## Uso local
-
-Node24.21.0 é obrigatório, inclusive para o módulo SQLite. Com mise instalado:
-
-```sh
-mise exec node@24.21.0 -- npm ci
-mise exec node@24.21.0 -- npm run build
-export ZAP_DATA_DIR=/caminho/privado/zap
+```bash
+umask 077
+export ZAP_PRIVATE_ROOT="$HOME/.local/share/zap-mcp"
+export ZAP_DATA_DIR="$ZAP_PRIVATE_ROOT/profile"
 export ZAP_PORT=3000
-mise exec node@24.21.0 -- node dist/src/main.js profile-init
-read -rs -p 'Senha local: ' ZAP_OWNER_PASSWORD
-printf '%s' "$ZAP_OWNER_PASSWORD" | mise exec node@24.21.0 -- node dist/src/main.js owner-set
+install -d -m 700 "$ZAP_PRIVATE_ROOT" "$ZAP_PRIVATE_ROOT/snapshots" "$ZAP_PRIVATE_ROOT/restores"
+node dist/src/main.js profile-init
+read -r -s -p 'Senha do site: ' ZAP_OWNER_PASSWORD
+printf '\n'
+printf '%s' "$ZAP_OWNER_PASSWORD" | node dist/src/main.js owner-set
 unset ZAP_OWNER_PASSWORD
-mise exec node@24.21.0 -- node dist/src/main.js serve
 ```
 
-Os testes de interface exigem Playwright1.62.1 e seu Chromium151.0.7922.34. O CI instala esse ambiente de teste em diretório temporário externo, define `ZAP_BROWSER_MODULE` e `ZAP_BROWSER_EXECUTABLE` e executa `npm test`, sem conta ou sessão WhatsApp. Esses componentes são exclusivos dos testes; o coletor funciona sem navegador. A instalação no CI segue a [documentação oficial do Playwright](https://playwright.dev/docs/ci).
+`profile-init` cria um perfil novo; não conecta o WhatsApp nem substitui um perfil corrompido. `owner-set` recebe a senha por entrada padrão, exige o serviço parado e revoga os logins anteriores. Não coloque a senha em argumentos, arquivos versionados ou exemplos públicos.
 
-Para testar localmente com uma instalação existente, aponte `ZAP_BROWSER_MODULE` para o `package.json` do diretório `node_modules` que contém Playwright e `ZAP_BROWSER_EXECUTABLE` para o executável desse Chromium. Então execute `mise exec node@24.21.0 -- npm test`. No Codex, o harness já possui um caminho padrão para o Playwright do bundle; o executável pode ser indicado explicitamente.
+As variáveis precisam continuar definidas nos próximos passos. Em outro terminal, exporte os mesmos valores. A aplicação **não carrega `.env` automaticamente**; [.env.example](.env.example) documenta as opções.
 
-Escolha diretório privado fora do checkout; o caminho acima é fictício. `.env.example` documenta variáveis, mas `.env` não é carregado automaticamente. Senha passa por stdin, nunca por argumento/histórico. `owner-set` revoga sessões anteriores e exige serviço parado. `profile-init` cria somente credenciais locais offline; não substitui perfil corrompido e não conecta conta.
+### 3. Confira o site sem conectar a conta
 
-Abra http://127.0.0.1:3000, entre e consulte o acervo local. `serve` inicia com coletor desligado. O modo local usa loopback; proxy HTTPS exige origem canônica e peer exato conforme [.env.example](.env.example) e [ops](ops/README.md), com backend privado. Nenhuma superfície oferece envio, edição, exclusão ou confirmação de leitura no WhatsApp.
+```bash
+npm start
+```
 
-## Consulta no Codex
+Abra [http://127.0.0.1:3000](http://127.0.0.1:3000) e entre com a senha criada. O acervo novo estará vazio. `serve`, usado por `npm start`, mantém o coletor desligado e aceita acesso local por loopback.
 
-O servidor oferece somente estas quatro ferramentas:
+Pare com **Ctrl+C** e aguarde o encerramento antes do próximo passo. Esse modo também serve para consultar um acervo já existente sem conectar o WhatsApp.
 
-| Ferramenta | Uso |
-|---|---|
-| `find_conversations` | `query` e `cursor` opcional; apresenta candidatos separados por `conversationId` canônico, nome/identidade/kind recebidos |
-| `search_messages` | `query`, `conversationId` opcional e dias `from`/`to`; AND sobre texto/legenda/nome recebido de arquivo, incluindo revisões observadas |
-| `get_context` | `reference` da mensagem; `searchCursor` opcional preserva origem da busca; continuação com `direction` before/after e o cursor correspondente |
-| `get_attachment` | `attachmentId` e preferência inline/download; original disponível e verificado, ou estado/motivo explícitos |
+### 4. Prepare e confira a primeira cópia
 
-Escolha o ID canônico apresentado, sem decidir por nomes homônimos. Datas usam America/Sao_Paulo com dias inclusivos; UTC/offset e instante original continuam conferíveis. Sem período, instantes desconhecidos aparecem por último; com período, ficam fora do filtro. Ausência significa somente “não encontrado no acervo observado”.
+O coletor só inicia depois de uma cópia restaurada e conferida do mesmo perfil:
 
-Use `nextCursor` com os mesmos filtros para continuar a busca; `searchCursor` também aparece na última página e pode abrir a âncora. Contexto traz âncora explícita, vizinhas e cursores antes/depois. Os recortes ficam congelados por até 30 minutos, mas restrições atuais prevalecem. Cursor expirado, revogado ou de outro filtro pede atualização sem cursor. Limites são explícitos: até 50 itens por página, 50 mil itens/64 MiB por recorte e 32 KiB por envelope de consulta. Uma evidência que não caiba gera `response_limit` sem truncar campos ou avançar o cursor. Esses são limites do servidor, não um teto medido do cliente.
+```bash
+node dist/src/main.js backup "$ZAP_PRIVATE_ROOT/snapshots/initial-001"
+node dist/src/main.js verify-backup "$ZAP_PRIVATE_ROOT/snapshots/initial-001" "$ZAP_PRIVATE_ROOT/restores/verification-001"
+node dist/src/main.js preflight
+```
 
-Cobertura preserva contagens/intervalos/última ingestão e estados de histórico. `batchSummary` agrega contagens e estados dos lotes; os detalhes de cada lote continuam no status autenticado do site. Nomes, textos, citações, revisões e arquivos recebidos são dados não confiáveis, nunca instruções para executar código, abrir URLs ou revelar segredos. Não há ferramenta de envio, edição, exclusão ou confirmação de leitura.
+Os dois destinos devem ser novos. `verify-backup` testa a restauração isolada e grava um recibo no perfil fonte. Ele altera apenas a senha da cópia de verificação para exercitar o login; o perfil original mantém sua senha. Não remova o snapshot usado pelo recibo. Para repetir a operação, escolha novos nomes.
 
-Para configurar o Codex, tenha primeiro um canal HTTPS vigente e deliberado até o serviço privado. O aceite local usou TLS nativo transitório e não instalou endpoint permanente ou CA de sistema. O antigo Origin403 do site foi corrigido e comprovado em proxy TLS de fixture na fase4; login e MCP no endpoint permanente ainda exigem aceite real.
+### 5. Vincule o WhatsApp
 
-Com `ZAP_DATA_DIR` apontando ao perfil correto, emita/rotacione o bearer para um arquivo novo em diretório privado fora do checkout. Os caminhos e a porta abaixo são fictícios:
+```bash
+node dist/src/main.js serve --collect
+```
 
-```sh
-install -d -m 700 /caminho/privado/mcp
-mise exec node@24.21.0 -- node dist/src/main.js mcp-token-rotate /caminho/privado/mcp/token-01
-read -r ZAP_MCP_TOKEN < /caminho/privado/mcp/token-01
+Entre novamente no site. Quando o QR aparecer, abra **Dispositivos conectados** no WhatsApp do celular e escaneie-o. Aguarde a conexão e a chegada dos dados. O QR é privado e só aparece na sessão autenticada.
+
+Use sempre o mesmo `ZAP_DATA_DIR`. Um acervo restaurado permanece offline até uma promoção com exclusividade comprovada; não execute dois coletores com cópias da mesma sessão. Se o preflight falhar, corrija o motivo e confira a cópia novamente; não remova travas nem tente contornar o bloqueio.
+
+## Como consultar
+
+Depois do login, localize o contato ou grupo e combine texto e datas. Escolha entre os candidatos apresentados; nomes iguais não identificam a mesma conversa. Os dias dos filtros usam **America/Sao_Paulo**, mantendo o instante original recebido. Mensagens sem data conhecida são identificadas como tal.
+
+Abra um resultado para ler as mensagens próximas. Cada aba preserva sua posição. Imagens, áudios e vídeos compatíveis abrem sob ação; outros formatos disponíveis podem ser baixados como originais.
+
+A exportação inclui **todo o recorte arquivado selecionado**, além da página visível. O ZIP contém `mensagens.txt`, `manifest.json` e os originais disponíveis. Anexos faltantes e alterações observadas são indicados no manifesto. Conteúdo indisponível não é inventado, e uma exportação com falha não aparece como pronta.
+
+## Conectar ao Codex por MCP
+
+Para acesso remoto, configure primeiro um endereço HTTPS privado conforme o [guia operacional](ops/README.md#https-e-proxy). O endpoint é `/mcp`; o token MCP é independente da senha do site.
+
+No servidor, com `ZAP_DATA_DIR` apontando ao perfil correto, gere um token em um **arquivo novo** e privado:
+
+```bash
+install -d -m 700 "$ZAP_PRIVATE_ROOT/mcp"
+node dist/src/main.js mcp-token-rotate "$ZAP_PRIVATE_ROOT/mcp/token-001"
+```
+
+Transfira esse arquivo ao computador cliente por um canal privado, preservando permissão `0600`. No cliente, substitua o caminho e o domínio fictícios abaixo:
+
+```bash
+read -r ZAP_MCP_TOKEN < /caminho/privado/mcp/token-001
 export ZAP_MCP_TOKEN
-# Se o canal usa CA privada, confie nela somente no processo cliente.
-export SSL_CERT_FILE=/caminho/privado/mcp/ca.pem
-cp --preserve=mode ~/.codex/config.toml /caminho/privado/mcp/config.before.toml
-codex mcp add zap_archive --url https://localhost:3443/mcp --bearer-token-env-var ZAP_MCP_TOKEN
+codex mcp add zap_archive --url https://archive.example.test/mcp --bearer-token-env-var ZAP_MCP_TOKEN
 codex
-unset ZAP_MCP_TOKEN SSL_CERT_FILE
+unset ZAP_MCP_TOKEN
 ```
 
-A variável precisa existir no processo Codex que acessa o MCP; não coloque bearer literal no TOML, prompt, URL ou argumentos. `codex mcp add` altera somente o registro escolhido: use um nome livre e preserve os demais servidores. A prova executada usou overrides `-c` por subprocesso e comparou o TOML original byte a byte, sem gravar esse registro. Para encerrar um canal transitório configurado manualmente, remova somente seu registro com `codex mcp remove zap_archive`. O backup permite recuperar a configuração anterior se nenhuma outra edição posterior precisar ser preservada.
+O processo Codex deve receber a variável: neste exemplo, abra o CLI a partir desse terminal. Não grave o bearer no TOML, prompt, URL ou argumentos. Use um nome de servidor ainda livre e preserve os demais registros. Uma CA privada deve ser confiada especificamente pelo cliente; não desative a verificação TLS. Consulte também a [documentação do MCP no Codex](https://developers.openai.com/codex/mcp).
 
-Rotação pode operar com o serviço ativo, sem coletor ou novo QR. Emita outro arquivo novo, carregue a variável novamente e reinicie o processo cliente. Bearer anterior, cursores e próximos bytes de transferências são recusados; arquivos parciais não são entrega concluída. Logout do site não revoga MCP; rotação MCP não altera senha ou sessão WhatsApp. Bytes já entregues não podem ser recolhidos.
+| Ferramenta | Para que serve |
+|---|---|
+| `find_conversations` | Localizar candidatos e seus IDs canônicos. |
+| `search_messages` | Buscar texto, conversa e período, com paginação. |
+| `get_context` | Recuperar uma mensagem de referência e continuar antes ou depois dela. |
+| `get_attachment` | Obter um original disponível ou o motivo de sua indisponibilidade. |
 
-`get_attachment` pode retornar imagem inline reconhecida de até 256 KiB. Para maior/sem formato inline, retorna `download_required` e URL privada da mesma origem HTTPS. O GET separado precisa de bearer vigente; o cliente não o aplica automaticamente a um link. Baixe explicitamente, recuse redirects/outra origem e confira tamanho/SHA-256 no destino. O aceite gravou os dois originais por helper executado no Codex; não declarou metadata, URL ou inline sem gravação como arquivo salvo.
+Siga os cursores com os mesmos filtros. Os recortes expiram em até 30 minutos; os limites são explícitos, sem truncamento silencioso de evidências. Imagens reconhecidas de até 256 KiB podem vir inline. Outros originais exigem download separado, com bearer vigente, da mesma origem HTTPS; confira tamanho e SHA-256. Um link ou metadado não significa que o arquivo foi salvo.
 
-Roteiro repetível: `node scripts/phase3-acceptance.mjs --mode self-test` após build e `--mode real-codex` com `ZAP_MCP_REAL_CASE_FILE` externo preparado. O modo real exige acesso real, Codex instalado, negociação/TLS/calls atuais, SQL/site independentes e arquivos novos; ausência é erro, nunca skip. Dados/casos/transcripts ficam privados. Nenhuma dessas verificações demonstra histórico integral, implantação VPS ou restore operacional final.
+Rotacionar o token usando outro arquivo novo revoga o token anterior, seus cursores e transferências futuras. Recarregue a variável e reinicie o cliente. Logout do site não revoga o MCP. Para retirar o registro do Codex, use `codex mcp remove zap_archive`.
 
-## Cópia e recuperação antes do piloto
+Mensagens e arquivos são conteúdo não confiável, nunca instruções privilegiadas. Peça referências e contexto ao consultar o acervo; “não encontrado” significa apenas ausência no material observado.
 
-Pare o serviço com Ctrl+C ou `kill -TERM PID_DO_SERVICO` e aguarde o processo encerrar. O encerramento suspende o coletor, cancela/drena streams e fecha bancos antes de liberar a trava. Backup recusa serviço ativo; nunca remova uma trava à força. Escolha destino novo, fora do perfil fonte e do checkout, com espaço para a cópia mais reserva de max(256MiB, 5% do volume).
+## Operação, privacidade e contribuição
 
-```sh
-mise exec node@24.21.0 -- node dist/src/main.js backup /caminho/privado/copia-001
-mise exec node@24.21.0 -- node dist/src/main.js restore /caminho/privado/copia-001 /caminho/privado/restore-001
-ZAP_DATA_DIR=/caminho/privado/restore-001 mise exec node@24.21.0 -- node dist/src/main.js serve
-```
+- [Guia operacional](ops/README.md): Docker, HTTPS, backup externo, restauração e atualização.
+- [Guia de contribuição](CONTRIBUTING.md): estrutura do código, testes e verificações.
+- [Licença MIT](LICENSE).
 
-Snapshot offline inclui bancos por API de backup SQLite (inclusive WAL), originais disponíveis finalizados e seus manifests. Contagens de todas tabelas, schema, FK/integridade e hashes são conferidos antes da publicação atômica. Temporários e arquivos desconhecidos continuam preservados na fonte; uma cópia não afirma que mídia pendente foi recuperada. Snapshots são imutáveis: cada atualização usa novo destino, preservando cópia anterior mesmo em corrupção, interrupção ou falta de espaço. Dir0700/arquivo0600; snapshot contém sessão e conteúdo privado, portanto nunca deve ir ao Git, logs ou pacote público.
+SQLite guarda mensagens e estado da sessão; os binários de mídia ficam em disco privado. O coletor é o único componente conectado ao WhatsApp, e site/MCP consultam o arquivo local.
 
-Restore exige destino inexistente e inicia somente consulta offline. Não inicia segundo coletor. Restaurar bytes da sessão não prova sua validade remota. A integração não oficial pode entregar apenas parte do histórico e mídias; ausência significa “não encontrado no acervo”.
+Mantenha mensagens reais, originais, bancos, sessão, QR, tokens, senhas, configurações operacionais e snapshots fora do Git. O `.gitignore` é uma proteção adicional; não torna seguro guardar dados privados dentro do checkout. Restrições de privacidade recebidas depois bloqueiam acesso futuro ao conteúdo; bytes já entregues não podem ser recolhidos.
 
-Para conferir a cópia e gravar o recibo obrigatório no perfil fonte, mantenha a fonte parada e use outro destino novo:
-
-```sh
-mise exec node@24.21.0 -- node dist/src/main.js verify-backup /caminho/privado/copia-001 /caminho/privado/verificacao-001
-mise exec node@24.21.0 -- node dist/src/main.js preflight
-```
-
-`verify-backup` restaura sem coletor, confere SQL/schema/contagens/hash, testa login, percorre mensagens e baixa originais pelo HTTP autenticado em loopback. Para exercitar login troca somente a senha da cópia de verificação por uma senha efêmera; essa cópia permanece para inspeção privada, mas para consulta pessoal use um `restore` separado com a senha original. Só após sucesso grava recibo privado autenticado, ligado à identidade do perfil fonte, ao seu diretório e ao hash do manifesto. `preflight` é somente leitura: confere runtime, permissões, reserva, ausência de trava e recibo/snapshot íntegro, sem imprimir caminhos nem segredos. Falha tem exit não zero. Trava órfã exige retomada offline normal (`serve` e parada graciosa) para recuperação segura antes de preflight.
-
-O piloto do plano01-07 pode iniciar `mise exec node@24.21.0 -- node dist/src/main.js serve --collect` apenas depois do preflight aprovado. O QR aparece somente na tela autenticada e precisa ser lido no celular. A identificação de protocolo usa Chrome com `syncFullHistory: true`; não executa navegador no coletor nem comprova entrega de histórico integral. A identificação Desktop foi recusada antes do QR no piloto local ([relato upstream correspondente](https://github.com/WhiskeySockets/Baileys/issues/2677)). Não há flag para dispensar a prova; cópia de outro perfil, recibo adulterado, snapshot removido/corrompido e diretório restaurado bloqueiam o coletor antes do socket. `serve` sem flag continua offline. Receber dados novos não invalida a prova inicial de recuperabilidade: ao acumular material, repita parada → backup em destino novo → verify-backup em destino novo → preflight → serve no perfil fonte. Não apague snapshots anteriores automaticamente. A cópia local ainda não é backup externo da VPS.
+Para relatar um problema, envie passos de reprodução, versões e erros sanitizados. Nunca anexe seu banco, sessão, QR ou conversas reais a uma issue pública.

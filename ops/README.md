@@ -1,143 +1,184 @@
-# Inventário operacional privado
+# Operar o Zap MCP
 
-O plano 04-01 produz fatos atuais ou dependências explícitas. `blocked` é um inventário válido; não comprova VPS, backup externo ou requisitos OPS. Nenhum comando deste roteiro para o coletor, conecta WhatsApp, instala software ou altera o Codex.
+Este guia cobre instalação em servidor, HTTPS, backup externo e recuperação. Para começar localmente, siga o [README](../README.md#instalação-local). Todos os domínios, caminhos e identificadores abaixo são exemplos: substitua-os pelos valores conferidos no seu ambiente.
 
-Use Node24.21.0:
+## Arquivo privado e configuração
 
-```sh
-mise exec node@24.21.0 -- node scripts/phase4-environment.mjs --mode discover
-mise exec node@24.21.0 -- node scripts/phase4-environment.mjs --mode assert-ready
-mise exec node@24.21.0 -- node scripts/phase4-environment.mjs --mode self-test
-```
+Mantenha o perfil, configurações operacionais, snapshots e chaves fora do checkout e dos releases. Diretórios privados usam `0700`; arquivos usam `0600` e pertencem ao usuário que executa a operação. Configurações e chaves não podem ser symlinks. O serviço deve ter um usuário dedicado, sem acesso a arquivos de outros serviços.
 
-`discover` retorna exit0 após gravar um recibo válido. Sem configuração, escolhe diretório temporário privado externo e lista as oito dependências no stdout. `assert-ready` repete os probes; exit0 exige todos os fatos observados nesta execução, com idade máxima de15min. Copiar, editar ou atualizar a data de um JSON antigo não libera operação. `self-test` usa somente fixtures e não conta como acesso real.
-
-`ZAP_OPERATION_CONFIG_FILE` referencia JSON existente, owner-only0600, fora do checkout e sem symlinks. Seu `evidenceDir` precisa existir, ser externo, do mesmo proprietário e0700. O arquivo `environment.json` contém `version:1`, `runId`, `observedAt`, `status` e `dependencies`; provas integrais ficam nele em0600. Não publique esse diretório. Os argumentos nunca carregam credenciais; preserve as identidades SSH já existentes.
-
-Contrato da configuração:
-
-| Campo | Referências privadas necessárias |
+| Variável | Finalidade |
 |---|---|
-| `source` | `kind:local` ou `ssh`, `machineId` conferido por canal existente, `dataDir`, `appRoot`; no SSH, campos abaixo |
-| `target` | `kind:ssh`, `host`, `user`, `port` opcional, `machineId`, `dataDir`, `appRoot`, `identityFile`, `knownHostsFile` |
-| `publicOrigin` | Origem HTTPS exata, sem credencial, query ou path |
-| `proxy` | `kind:nginx` ou `caddy` já identificado, `configFile`, `expectedConfigDigest` de configuração previamente conferida para Host/peer/topologia; versões observadas precisam ser revalidadas antes de deploy |
-| `supervisor` | `kind:systemd` existente, `unit` conhecida; probe confere estado, autostart, User e MainPID do processo do projeto |
-| `persistentVolume` | `path`, `releaseRoot`; owner0700, mount gravável persistente, fora de release/appRoot |
-| `capacity` | `queueZipBytes`, `queueZipFiles`: orçamento adicional para fila/ZIP, nunca tamanho antigo do acervo |
-| `offsite` | Host SSH independente com identidade/chave/known-hosts existentes e `storagePath` |
-| `recoveryKeyReference` | `host:offsite`, `path` de arquivo0600 independente; a ferramenta verifica somente metadata/acesso, sem ler segredo |
+| `ZAP_DATA_DIR` | Caminho absoluto do perfil, com bancos, sessão e mídia. |
+| `ZAP_PORT` | Porta do backend; padrão `3000`. |
+| `ZAP_BIND_HOST` | Padrão `127.0.0.1`; `0.0.0.0` somente em rede privada com proxy configurado. |
+| `ZAP_PUBLIC_ORIGIN` | Origem HTTPS canônica, sem barra final ou caminho. |
+| `ZAP_TRUSTED_PROXY_PEERS` | IPs exatos dos peers do proxy, separados por vírgula, sem espaços ou CIDR. |
+| `ZAP_OPERATION_CONFIG_FILE` | JSON privado da operação atual: backup, promoção, inventário ou deploy. Cada comando exige seu próprio contrato. |
+| `ZAP_BACKUP_STATE_FILE` | Estado privado do backup externo, disponibilizado somente para leitura pelo site. |
 
-Não invente host nem aceite fingerprint desconhecido automaticamente. O SSH usa `-F /dev/null`, `BatchMode`, `StrictHostKeyChecking`, identidades explícitas e nenhum argv de comando fornecido pela configuração. A expressão remota é fixa e o payload serializado usa base64. Cada probe tem deadline10s e saída limitada; chamadas internas usam argv fixos, sem shell. A leitura da identidade é de `/etc/machine-id`; runtime/SQLite/FTS são exercitados em banco em memória. O processo de aplicação nunca é importado ou iniciado.
+A aplicação não carrega `.env`. Exporte as variáveis ou configure-as no supervisor. O arquivo [`.env.example`](../.env.example) é uma referência; o Compose faz sua própria interpolação de variáveis.
 
-O cálculo usa metadata atual da origem, incluindo arquivos existentes, sem abrir mensagens/sessões/mídias: cinco vezes os bytes do acervo (acervo destino, snapshot novo, staging, readback e restore), mais orçamento fila/ZIP e reserva `max(256MiB,5% do subtotal)`. Inodes precisam cobrir cinco conjuntos, orçamento e32 entradas auxiliares. Volume cheio não autoriza apagar nada. Medições não prometem consistência de snapshot de origem ativa; remeça no preflight imediatamente anterior à operação.
+## HTTPS e proxy
 
-O stdout usa allowlist de nomes/status/códigos; não contém host, path, hash, conteúdo, erro externo bruto ou chave. `missing` significa referência não informada; `unverified` significa prova incompleta ou falha atual, não indisponibilidade permanente. `configuration_invalid`, `probe_failed`, `runtime_unsupported`, `capacity_insufficient` indicam o campo/probe que precisa ser corrigido no recibo privado.
+O backend aceita loopback local ou um proxy explicitamente confiável. Para acesso remoto, configure **as duas** variáveis de origem e peers, mantenha o backend privado e termine TLS no proxy:
 
-Atualmente nenhum backend externo/ferramenta cifrada foi identificado no ambiente disponível. Por isso o probe SSH do offsite mantém `target_offsite_access_unverified` até provar acesso direto desde a VPS sem notebook. A chave mantém `recovery_decryption_unverified` mesmo quando metadata e acesso independente passam: arquivo legível não prova chave correta, formato, versão nem decrypt. Não há adapter especulativo nem upload neste plano. Após identificar backend e ferramenta oficiais realmente disponíveis, os planos04-04/05/06 devem completar o probe correspondente, recuperar/decriptar e conferir a cópia real antes de qualquer aceite. As hipóteses A1/A2 continuam unresolved sem provas positivas.
+```bash
+export ZAP_PUBLIC_ORIGIN=https://archive.example.test
+export ZAP_TRUSTED_PROXY_PEERS=127.0.0.1
+```
 
-Dependências para avançar remotamente: referência privada verificável da VPS e acesso, origem HTTPS com proxy existente/topologia conferida, supervisor e volume persistente, destino externo acessível diretamente pela VPS e kit/chave utilizável independentemente dela. Prepare essas referências por acesso/painel já autorizado; se uma autenticação depender do proprietário, indique exatamente o login/2FA necessário. As implementações locais dos planos04-02–04 continuam possíveis enquanto esses fatos não forem provados.
+Use o IP real do socket que chega ao backend, não o IP do navegador nem uma quantidade de saltos. Na rede Docker, ele pode ser diferente de loopback e precisa ser medido novamente após mudanças de topologia.
 
-## Backup cifrado iniciado pelo notebook — contrato04-04
+O proxy deve preservar o `Host` da origem canônica, definir exatamente `X-Forwarded-Proto: https` e remover `Forwarded` e os demais `X-Forwarded-*`. Cabeçalhos duplicados, cadeias, origem divergente ou peer desconhecido recebem `403`. Cookies remotos usam `Secure`; login e exportação continuam protegidos por CSRF. Site, QR, mídia, exportações e MCP exigem suas respectivas autenticações.
 
-O inventário acima descreve o probe inicial04-01. A direção operacional posterior usa o notebook como destino externo já disponível: ele inicia um **pull SSH autenticado da VPS**. A VPS não precisa conectar ao notebook nem depende dele para iniciar/reconectar o coletor. Notebook desligado significa ausência de novo backup externo; o status mostra idade real, sem promessa de SLA. Outro storage sempre online exigirá inventário e uma decisão posterior, sem fallback silencioso nem contratação nesta versão.
+Antes de liberar a rota, confira TLS válido, login e consulta autenticada. Verifique também que pedidos anônimos para dados, QR, anexos e MCP são recusados. Nunca resolva uma falha de proxy ampliando confiança para toda a rede.
 
-Uma ferramenta: `/usr/bin/age` **1.3.2**, versão exigida antes de encrypt/decrypt. O binário oficial informa `v1.3.2` e o pacote Arch informa `1.3.2`; o gate aceita exclusivamente essas duas formas da versão fixada. A instalação local foi feita pelo orquestrador com pacote Arch extra assinado e checksum/signatura verificados. O CI instala o binário oficial por versão e SHA-256 fixados. Ainda é necessário disponibilizar a mesma versão verificada no produtor real; nada foi instalado na VPS por este plano. Consulte [documentação oficial age](https://github.com/FiloSottile/age) e [manual](https://filippo.io/age/age.1). Não baixar/executar uma versão alternativa automaticamente. ZIP usa yazl/yauzl já fixados no lock, sem pacote novo nem formato criptográfico próprio.
+## Docker e supervisão
 
-Configuração privada separada por máquina, JSON0600, diretórios0700 existentes fora do Git/release. `ZAP_OPERATION_CONFIG_FILE` aponta ao arquivo correspondente. Não inserir chaves/identidades, hosts ou paths reais neste documento. Não versionar o arquivo nem o kit. O runtime continua Node24.21.0.
+```bash
+docker build --tag zap-mcp:local .
+```
 
-| Papel | Campos concretos |
+O [Dockerfile](../Dockerfile) fixa Node 24.21.0 por digest, valida o lock inteiro no registro npm, instala sem lifecycle automático e compila explicitamente `better-sqlite3`. O build confere SQLite FTS5 e imports da aplicação; o runtime usa UID/GID **12001:12001**. As ferramentas de compilação ficam apenas no primeiro estágio.
+
+O [Compose de exemplo](compose.example.yml) descreve uma implantação com Traefik já existente. Ele **não prepara sozinho** domínio, certificados, usuário, perfil, autorização de promoção, supervisor ou backup. Prepare esses recursos antes de iniciar o serviço. Um perfil novo deve ser inicializado e ter backup conferido pelo usuário dedicado; migrar um perfil existente exige o procedimento de promoção abaixo.
+
+Renderize o Compose em uma pasta privada. Configure:
+
+| Grupo | Variáveis exigidas |
 |---|---|
-| VPS, `role:source` | Todos os campos `OperationConfig`04-03: dataDir, operationDir, destination (prefixo externo para snapshots exclusivos), priorMode, priorRelease, supervisor. Mais recipientFile, maxBytes, reserveBytes, maxFiles opcional |
-| Notebook, `role:pull` | operationDir, destinationDir, identityFile (chave **age**, independente), maxBytes, reserveBytes, maxFiles opcional e remote |
-| `remote` no notebook | host, user, port opcional22, identityFile (chave **SSH**, distinta), knownHostsFile previamente conferido, nodePath, mainPath e configFile absolutos no host produtor, dataDir da VPS |
-| Estado autenticado na VPS | `ZAP_BACKUP_STATE_FILE` com o path privado `operationDir/offsite-state.json`; `serve` lê somente a allowlist. Arquivo ausente significa nenhum sucesso verificado, nunca ready |
+| Release | `ZAP_IMAGE_DIGEST` com imagem imutável e `ZAP_RELEASE_COMMIT` com commit exato. |
+| Perfil | `ZAP_DATA_DIR`, `ZAP_OPERATION_DIR`, `ZAP_BACKUP_STATE_FILE`, `ZAP_SNAPSHOT_ROOT` e `ZAP_ARCHIVE_LABEL`. |
+| Proxy | `ZAP_PUBLIC_ORIGIN`, `ZAP_TRUSTED_PROXY_PEERS`, `ZAP_HOST`, `ZAP_PROXY_NETWORK` e `ZAP_TLS_CERTRESOLVER`. |
 
-`maxBytes` limita ciphertext e conteúdo ZIP integral; medir acervo e overhead antes de escolher. `maxFiles` limita entradas (default10000); medir originais e manifests. `reserveBytes` é reserva adicional, nunca reduz o mínimo `max(256MiB,5% do filesystem)`. Preflight mede metadata atual na VPS antes de stop; verifica orçamento, bytes e inodes. Notebook reserva até cinco conjuntos/bytes para incoming, readback, pacote, snapshot e restore. Ambos recusam capacidade insuficiente. Nenhum disco cheio autoriza apagar acervo, snapshots ou último bom.
+Valide com `docker compose -f CAMINHO_PRIVADO/compose.yml config --quiet`. O exemplo inicia **offline**. Ele não publica portas, não monta o socket Docker e usa filesystem raiz somente leitura, sem capabilities e com `no-new-privileges`.
 
-Os paths remotos aceitam somente caracteres de path absolutos sem espaços, `..` ou metacaracteres. O executável Node/release e configuração são referências previamente conferidas pelo operador, não um comando livre. OpenSSH usa arquivo de configuração vazio, BatchMode, identidade explícita, StrictHostKeyChecking, known-hosts pinado, sem forwarding, sem atualização automática de host keys e sem stdin interativo. [Opções oficiais OpenSSH](https://man.openbsd.org/ssh_config). Nenhuma impressão de erro remoto bruto, chave, plaintext ou hash pessoal; stderr dos processos privados não é retransmitido. A chave age passa por fd3, nunca por argv; só recipient público fica na VPS.
+O volume do perfil pertence a `12001:12001`, é privado e usa o mesmo caminho absoluto no host e no container. `/etc/machine-id` é montado somente para leitura; snapshots referenciados por uma promoção também usam o mesmo caminho absoluto e mount somente leitura. O modo `pid: host` permite validar a trava por PID/starttime/bootId: considere esse requisito ao escolher o ambiente, e não remova os guards para adaptar a imagem.
 
-Comandos de produto (o agente prepara e executa; não exigem operação manual de terminal pelo proprietário):
+### Controle limitado de containers
 
-```sh
-# Notebook; config role:pull; não precisa ZAP_DATA_DIR local
-mise exec node@24.21.0 -- node dist/src/main.js offsite-backup
-# Mesmo notebook, ID exato do estado privado, diretório de recuperação novo
-mise exec node@24.21.0 -- node dist/src/main.js offsite-recover ID_IMUTAVEL DIRETORIO_PRIVADO_NOVO
+O helper [zap-container-control.mjs](zap-container-control.mjs) permite ao usuário dedicado inspecionar, parar e iniciar somente releases autorizados do Zap. Instale uma cópia root-owned `0755` em `/usr/local/libexec/zap-container-control`, com Node 24 verificado no shebang e ancestrais não graváveis por grupo/outros.
+
+Sua configuração fica em `/etc/zap-mcp-control/config.json`, root-owned `0600`, dentro de diretório `0700`. Campos: `uid`, `machineId`, `dataDir`, `appLabel`, releases autorizados e, para proxy, nome real do Traefik, rede, peer, origem e labels exclusivos. Confira o contrato no helper; não use nomes de containers presumidos.
+
+Autorize no sudoers **somente esse executável**, sem permissão genérica para Node, Docker ou shell. O helper aceita `inspect`, `inspect-runtime`, `stop`, `start COMMIT offline|collect` e, quando configurado, `start-boot`. Ele confere caller, imagem/release, volumes, processo e exclusividade antes de agir.
+
+Prepare candidatos offline/collect e fallback parados com restart desabilitado. Evite rolling deploy e autodeploy que possam iniciar dois escritores. O supervisor host retoma somente o estado autorizado e conferido; valide stop/start, modo, release e autostart no ambiente real. Em Coolify, candidatos e imagens precisam das classificações de aplicação gerenciada exigidas pela limpeza da plataforma; preserve o fallback e não altere a limpeza global de outros serviços.
+
+## Backup local e restauração
+
+Pare o serviço com SIGTERM ou Ctrl+C e aguarde seu encerramento. Não copie bancos ativos manualmente nem remova travas. Com o `ZAP_DATA_DIR` original definido, use destinos novos em diretórios privados já existentes:
+
+```bash
+node dist/src/main.js backup /caminho/privado/snapshots/copy-002
+node dist/src/main.js verify-backup /caminho/privado/snapshots/copy-002 /caminho/privado/restores/check-002
+node dist/src/main.js preflight
 ```
 
-O adapter invoca automaticamente na VPS `offsite-produce ID_IMUTAVEL` com ZAP_DATA_DIR e config source. O produtor usa mutex/journal04-03, stop/drain/snapshot/retomada segura **antes** da cifragem e transmissão. Snapshots são `destination-ID`; ciphertexts `operationDir/ID.age`, acompanhados de descriptor privado. A saída stdout deste comando contém somente ciphertext finalizado. Serviço retomado continua útil mesmo quando a rede falha.
+O snapshot inclui bancos SQLite consistentes, estado necessário da sessão e originais disponíveis com manifests e hashes. Conteúdo pendente continua indicado como pendente. O backup exige espaço para a cópia mais reserva de `max(256 MiB, 5% do volume)`; falha nunca autoriza apagar o acervo ou o último backup bom.
 
-No notebook, a transmissão usa temporário privado e publicação exclusiva por link/fsync em `destinationDir/ID.age`. O arquivo final é reaberto pelo **mesmo ID** e copiado por stream para readback novo; ciphertext/SHA conferidos, age decifra com a chave independente e a extração usa allowlist estrita. Rejeita paths arbitrários, diretórios/links/symlinks, duplicatas, entradas excedentes, replay de ID, orçamento excedido, conjunto e hashes divergentes. SQL integrity/FK/schema/contagens, FTS, perfil e **todos** os originais disponíveis são conferidos por validateSnapshot; restoreSnapshot cria clone offline novo. Nenhum coletor é iniciado no ensaio, nenhuma senha real é redefinida.
+Para recuperar **somente leitura**, use outro destino inexistente:
 
-Somente depois dessa validação o notebook envia `offsite-ack` por SSH, JSON limitado4096bytes em stdin. A VPS compara ID/digest/data/ciphertext com o descriptor preparado e só então grava lastVerifiedSuccess atomicamente. ACK antigo não avança ponteiro de operação nova; ACK do mesmo sucesso é idempotente. `offsite-failed` envia somente ID interno/código de uma allowlist, sem detalhes privados; mantém último bom. Se nem essa comunicação for possível, a VPS permanece pending e a idade aumenta; o notebook conserva a falha concreta localmente.
-
-Transferência: deadline120s por tentativa, no máximo três tentativas (inicial + dois retries), sempre com o mesmo ID. Cifragem, decrypt/readback e ACK têm deadline próprio; stop herda60s. Hash/validação SQL síncronos não constituem uma garantia de janela curta: medir duração com o acervo real. Retry de ciphertext preparado não repete parada. SIGKILL deixa estado pending/falha e temporários identificáveis; retomada exige revalidar o ID, não confiar no upload. Se link exclusivo foi publicado antes do descriptor, reconciliação associa apenas o snapshot original da intenção e **não** publica sucesso sem decrypt/readback/ACK. Journal04-03 de parada/retomada ambígua exige operation-recover; nunca remover trava manualmente. Não remover temporários de terceiros nem expurgar automaticamente artefatos antigos/corrompidos.
-
-Status `/api/status` exige cookie do proprietário e contém backup: lastAttemptAt, lastVerifiedAt, snapshotCreatedAt, ageSeconds, overdue24h, result e safeFailureCode. Idade/RPO usa **snapshotCreatedAt**; um upload de snapshot antigo não reduz atraso. `overdue24h` é true sem sucesso ou acima24h. Tentativa e agenda não atualizam sucesso. Não expõe ID, caminho, host, hash, chave ou erro externo. Falha de backup não derruba consulta. Estado inválido é failed/state_invalid.
-
-## Rotina diária e recovery kit
-
-Instalar agenda no **notebook** em04-05: diária America/Sao_Paulo, horário escolhido depois da medição, catch-up ao ligar/reiniciar e tentativas limitadas. Notebook desligado por mais24h é degradação mensurada, não um serviço sempre disponível. Não há agenda instalada por04-04. Antes de migração/update, disparar pull e exigir novo lastVerifiedSuccess e recuperação completa; se notebook indisponível, adiar a atualização com fallback íntegro e consulta preservada. Não confundir snapshot local pré-update com sucesso offsite.
-
-Kit independente protegido fora da VPS: identidade age0600, recipient público, versão/instalação verificável de age1.3.2 e release/lock Node, config de pull/known-hosts/acesso SSH e cópia cifrada por ID. Guardar também a chave privada original SourceSigner em local protegido **fora da VPS**; nunca incluir `source-fence-key.json` no produtor. Perder tanto notebook quanto VPS continua fora da proteção de duas máquinas; a evidência real deve explicitar isso.
-
-Quando há promoção ativa, o pacote cifrado inclui `recovery/` separado de `snapshot/`: promotion-receipt, promotion-state, promotion-key, signed fence e public anchor herdados. Estes arquivos têm hashes no metadata cifrado. `recoveryFiles` pode indicar explicitamente os mesmos nomes permitidos, com referências privadas; nenhum outro nome/path é aceito. Não inclui a chave privada SourceSigner. Prova/public anchor conservados não autorizam coletor numa nova máquina/path: restaurar primeiro para consulta offline e executar uma nova promoção/fencing coerentes com04-03. Nunca copiar autorização para burlar gate nem iniciar segundo coletor.
-
-Conferir recuperação usando **identityFile do kit independente**, ID imutável e destino limpo; revisar SQL/FTS/IDs/originais e consultar clone offline. Nenhum requisito OPS é concluído por teste sintético, pacote presente, agendamento ou descriptor. A rodada real exige produtor/tool/supervisor/acesso SSH reais, cópia do acervo recebida no notebook, decrypt com kit e restore integral em04-05/06. Falhas preservam os snapshots e último bom; não existe `latest`, sobrescrita, autopurge ou garantia WORM contra um administrador do filesystem.
-
-## Deployment04-05 — Docker e Traefik existentes
-
-O inventário autorizado do painel identificou Docker/Compose e Traefik existentes. O código abaixo prepara somente essa topologia. A aplicação ainda precisa de acesso host confirmado, configuração externa e migração real; preparo do painel e testes de fixture não concluem OPS. Não há operação remota automática ao fazer build/self-test.
-
-`Dockerfile` usa a imagem oficial **Node24.21.0/bookworm-slim/amd64**, fixada por digest. Antes do `npm ci`, `ops/verify-dependencies.mjs` compara os seis pins/SRI da revalidação03 com o lock e consulta o registro npm oficial para **cada** entrada exata do lock (nome, versão, SRI e tarball, sem redirects). Mismatch/ausência interrompe o build antes de lifecycle: verifique a legitimidade, não troque nome/versão. `npm ci --ignore-scripts` e rebuild explícito de better-sqlite3 compilam no destino com Python/make/g++ oficiais Debian, somente no stage de build; smoke exige runtime exato, SQLite FTS5 e imports main/MCP. Sem copiar node_modules do notebook ou atualizar pins. [Imagem oficial Node](https://github.com/nodejs/docker-node), [node-gyp](https://github.com/nodejs/node-gyp#installation).
-
-`ops/compose.example.yml` contém contratos, **não valores reais**. Renderizar fora do Git a partir dos fatos atuais; aplicar somente às rotas do Zap no proxy existente. Fixar a imagem resultante por digest e `zap.release` pelo commit exato construído. `docker compose config --quiet` passa com referências de fixture; rodar novamente com Compose/version reais antes de criar containers. A rede externa deve ser a rede privada realmente compartilhada com Traefik. Nenhuma seção `ports`, host network, Docker socket ou grupo Docker para o app. [Contrato oficial Compose](https://docs.docker.com/reference/compose-file/services/).
-
-Volume0700 com UID/GID dedicado **12001:12001**, fora dos releases, montado no **mesmo caminho absoluto** no host e container. App não root, `pid:host` para o lock Linux/PID/starttime/bootId, root filesystem read-only, sem capabilities e no-new-privileges. Usar UID exclusivo, sem outros processos/serviços desse UID. Coordenação/snapshot/age rodam no host como esse mesmo UID, com Node24.21.0 e módulos nativos do release host; não rodar snapshot como root. `operationDir` e estado de backup persistem fora do dataDir/release; o app recebe operationDir somente leitura. Chave privada age e SourceSigner ficam no notebook; recipient público e estado operacional necessários ficam no produtor.
-
-Promoção durável também confere `/etc/machine-id`: montar esse arquivo do host **read-only**, no mesmo path. Montar `ZAP_SNAPSHOT_ROOT` (pai privado dos snapshots de promoção, owner0700) **read-only** no mesmo path absoluto; o recibo revalida o snapshot original antes do socket. Não remover snapshots referenciados nem dispensar a verificação. Esses mounts não concedem acesso a `/`, sessão de outro serviço ou socket Docker.
-
-### Controle administrativo limitado
-
-Instalar uma cópia root-owned0755 de `ops/zap-container-control.mjs` em `/usr/local/libexec/zap-container-control`, com ancestrais root-owned não graváveis por grupo/outros. O helper utiliza o Node de `/usr/bin/node`; conferir execução dessa cópia no host. Criar `/etc/zap-mcp-control` root0700 e `config.json` root0600, sem symlinks/hardlinks. O helper recusa outro caller: `SUDO_UID` precisa ser o UID configurado. Autorizar no sudoers **apenas** esse executable; não autorizar `node`, `docker`, shell ou comandos administrativos livres ao UID do arquivo. O parse aceita somente `inspect`, `inspect-runtime`, `stop`, `start COMMIT offline|collect` e, se configurado, `start-boot`. O root continua sendo o operador capaz de instalar/atualizar a configuração limitada. A cópia instalada pode usar o Node24 dedicado e verificado no shebang, sem alterar o runtime global.
-
-Config do helper: `uid`, `machineId`, `dataDir`, `appLabel` estável e privado, `releases` com commits exatos autorizados; `proxy` contém `name` observado do container Traefik, `network`, `expectedPeer` IP exato atual, `publicOrigin`, e `router`/`middleware` dos labels exclusivos Zap. Nunca selecionar container por sufixo Coolify presumido. Descoberta usa `zap.archive`+`zap.release`, mount/path/UID e modo; candidatos precisam ser únicos. Root prepara um container parado por release/mode e desativa rolling/autodeploy que possa arrancar dois writers. Nenhum antigo container pode ter restart habilitado depois da troca.
-
-Quando a plataforma observada é Coolify, conferir suas regras atuais de limpeza antes de preparar candidatos parados. Nesta implantação, a limpeza removeu containers próprios sem classificação de aplicação e depois sua imagem sem referências. Preparar somente os candidatos Zap com `coolify.type=application` e suas imagens com `coolify.managed=true`; preservar também o fallback parado. Se o candidato já existe, guardar sua definição privada e recriar apenas esse container parado com a mesma imagem, mounts, env, UID e guards. A ordem dos mounts no inventário pode mudar: comparar o conjunto completo, sem ignorar propriedades. Não desabilitar a limpeza global, usar prune genérico ou alterar containers de terceiros. Após recriação, reconferir exclusividade, restart desligado no fallback e perfil/backend ativos preservados.
-
-Se o host possui systemd, `bootUnit` aceita exclusivamente `zap-mcp-runtime.service`. Preparar essa unit root-owned/desativada antes do primeiro start, com `ExecStart` do helper `start-boot`, usuário dedicado e dependência do Docker. O helper salva release/mode/identidade observados em estado root0600; `start-boot` valida esse estado antes de parar somente o Zap e iniciar o mesmo release/mode. `inspect` inclui jobs de boot pendentes/ativos no fato autostart. Stop/start externos recusam esses jobs antes de qualquer mutação; o fluxo interno reconhece seu próprio MainPID pela ancestralidade real, incluindo o wrapper sudo. `stop` também desabilita a unit, sem `--now` para não interromper seu próprio caller. Não executar preflight antes de `start-boot`: um processo Docker já iniciado ou lock órfão após reboot seria rejeitado antes da recuperação. Partida normal mantém os gates nativos de lock/promoção/coletor; ensaio de restart desse fluxo é separado de reboot da VPS inteira.
-
-`inspect` confere todos os containers para detectar outro writer no bind; confere UID não root, pidhost, bind idêntico, ausência de porta/socket e comando serve exato. PIDs de `/proc` e Docker são deduplicados; processo extra ou estado ilegível é bloqueio. Verifica Traefik vivo, versão por comando fixo, peer atual, rede comum e labels Host/origem/limpeza dos forwarding headers. Retorna somente fatos limitados; nunca Env/inspect bruto. `stop` inibe restart **somente** dos containers Zap autorizados e aguarda até60s; `start` exige ausência de writer/autostart e único candidato preparado, com restart `on-failure:3`. Docker limita a contagem de retries; não oferece a janela exata3/5min e delay10s de systemd. Esse limite é explícito, não promessa de recuperação medida.
-
-`SupervisorConfig` herdado aceita `helperPath` e `release` para Docker; main/snapshot/offsite/fence usam o mesmo controller limitado. Probe confere machineId e digest do dataDir contra o caller. Snapshot registra a release realmente observada e solicita essa mesma release na retomada; a referência inicial da config não causa downgrade após update. Não dar sudo/socket ao app no container; só ao coordenador host do mesmo UID. O app não precisa do helper para servir/reiniciar.
-
-`inspect-runtime` é uma ação somente leitura do mesmo helper root-owned: mantém validação de UID/PID/bind/comando/allowlist/exclusividade e retorna releases preparadas, sem exigir Traefik/HTTPS saudável. Todas as ações impõem as invariantes estáticas do app: uma única definição de ZAP_DATA_DIR canônico e bind Source/Destination idêntico, sem bind extra gravável ou mount que encubra o perfil. Com proxy configurado, ZAP_BIND_HOST/origem/peers também são únicos e iguais à config root-owned; rede e labels de forwarding permanecem coerentes. Mounts read-only de machine-id/snapshot/estado e tmpfs em /tmp continuam permitidos. Somente saúde/versão/IP atual do proxy são dispensados no inspect-runtime. Recovery usa essa ação e preflight atual de identidade/runtime/volume, journal ligado ao target e schemas compatíveis. Não exige endpoint nem sucesso do último offsite antes de retomar código offline. Após start, confere integridade e HTTPS/login; falha posterior fica em `recovery-validation-failed`, com código já retomado offline e dados atuais preservados. Instalar a versão do helper que oferece essa ação junto desta release. Migrate/update conservam os gates completos. Journals antigos sem binding/schema explícitos são recusados, exigindo reconciliação privada documentada.
-
-### Driver e configurações externas
-
-```sh
-mise exec node@24.21.0 -- npm run build
-mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode self-test
-# Config operacional privada de deployment, preparada pelo agente:
-mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode preflight
-mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode migrate
-mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode update
-mise exec node@24.21.0 -- node scripts/phase4-deploy.mjs --mode recover
+```bash
+node dist/src/main.js restore /caminho/privado/snapshots/copy-002 /caminho/privado/restores/read-002
+ZAP_DATA_DIR=/caminho/privado/restores/read-002 node dist/src/main.js serve
 ```
 
-`ZAP_OPERATION_CONFIG_FILE` é o único caminho de config do driver; JSON0600 externo ao checkout, do usuário notebook. Schema `version:1`, `operationDir` privado para journal/lock de deployment (**distinto** do operationDir do pull), `environmentFile`, `pullConfigFile`, `ownerPasswordFile` com senha original preservada por padrão, `publicOrigin`, `priorRelease`, `candidateRelease`, `archiveSchema`, `authSchema`. Estes dois digests são schemas atuais aferidos por `profileState`, iguais aos schemas suportados pelo candidato validado em fixture/build. `target` contém `host`, `user` exclusivo do arquivo, `port` opcional, SSH `identityFile`/`knownHostsFile`, `machineId`, `dataDir`, `appRoot` de release host Node24/FTS/scripts, `nodePath`, `helperPath`, `snapshotDir` novo e `promotionConfigFile`. Não aceitar comando livre; SSH é fixo, pinado e não interativo. `migrate` exige ainda `sourceConfigFile` (SourceOffsiteConfig local/systemd user), `sourceFencePublicKey` pinada e SourceSigner privado previamente preparado fora da VPS. Fonte/password/sessão nunca vão a argumentos ou stdout. Quando o proprietário não possui a senha anterior, `rotateOwnerOnMigration:true` permite novo segredo privado exclusivamente no destino depois de restore/promoção, com ambos os serviços quietos. A comparação do perfil exige que só `web_owner` mude; fonte, sessão WhatsApp, acervo e autorização de promoção ficam preservados.
+Esse clone conserva a senha original e permanece offline. A cópia de `verify-backup` usa uma senha efêmera para testar login; use `restore` para consulta pessoal. Restaurar a sessão não prova sua validade remota e não autoriza outro coletor. Não apague snapshots referenciados por recibos de coleta ou promoção.
 
-O environmentFile04-01 agora aceita `proxy.kind:traefik`, `supervisor.kind:docker` com `name` estável e `helperPath`, e `offsite.kind:local` com `machineId`, `storagePath`, `configFile` do pull independente. Host SSH aceita `nodePath` absoluto fixado. Target/private volume/proxy/helper/TLS precisam ser comprovados atualmente; helper parado/fenced também é um estado preparado observado, sem afirmar supervisão ativa. Inventário e driver exigem o mesmo `target.dataDir` canônico, `persistentVolume.path`, `appRoot`, `nodePath`, SSH (host/user/port/identity/knownHosts) e helperPath. Fatos atuais precisam bater com machineId, hash do dataDir e PID/contagem/mode/release; um helper de outro volume não autoriza stop/fence da origem. Um ensaio **offline** em perfil separado tem configuração própria e não comprova preflight do volume final. O volume final precisa existir vazio0700, fora dos releases; retirar o ensaio/rota antes da entrada final, preservando outros serviços.
+## Backup externo cifrado
 
-Offsite readiness não é crypto roundtrip sintético: recupera pelo ID do último bom o ciphertext **existente** no notebook, decifra com a key independente em destino temporário novo, valida SQL/schema/FTS/todos originais/recovery kit e exige data do snapshot até24h. Estado salvo só seleciona o ID; bytes atuais são reabertos/decriptados. Sem cópia válida, ambiente segue blocked; preparar a cópia inicial e medir a capacidade antes de qualquer corte. No update, o driver dispara **novo** pull/readback/decrypt/ACK, depois repete os probes imediatamente antes de parar o target. `preflight` não muda serviço, mas faz leitura/restore descartável privado no notebook.
+O destino externo inicia um **pull SSH da VPS**. Ele pode ser um notebook Linux: a coleta continua quando ele está desligado, mas não haverá backup externo novo. O site mostra a idade real da última cópia verificada. Um destino sempre online deve ser preparado explicitamente.
 
-Migração: destino/capacidade/fallback/backup/key/config de promoção/candidatos preparados são gates antes do stop. A promoção remota tem deadline900000ms para cópia, SQL/FTS e todos os originais do acervo real; demais RPCs mantêm90000ms e streams120000ms. Se o SSH expirar, o resultado remoto é indeterminado: conferir journal nativo, autorização MAC/fence, ausência de writer e estado atual antes de continuar. Não repetir promoção nem assumir cancelamento remoto por timeout. Após cópia cifrada inicial recuperada, inibir autostart da origem user-systemd, stop/drain e conferir quiet, emitir fence durável pinado, snapshot **final** consistente e transferir somente seus arquivos permitidos por stream SSH cifrado (0600/0700 e publicação exclusiva). Nunca transferir SourceSigner privado. PromotionConfig do target precisa conter a public anchor pinada, paths novos de fence/snapshot/verification e o controller helper correto; driver grava apenas a prova assinada nesse path previamente permitido, restaura volume vazio e chama promoteProfile. Consulta inicia **offline**; novo pull VPS→notebook tem de passar antes de completar o journal migration-offline. Fonte permanece fenced. Ativação do único coletor/validade remota é verificação separada; QR só por sessão efetivamente inválida. Falha de migração não reativa a fonte por conta própria; reconciliação exige target parado/revogado e prova de exclusividade.
+Instale **age 1.3.2** em `/usr/bin/age` e `/usr/bin/age-keygen` nos hosts que executam esses comandos, e confira a versão. Guarde a chave privada age fora da VPS; na VPS fica somente o recipient público. A chave SSH e a chave age são arquivos distintos. Confira o host SSH por canal independente e mantenha `known_hosts` pinado; o adapter não aceita fingerprint automaticamente.
 
-Update: mutex/journal externo, backup atual, stop/fence target, baseline SQL/owner/sessão/IDs/originais **posterior** ao backup, candidato offline, HTTPS/login/API/originais/Range autenticados, comparação integral e retomada do modo anterior autorizado. Se falhar, parar/inibir target e voltar **somente o código**, se schemas atuais continuam compatíveis. Registros depois do backup permanecem. Schema divergente/ambiguidade deixa offline e `release_recovery_required`; `recover` é só release, nunca restaura banco antigo nem reconcilia automaticamente migração. IDs/imagens/paths/operações integrais ficam no journal privado; stdout contém status geral sem valores pessoais. Originais no probe são conferidos por stream com tamanho exato e SHA do SQL, além de HEAD/Range autenticados; o limite32MiB permanece apenas para respostas em memória sem tamanho esperado. Challenge tolera startup transitório até180s, sem repetir login/download ou aceitar falha de TLS/auth.
+### Configuração do produtor na VPS
 
-### Agenda e gate real pendente
+O JSON privado de `role: source` combina o contrato de snapshot com orçamento e recipient:
 
-Agenda diária é um user timer do notebook, com ExecStart do Node24/release/config pull absolutos e privados; nenhuma credencial literal. Depois de medir janela/conflitos, usar `OnCalendar=*-*-* 03:00:00 America/Sao_Paulo`, `Persistent=true` e oneshot `offsite-backup`. Conferir com a versão local `systemd-analyze calendar`/`verify` antes de instalar, e conferir `list-timers`/execução/readback/ACK. Biblioteca limita a três tentativas por ID. `transferTimeoutMs` opcional nos configs source/pull aceita1000–900000ms, padrão120000ms, e vale apenas para transporte do ciphertext; encrypt/decrypt/ACK mantêm120s. Medir a cópia real antes de ajustar o prazo e a unit. Notebook offline implica RPO maior24h; status precisa mostrar atraso real. Não instalar agenda nos testes ou confundir timer ativo com sucesso externo. Antes de update, pull atual obrigatório mesmo que timer tenha rodado.
+| Campos | Conteúdo |
+|---|---|
+| `dataDir`, `operationDir`, `destination` | Perfil, journal externo e prefixo privado dos snapshots. |
+| `priorMode`, `priorRelease` | Modo `offline`/`collect` e release que devem ser retomados. |
+| `supervisor` | `kind: systemd` ou `docker`, `name`, `dataDir`, `machineId`; systemd pode usar `user: true`. Docker controlado usa `helperPath` e `release` autorizado. |
+| `recipientFile` | Arquivo privado com o recipient público age. |
+| `maxBytes`, `reserveBytes`, `maxFiles` | Orçamentos em bytes e entradas; `maxFiles` padrão é 10000. |
 
-Os gates atuais da implantação real e as evidências pendentes ficam em `.planning/STATE.md` e no SUMMARY04-05; configs, journals e provas integrais permanecem privados. **Nenhum OPS está concluído por04-05-01.** O agente executa o restante após resolver essas dependências; proprietário intervém somente em autenticação obrigatória ou QR real. Não imprimir hosts, caminhos reais, conteúdo, hashes pessoais ou segredos em Git.
+Diretórios precisam existir e pertencer ao usuário operacional. O `operationDir` fica fora do perfil; `supervisor.dataDir` deve apontar ao mesmo perfil. Supervisor e usuário devem permitir parada e retomada verificáveis. Meça espaço/inodes antes de escolher os orçamentos; o destino externo reserva capacidade para vários conjuntos de trabalho.
+
+Configure `ZAP_BACKUP_STATE_FILE` no site com `operationDir/offsite-state.json` do produtor, montado somente para leitura. A configuração operacional usada pelo SSH não deve ser exposta ao container do site.
+
+### Configuração do destino externo
+
+Exemplo de JSON `0600`, fora do Git; substitua os valores e prepare os diretórios `0700`:
+
+```json
+{
+  "role": "pull",
+  "operationDir": "/caminho/privado/pull-state",
+  "destinationDir": "/caminho/privado/backups",
+  "identityFile": "/caminho/privado/age-identity.txt",
+  "maxBytes": 10737418240,
+  "reserveBytes": 1073741824,
+  "maxFiles": 10000,
+  "remote": {
+    "host": "vps.example.test",
+    "user": "archive-owner",
+    "port": 22,
+    "identityFile": "/caminho/privado/ssh-identity",
+    "knownHostsFile": "/caminho/privado/known_hosts",
+    "nodePath": "/caminho/node24/bin/node",
+    "mainPath": "/caminho/release/dist/src/main.js",
+    "configFile": "/caminho/privado/source-backup.json",
+    "dataDir": "/caminho/privado/profile"
+  }
+}
+```
+
+Os caminhos em `remote` são da VPS, absolutos e sem espaços/metacaracteres; os demais são do destino externo. Os números são exemplos de limites, não uma medição do seu acervo. Os contratos completos estão em [offsite.ts](../src/offsite.ts) e [operation.ts](../src/operation.ts).
+
+No destino externo:
+
+```bash
+export ZAP_OPERATION_CONFIG_FILE=/caminho/privado/pull-backup.json
+node dist/src/main.js offsite-backup
+node dist/src/main.js offsite-recover ID_DO_BACKUP /caminho/privado/restores/offsite-001
+```
+
+Selecione o ID no estado privado do backup. `offsite-backup` coordena parada/snapshot/retomada na VPS, recebe o pacote cifrado, reabre o mesmo ID, decifra e restaura isoladamente. Só depois da conferência SQL, FTS, sessão e originais envia o ACK que atualiza o sucesso na VPS. Um upload, arquivo presente ou timer ativo não comprova recuperação.
+
+Cada execução usa ID imutável e preserva o último bom. Falhas de rede têm tentativas limitadas. `transferTimeoutMs` opcional aceita 1000–900000 ms; o padrão é 120000 ms e vale para transporte do ciphertext. Operação interrompida exige reconciliação pelo journal; não apague travas ou reinicie uma migração às cegas.
+
+### Agenda e kit de recuperação
+
+Crie um serviço oneshot no destino externo com Node, release e configuração privados, e um timer systemd com `Persistent=true`. Um exemplo de horário é `OnCalendar=*-*-* 03:00:00 America/Sao_Paulo`. Valide com `systemd-analyze calendar` e `systemd-analyze verify`, confira `list-timers` e execute um backup com recuperação e ACK antes de confiar na agenda.
+
+Guarde fora da VPS: chave age, recipient, cópia cifrada, acesso SSH/known-hosts e versões/configurações para recuperação. Uma promoção também exige conservar sua chave privada de assinatura da origem em local independente; não envie essa chave à VPS. O pacote inclui somente os arquivos de recuperação permitidos, nunca a chave privada da origem.
+
+O status autenticado mostra tentativa, último sucesso verificado, instante do snapshot e atraso acima de 24 horas. A idade usa o instante do snapshot; reenviar uma cópia antiga não reduz o atraso. A perda simultânea da VPS e do único destino externo exige uma terceira cópia para ser coberta.
+
+## Migração e atualização
+
+Migração de uma conta existente exige parar e inibir a origem, conferir ausência de escritor, emitir o bloqueio durável assinado (**fence**), copiar um snapshot final e promover somente o destino autorizado. Comece por consulta offline e valide backup externo antes de habilitar seu único coletor. Uma sessão inválida pode exigir novo QR; copiar arquivos não dispensa promoção ou comprova reconexão.
+
+O driver `scripts/phase4-deploy.mjs` mantém esse processo e as atualizações com journal privado. Seu nome é legado; ele é uma ferramenta de operação, não um plano. Use `ZAP_OPERATION_CONFIG_FILE` com configuração própria do driver:
+
+| Grupo | Campos |
+|---|---|
+| Operação | `version: 1`, `operationDir`, `environmentFile`, `pullConfigFile`, `ownerPasswordFile`, `publicOrigin`. |
+| Compatibilidade | `priorRelease`, `candidateRelease`, `archiveSchema`, `authSchema`, medidos no perfil atual. |
+| Destino | `target` com SSH pinado, `machineId`, `dataDir`, `appRoot`, `nodePath`, `helperPath`, `snapshotDir`, `promotionConfigFile`. |
+| Migração | `sourceConfigFile` e `sourceFencePublicKey` conferidos; `rotateOwnerOnMigration: true` somente se for necessário criar uma nova senha no destino. |
+
+O inventário `scripts/phase4-environment.mjs --mode discover` produz recibo privado dos recursos disponíveis; `--mode assert-ready` exige observações atuais. Configuração ausente ou probe falho não é ambiente pronto. Consulte os validadores dos scripts para os contratos específicos de proxy, supervisor, capacidade e destino externo.
+
+```bash
+node scripts/phase4-deploy.mjs --mode preflight
+node scripts/phase4-deploy.mjs --mode migrate # somente ao migrar a origem preparada
+node scripts/phase4-deploy.mjs --mode update  # somente com candidato e fallback preparados
+node scripts/phase4-deploy.mjs --mode recover # reconciliação da troca de release
+```
+
+O update exige backup externo novo e recuperável antes da parada, compara o perfil atual, testa o candidato offline por HTTPS e retoma o modo autorizado. Recuperação de release troca **somente código**, mantendo registros posteriores ao backup; schema incompatível ou estado ambíguo deixam o arquivo offline para reconciliação. `operation-recover` é o comando separado para journals de snapshot, com configuração operacional correspondente.
+
+Após qualquer mudança, confira consulta autenticada, originais, exclusividade, release/mode e backup recuperável. Mantenha dados, configs, chaves, journals e evidências integrais privados; não os envie em issues, logs públicos ou no Git.

@@ -1,5 +1,0 @@
-## Deferred Items
-
-- Suite paralela: `test/media.test.ts#tamanho n-1/n/n+1, hash e Long inválido nunca publicam corrupção` apresentou `retry_wait` em original válido durante uma repetição completa (58/59). Uma execução anterior teve59/59 e os alvos isolados passam. O worker já existente reserva todo espaço livre para tamanho desconhecido; a medição mutável compartilhada com cópias/downloads paralelos pode consumir o orçamento de outro job. Causa inferida do código, sem reproducer em carga de conta real. Fonte `src/media.ts` não alterada por01-06; revisar reserva sob concorrência na tarefa de mídia. Execução sequencial da suíte é evidência separada e não apaga esta observação.
-  status: resolved
-  **Resolução:** Autorização do orquestrador ampliou a correção ao worker da mesma fase. Regressão com disco injetado reproduziu o erro após4096bytes de variação com quase1GiB livre; `src/media.ts` agora reavalia a reserva desconhecida depois dos compromissos conhecidos. Alvos mídia/recuperação19/19 e suíte padrão60/60 passaram. A observação anterior permanece registrada, sem omitir falha nem depender de runner sequencial.

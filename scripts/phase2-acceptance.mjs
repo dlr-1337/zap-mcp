@@ -173,9 +173,9 @@ export async function runAcceptance({ mode, snapshotDir, caseFile }) {
   finally { oracle.close(); await new Promise(r => server.close(r)); await s.close(); rmSync(destination, { recursive: true }); }
 }
 async function runBrowser({ base, password, c, directory, oracle, period, snapshotDir }) {
-  const require = createRequire(process.env.ZAP_BROWSER_MODULE ?? '/home/otavio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
+  const require = createRequire(process.env.ZAP_BROWSER_MODULE ?? import.meta.url);
   const { chromium } = require('playwright');
-  const browser = await chromium.launch({ executablePath: process.env.ZAP_BROWSER_EXECUTABLE ?? '/usr/bin/chromium', headless: true,
+  const browser = await chromium.launch({ executablePath: process.env.ZAP_BROWSER_EXECUTABLE, headless: true,
     args: ['--no-sandbox', '--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true }); page.setDefaultTimeout(20000);
   const proof = { formats: [], browserVersion: browser.version() }; let gets = 0;
