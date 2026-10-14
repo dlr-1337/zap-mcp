@@ -3,7 +3,7 @@ status: complete
 phase: 04-opera-o-e-restaura-o-na-vps
 source: [04-01-SUMMARY.md, 04-02-SUMMARY.md, 04-03-SUMMARY.md, 04-04-SUMMARY.md, 04-05-SUMMARY.md, 04-06-SUMMARY.md]
 started: 2026-10-14T03:40:31.338826+00:00
-updated: 2026-10-14T03:40:31.916Z
+updated: 2026-10-14T03:42:52.684Z
 mode: autonomous
 human_confirmation_claimed: false
 flagged_prohibitions: 3
@@ -162,21 +162,21 @@ expected: Registrar controles específicos e manter flag sem certificar ausênci
 result: skipped
 source: autonomous-disposition
 evidence: 04-VERIFICATION.md; ADR-550 B-with-guard
-reason: Revisão global humana recomendada, sem blocker técnico; execução autônoma autorizada conserva unverified-prohibition/flagged e julgamento LLM não autoritativo. Sentinelas/auditoria pública passaram; o histórico de ferramentas teve detalhes privados e não é declarado limpo. Não se afirma revisão ou confirmação humana.
+reason: Deferred follow-up: revisão global humana recomendada, sem blocker técnico; execução autônoma autorizada conserva unverified-prohibition/flagged e julgamento LLM não autoritativo. Sentinelas/auditoria pública passaram; o histórico de ferramentas teve detalhes privados e não é declarado limpo. Não se afirma revisão ou confirmação humana.
 
 ### 25. Revisão recomendada da proibição: Autorização de coleta
 expected: Registrar controles específicos e manter flag sem certificar ausência global.
 result: skipped
 source: autonomous-disposition
 evidence: 04-VERIFICATION.md; ADR-550 B-with-guard
-reason: Revisão global humana recomendada, sem blocker técnico; execução autônoma autorizada conserva unverified-prohibition/flagged e julgamento LLM não autoritativo. Fence, coletor único e negativos passaram; origem parada e clone offline demonstrados. Não se afirma revisão ou confirmação humana.
+reason: Deferred follow-up: revisão global humana recomendada, sem blocker técnico; execução autônoma autorizada conserva unverified-prohibition/flagged e julgamento LLM não autoritativo. Fence, coletor único e negativos passaram; origem parada e clone offline demonstrados. Não se afirma revisão ou confirmação humana.
 
 ### 26. Revisão recomendada da proibição: Evidência sintética e replay
 expected: Registrar controles específicos e manter flag sem certificar ausência global.
 result: skipped
 source: autonomous-disposition
 evidence: 04-VERIFICATION.md; ADR-550 B-with-guard
-reason: Revisão global humana recomendada, sem blocker técnico; execução autônoma autorizada conserva unverified-prohibition/flagged e julgamento LLM não autoritativo. 26 gates vivos, processo status0, clientes/arquivos/SQL e negativos demonstrados. Não se afirma revisão ou confirmação humana.
+reason: Deferred follow-up: revisão global humana recomendada, sem blocker técnico; execução autônoma autorizada conserva unverified-prohibition/flagged e julgamento LLM não autoritativo. 26 gates vivos, processo status0, clientes/arquivos/SQL e negativos demonstrados. Não se afirma revisão ou confirmação humana.
 
 ## Summary
 
@@ -193,3 +193,11 @@ Nenhuma lacuna técnica restante. A interpretação inicial restaurada falhou e 
 ## Limites
 
 Complete with 3 flagged prohibitions: nenhuma revisão humana global foi inventada. Codex CLI comprovado; Desktop GUI, reboot integral e evento futuro das 03h não foram testados. Backup pull depende do notebook online. O acervo contém o recebido, não histórico integral.
+
+## Deferred Follow-Ups
+
+- Revisão humana global de exposição em artefatos públicos: controles específicos aprovados, flag e limites preservados; o histórico de ferramentas não é declarado limpo.
+- Revisão humana global da autorização de coleta: fence/negativos demonstrados, mantendo julgamento não autoritativo.
+- Revisão humana global da evidência sintética/replay: processo vivo/negativos/oráculos demonstrados, sem certificado global.
+
+São recomendações do contrato autônomo B-with-guard, conservadas para revisão futura. Não há pendência técnica indispensável ou confirmação humana presumida.
