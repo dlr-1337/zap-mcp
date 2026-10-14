@@ -1,6 +1,8 @@
 # Phase 04 — Coverage and source audit
 
-No external API integration: a fase adapta transporte/deploy/backup por CLI oficial do ambiente e reusa MCP/Baileys já integrados; não acrescenta API/SDK externo. Se o backend realmente identificado exigir nova API em vez de CLI, enumerar sua superfície oficial e produzir matriz INTEGRATE/OPT-OUT com razões antes de implementar; esta declaração não dispensa esse gate.
+No external API integration: transporte/deploy/backup usam CLI do ambiente e reutilizam MCP/Baileys existentes; nenhum novo SDK/API externo.
+
+Se o backend identificado exigir nova API, enumerar sua superfície oficial e produzir matriz INTEGRATE/OPT-OUT com razões antes de implementar; esta declaração não dispensa esse gate.
 
 Hooks aplicados na ordem recebida: api-integration (declaração acima), assumption-delta (detector atual detected:false), schema-gate (nenhum ORM/schema path detectado; SQLite existente), security (ASVS1/high bloqueante), tdd (RED/GREEN em capacidades elegíveis). Graphify desabilitado; sem contexto de grafo. Descoberta nível1 com RESEARCH atual + padrões fonte rastreada confirmados por git ls-files; novas versões do host/ferramenta oficial devem ser revalidadas no inventário/execução.
 
