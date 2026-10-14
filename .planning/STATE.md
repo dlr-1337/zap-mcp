@@ -35,7 +35,7 @@ Total Plans in Phase: 6
 Status: All phases complete
 Last activity: 2026-10-14 — Phase 4 complete
 
-Progress: [██████████] 100% — 4/4 fases;23/23 planos concluídos. Verificador25/25 e UAT23 critérios técnicos passaram; três revisões recomendadas permanecem flagged e adiadas, sem confirmação humana presumida. OPS-01–04 concluídos pelo lifecycle nativo. G é o único coletor, conectado sem QR; origem original fenced/parada. Os910 originais foram preservados e o acervo atual tem923. Publicação final no GitHub em andamento.
+Progress: [██████████] 100% — 4/4 fases;23/23 planos concluídos. Verificador25/25 e UAT23 critérios técnicos passaram; três revisões recomendadas permanecem flagged e adiadas, sem confirmação humana presumida. OPS-01–04 concluídos pelo lifecycle nativo. G é o único coletor, conectado sem QR; origem original fenced/parada. Os910 originais foram preservados e o acervo atual tem923. Main atualizada no GitHub; resultado final do CI conferido no workflow remoto.
 
 ## Performance Metrics
 
@@ -131,7 +131,7 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 
 ### Pending Todos
 
-Próxima ação: concluir publicação final e conferir CI. Nenhuma intervenção indispensável do usuário; três revisões globais recomendadas continuam flagged e visíveis em04-UAT.md.
+Nenhuma etapa técnica indispensável pendente. Acompanhar a operação/backup diário; três revisões globais recomendadas continuam flagged e visíveis em04-UAT.md.
 
 ### Blockers/Concerns
 

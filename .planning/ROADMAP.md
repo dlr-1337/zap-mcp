@@ -142,4 +142,4 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | 3. Consulta e arquivos reais no Codex | 4/4 | Complete    | 2026-10-12 |
 | 4. Operação e restauração na VPS | 6/6 | Complete    | 2026-10-14 |
 
-**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez;0 órfãos e0 duplicações.28 requisitos concluídos nas fases1–3; OPS-01 a OPS-04 permanecem pendentes.04-05 e04-06 concluíram suas tarefas reais; o novo aceite passou26/26 com Chrome/Codex, restore e cleanup/timer preservados. Fase4 permanece aberta até verificador/UAT e lifecycle pelo orquestrador.
+**Coverage:** 32/32 requisitos v1 mapeados e concluídos pelo lifecycle nativo; 4/4 fases e23/23 planos. Fase4 passou25/25 verdades e UAT técnico, com três revisões humanas recomendadas adiadas/flagged. G é o único coletor conectado; origem original fenced/parada, perfil preservado e backup externo restaurável.
