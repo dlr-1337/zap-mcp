@@ -63,7 +63,9 @@ Nenhum risco aceito. Todas as disposições são mitigate.
 
 A suíte existente passou311/311, sem falhas, cancelamentos, skips ou todo; o auditor conferiu o resumo e não repetiu operações reais. A revisão de código está clean, incluindo a correção da publicação IPC com teste de pausa controlada. O setup privado do cliente foi lido sem execução, sem abrir configuração pessoal, conversas ou credenciais. Seus ponteiros completos permanecem privados.
 
-A rodada final de implantação/cliente/restauração continua em execução. Nenhum marcador ou relatório desserializado confere gates OPS; o driver requer efeitos atuais e cleanup observado.
+A rodada final de implantação/cliente/restauração passou 26/26 gates vivos, com status 0 da unidade, Chrome/Codex nos dois backends e cleanup observado. Nenhum marcador ou relatório desserializado confere gates OPS; a fase e os requisitos aguardam o verificador independente.
+
+A flag final `ephemeral-owner-readiness-envelope` do harness privado está coberta por T-04-10/16/17: arquivo fixo restrito a UID/0600/nlink1, transmissão por stdin, TLS autorizado, login/status/logout bounded e remoção no finally. O self-check isolado e o ciclo real conferiram a remoção e a revogação; o token permanente do Codex permaneceu no notebook. Isso não altera a autenticação pública nem autoriza uma nova concessão.
 
 ## Sign-Off
 
@@ -73,3 +75,11 @@ A rodada final de implantação/cliente/restauração continua em execução. Ne
 - [x] status:verified.
 
 **Verificação:** 2026-10-13 — mitigações presentes; aceite operacional independente.
+
+## Security Audit 2026-10-14
+
+| Metric | Count |
+|---|---|
+| Threats found | 18 |
+| Closed | 18 |
+| Open | 0 |
