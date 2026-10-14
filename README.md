@@ -1,8 +1,12 @@
 # Zap MCP
 
+**Seu acervo de WhatsApp, pesquisável no navegador e consultável por assistentes via MCP.**
+
 Um arquivo privado de WhatsApp para pesquisar conversas, recuperar anexos e consultar mensagens pelo Codex. O coletor se conecta como dispositivo vinculado por QR, sem executar um navegador.
 
 O código pode ser público; seu acervo continua privado. A aplicação atende **uma conta, um proprietário e um coletor**.
+
+[Recursos](#o-que-você-pode-fazer) · [Arquitetura](#arquitetura) · [Instalação](#instalação-local) · [Uso](#como-consultar) · [MCP](#conectar-ao-codex-por-mcp) · [Operação e privacidade](#operação-privacidade-e-contribuição)
 
 ## O que você pode fazer
 
@@ -14,6 +18,47 @@ O código pode ser público; seu acervo continua privado. A aplicação atende *
 - Continuar lendo o arquivo mesmo com o WhatsApp desconectado.
 
 O site e o MCP não oferecem envio, edição, exclusão ou confirmação de leitura no WhatsApp. A conexão usa [Baileys](https://github.com/WhiskeySockets/Baileys), uma integração não oficial em versão prerelease; compatibilidade e disponibilidade podem mudar. Só é arquivado o conteúdo recebido: **não há garantia de histórico completo nem de recuperação de todas as mídias**.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    W[WhatsApp vinculado] --> C[Coletor Baileys]
+    C --> A[(Arquivo SQLite)]
+    C --> F[Originais em disco privado]
+    A --> S[Site autenticado]
+    F --> S
+    A --> M[MCP autenticado: somente leitura]
+    F --> M
+    M --> I[Cliente de IA]
+```
+
+A coleta e a consulta têm papéis diferentes: o coletor recebe o conteúdo; o site e o MCP leem o acervo local. Isso permite consultar o material já arquivado mesmo sem uma conexão ativa com o WhatsApp.
+
+| Camada | Implementação |
+| --- | --- |
+| Runtime | Node.js 24, TypeScript e módulos ESM. |
+| Serviço web | Express, autenticação do proprietário e interface HTML/CSS/JavaScript. |
+| Arquivo | SQLite com `better-sqlite3`; arquivos de mídia fora do checkout. |
+| Integração WhatsApp | Baileys, vinculado por QR, sem navegador automatizado. |
+| Acesso para IA | Model Context Protocol com token próprio e ferramentas de consulta. |
+| Operação | Comandos de backup, verificação de restauração e preflight; exemplo de deploy em Docker. |
+
+### Mapa do código
+
+| Arquivo ou diretório | Responsabilidade |
+| --- | --- |
+| [`src/main.ts`](src/main.ts) | Serviço HTTP, rotas e composição da aplicação. |
+| [`src/archive.ts`](src/archive.ts) | Persistência e consultas ao acervo. |
+| [`src/whatsapp.ts`](src/whatsapp.ts) | Coletor e estado da conexão. |
+| [`src/media.ts`](src/media.ts) | Originais, verificação e entrega de anexos. |
+| [`src/mcp.ts`](src/mcp.ts) | Adaptador MCP e autenticação por token. |
+| [`src/backup.ts`](src/backup.ts) | Cópias, restauração, verificação e preflight. |
+| [`public/`](public/) | Interface web. |
+| [`test/`](test/) | Testes automatizados. |
+| [`ops/`](ops/) | Documentação e ferramentas operacionais. |
+
+As versões fixadas e os scripts estão em [package.json](package.json) e `package-lock.json`. O comando `npm test` compila o projeto e executa os testes presentes no repositório; consulte também [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Instalação local
 
