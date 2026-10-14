@@ -1,8 +1,8 @@
 ---
 phase: "04"
 criterion: SC4 / OPS-04
-status: failed
-semantic_acceptance: false
+status: passed_with_conference
+semantic_acceptance: true
 human_confirmation_claimed: false
 full_operational_acceptance_repeated: false
 ---
@@ -38,6 +38,12 @@ O finally enviou DONE e o helper removeu o clone, restaurou G único offline e p
 
 Foi recuperado privadamente o ID exato da sessão restaurada para possível follow-up. Entretanto, a invocação usou `--ephemeral`; a ajuda local documenta ausência de persistência, e nenhum arquivo dessa sessão foi encontrado nas sessões gravadas ou arquivadas. Não foi usado `--last`, não houve injeção de texto/fatos novos e não foi recriado cliente ou clone.
 
-**SC4/OPS-04 permanece sem aceite semântico.** O orquestrador recebe o transcript original, respostas, linhas SQL, comparação dos dois conjuntos, avaliação e cleanup privados para decidir a próxima abordagem. VERIFICATION, REQUIREMENTS, STATE e ROADMAP não foram alterados por este complemento. As três proibições advisory continuam separadas deste resultado.
+## Conferência posterior sobre o material restaurado
+
+O orquestrador executou uma nova sessão privada do Codex CLI instalado sobre as **mesmas 12 mensagens efetivamente recebidas por MCP da restauração**, comparadas novamente ao SQLite readonly. Não foi um resume, não houve nova chamada MCP, clone, atualização ou backup. A resposta anterior errada permaneceu preservada; nenhuma evidência de negócio nova nem a resposta permanente foi fornecida ao analista.
+
+A nova resposta identificou proposta e confirmação explícita com referências/trechos literais válidos e limites do recorte. Uma segunda consulta independente confrontou a resposta com as linhas SQL e passou os cinco critérios: proposta, confirmação, ausência de fechamento inferido, limites e referências. A checagem rejeita referência/trecho forjado e não declara confirmação humana ou interpretação autoritativa.
+
+**O caso semântico foi resolvido com uma conferência adicional.** Isso demonstra o fluxo de recuperar e conferir evidências no Codex, inclusive as recebidas da restauração, e não acerto garantido na primeira resposta. O resultado inicial do cliente restaurado continua falha; orçamento/anexo isolado continua insuficiente para concluir aceitação. O recibo operacional original, a configuração, os tokens e o cleanup não foram alterados. As três proibições advisory permanecem explicitamente flagged, sem aprovação humana inventada; o verificador e o UAT decidem o fechamento da fase.
 
 Conteúdo, nomes, IDs, referências, caminhos privados e hashes ficam exclusivamente na evidência0600 fora do Git. Este documento publica apenas método, critérios, resultados, contagens e limites.
