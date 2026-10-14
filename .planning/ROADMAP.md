@@ -90,7 +90,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 
 ### Phase 4: Operação e restauração na VPS
 
-**Goal:** O proprietário mantém o arquivo consultável na VPS e consegue recuperá-lo de backup fora dela, demonstrando o fluxo real no site e no Codex sem depender de um coletor ativo.
+**Goal:** As a proprietário do acervo privado, I want to manter o arquivo consultável na VPS e recuperá-lo de backup fora dela, so that eu consiga conferir o fluxo real no site e no Codex sem depender de um coletor ativo.
 **Mode:** mvp
 **Depends on**: Phase 3
 **Requirements**: OPS-01, OPS-02, OPS-03, OPS-04
@@ -101,7 +101,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 3. A restauração em diretório limpo recupera mensagens, índice de busca e binários com contagens/integridade/hash conferíveis e permite consultar/exportar o acervo offline pelo site e MCP sem iniciar um segundo coletor. A validade da sessão WhatsApp restaurada é avaliada separadamente, com a instância original parada antes de eventual reconexão.
 4. Com uma conversa real conhecida, o proprietário completa “encontrar João, localizar orçamento, ler contexto e conferir anexo” no site e no Codex instalado, distingue proposta de confirmação e confere evidências ou limitações. O fluxo permanece verificável no acervo restaurado; pareamento isolado ou dados sintéticos não substituem esse aceite.
 
-**Plans**: 6 (quatro concluídos; implantação real e aceite pendentes)
+**Plans**: 6 (todos concluídos; verificação independente pendente)
 **Wave 1**
 - [x] 04-01-PLAN.md
 
