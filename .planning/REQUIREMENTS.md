@@ -56,10 +56,10 @@
 
 ### Operação e aceite
 
-- [ ] **OPS-01**: Na VPS, o serviço funciona com supervisão e HTTPS, preserva banco, anexos e sessão durante reinícios/atualizações e permite consultar o acervo quando a integração está indisponível.
-- [ ] **OPS-02**: O proprietário tem backup privado e consistente de banco, arquivos e estado necessário da sessão; uma cópia recuperável existe antes de acumular dados reais, e a operação final mantém cópia fora da VPS com proteção dos segredos.
-- [ ] **OPS-03**: Restaurar o backup em um diretório limpo recupera mensagens, índice e arquivos com integridade conferida, permitindo consultar o acervo sem iniciar um segundo coletor; a validade da sessão WhatsApp restaurada é avaliada separadamente.
-- [ ] **OPS-04**: O fluxo “encontrar João, localizar orçamento, ler contexto e conferir anexo” passa no site e no Codex do usuário com uma conversa real conhecida, distinguindo proposta de confirmação e citando evidências ou limitações; testes sintéticos ou pareamento isolado não contam como esse aceite.
+- [x] **OPS-01**: Na VPS, o serviço funciona com supervisão e HTTPS, preserva banco, anexos e sessão durante reinícios/atualizações e permite consultar o acervo quando a integração está indisponível.
+- [x] **OPS-02**: O proprietário tem backup privado e consistente de banco, arquivos e estado necessário da sessão; uma cópia recuperável existe antes de acumular dados reais, e a operação final mantém cópia fora da VPS com proteção dos segredos.
+- [x] **OPS-03**: Restaurar o backup em um diretório limpo recupera mensagens, índice e arquivos com integridade conferida, permitindo consultar o acervo sem iniciar um segundo coletor; a validade da sessão WhatsApp restaurada é avaliada separadamente.
+- [x] **OPS-04**: O fluxo “encontrar João, localizar orçamento, ler contexto e conferir anexo” passa no site e no Codex do usuário com uma conversa real conhecida, distinguindo proposta de confirmação e citando evidências ou limitações; testes sintéticos ou pareamento isolado não contam como esse aceite.
 
 ## v2 Requirements
 
@@ -122,10 +122,10 @@ Cada requisito v1 pertence a exatamente uma fase responsável. Requisitos transv
 | MCP-03 | Phase 3 | Complete |
 | MCP-04 | Phase 3 | Complete |
 | MCP-05 | Phase 3 | Complete |
-| OPS-01 | Phase 4 | Pending |
-| OPS-02 | Phase 4 | Pending |
-| OPS-03 | Phase 4 | Pending |
-| OPS-04 | Phase 4 | Pending |
+| OPS-01 | Phase 4 | Complete |
+| OPS-02 | Phase 4 | Complete |
+| OPS-03 | Phase 4 | Complete |
+| OPS-04 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 32 total

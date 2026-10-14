@@ -21,13 +21,13 @@
     {
       "number": "4",
       "name": "Operação e restauração na VPS",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 4 of 4 · 75% · ready to verify"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-10-14T02:28:10.102Z"
+  "updated_at": "2026-10-14T03:48:40.559Z"
 }

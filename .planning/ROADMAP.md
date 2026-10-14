@@ -9,7 +9,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 - [x] **Phase 1: Arquivo privado com mensagens e mídias reais** - Vincular sem navegador, preservar o material acessível e reabrir o acervo após desconexão ou reinício. (completed 2026-10-11)
 - [x] **Phase 2: Busca, contexto, abas e exportação no site** - Encontrar evidências, comparar conversas e exportar o recorte completo com seus arquivos. (completed 2026-10-11)
 - [x] **Phase 3: Consulta e arquivos reais no Codex** - Usar o MCP privado no Codex instalado e comprovar recebimento ou download dos binários. (completed 2026-10-12)
-- [ ] **Phase 4: Operação e restauração na VPS** - Manter o serviço supervisionado, backup privado fora da VPS e o fluxo real verificável após restauração.
+- [x] **Phase 4: Operação e restauração na VPS** - Manter o serviço supervisionado, backup privado fora da VPS e o fluxo real verificável após restauração. (completed 2026-10-14)
 
 ## Phase Details
 
@@ -140,6 +140,6 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
 | 3. Consulta e arquivos reais no Codex | 4/4 | Complete    | 2026-10-12 |
-| 4. Operação e restauração na VPS | 6/6 | Aguardando verificação independente | - |
+| 4. Operação e restauração na VPS | 6/6 | Complete    | 2026-10-14 |
 
 **Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez;0 órfãos e0 duplicações.28 requisitos concluídos nas fases1–3; OPS-01 a OPS-04 permanecem pendentes.04-05 e04-06 concluíram suas tarefas reais; o novo aceite passou26/26 com Chrome/Codex, restore e cleanup/timer preservados. Fase4 permanece aberta até verificador/UAT e lifecycle pelo orquestrador.
