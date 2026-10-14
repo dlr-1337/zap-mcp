@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Operação e restauração na VPS
 current_plan: 6
-status: executing
-stopped_at: 04-05 completed; 04-06 current real Codex and restored-backend acceptance executing
-last_updated: "2026-10-13T18:19:42.043Z"
+status: verifying
+stopped_at: Completed 04-06-PLAN.md; awaiting independent phase verification
+last_updated: "2026-10-14T02:28:10.944Z"
 last_activity: 2026-10-13
-last_activity_desc: Real deployment and daily backup verified; WhatsApp connected without QR; Codex reference installed; real acceptance executing
-state_head: 083366e667c543558ebb32750ff879bcd975fab7
+last_activity_desc: Fresh real acceptance passed 26/26; Chrome/Codex and cleanup/timer verified; independent phase verification pending
+state_head: 5047cf14a68199fe39ce4661e660a1be926f710a
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 23
-  completed_plans: 22
+  completed_plans: 23
   percent: 75
 ---
 
@@ -33,10 +33,10 @@ See: .planning/PROJECT.md (updated 2026-10-12)
 Phase: 4 (Operação e restauração na VPS) — VERIFICAÇÃO OPERACIONAL EM ANDAMENTO
 Current Plan: 6
 Total Plans in Phase: 6
-Status: Executing
-Last activity: 2026-10-13 — Operação04-05 concluída, sessão WhatsApp conectada sem QR e910 originais preservados; cliente/clone reais04-06 em execução
+Status: Awaiting independent phase verification
+Last activity: 2026-10-13 — Aceite04-06 aprovado 26/26, Chrome/Codex nos dois backends,910 originais e cleanup/perfil/timer preservados; G único offline
 
-Progress: [████████░░] 75% — 3/4 fases; 22/23 planos concluídos. 04-05 concluído por efeitos reais; revisão de04-06 clean e suíte311/311. Referência MCP permanente instalada com bearer privado separado e demais configurações preservadas. Cliente instalado, restauração pelo mesmo HTTPS, cleanup e verificador continuam pendentes; OPS-01 a OPS-04 não concluídos.
+Progress: [████████░░] 75% — 3/4 fases;23/23 planos concluídos.04-06 comprovou26 gates vivos, unidade status0, Chrome/Codex permanente/restaurado e cleanup; suíte315/315. Referência MCP e demais configurações preservadas, fallback parado protegido e timer active/enabled. Verificador/UAT, retomada única de G e publicação final pertencem ao orquestrador. OPS-01 a OPS-04 permanecem Pending; fase4 não concluída.
 
 ## Performance Metrics
 
@@ -82,6 +82,7 @@ Progress: [████████░░] 75% — 3/4 fases; 22/23 planos concl
 | Phase 04 P02 | 10min | 2 tasks | 6 files |
 | Phase 04 P03 | 30min | 3 tasks | 8 files |
 | Phase 04 P04 | 19min | 2 tasks | 4 files |
+| Phase 04 P06 | 42min25s | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -127,20 +128,21 @@ Decisões completas em PROJECT.md, seção Key Decisions.
 - [Phase 04]: Plan04-04 implementa pull cifrado com age e ACK apos restore; teste PN/LID corrigido por reserva proporcional, suite padrao239/239. Backup externo e OPS seguem pendentes da implantacao real.
 - [Phase 04]: 04-05-01 pronto: suite244/244 e Docker nao root/helper restrito conferidos. 04-05-02 aguarda SSH autorizado, configs privadas e backup externo real; fonte intacta e fase06 nao iniciada.
 - [Phase 04]: Predeployment review converged clean30files; six findings fixed. Final source ad9942b:257/257 standard tests, rebuilt nonroot Docker image Node24/FTS imports passed. Real05-02 and06 remain pending SSH confirmation and operational evidence.
+- [Phase 04]: Aceite novo 26/26 gates passou no processo vivo, com Chrome/Codex em ambos backends e cleanup/timer preservados; requisitos e fase aguardam verificador.
 
 ### Pending Todos
 
-Nenhum todo avulso registrado. Próxima ação: executar02-02;02-01 concluído com97/97 testes, sem aplicar busca no acervo real.
+Próxima ação: verificador independente e UAT da fase4, seguidos de retomada coordenada somente do coletor G e publicação final pelo orquestrador. Nenhuma intervenção do usuário identificada.
 
 ### Blockers/Concerns
 
 Nenhum impedimento para iniciar o planejamento.
 
 - Phase1 concluída: Baileys/chaves/identidades/eventos, QR, comparaçãoWeb e restore/restart verificados; histórico permanece limitado ao recebido. Crash do auxiliar sem causa exata determinada; download Chrome normal passou.
-- Phase 4: Identificar VPS/domínio/disco/proxy e destino/chave do backup; restore isolado não inicia segundo coletor e validade da sessão é separada.
+- Phase4 atual: inventário, endpoint, chave independente, backup externo e restore integral foram comprovados. Clone removido; G único offline, fallback parado protegido e timer active/enabled. Próxima ação é verificador/UAT; fase/requisitos permanecem pendentes.
 - Plano01-07 concluído: comparação autônoma com Web,244 projeções recuperadas, restore8.684/828 e retomada sem QR; 15 requisitos concluídos pelo phase.complete após verificadorpassed. Crash do browser auxiliar de causa exata desconhecida; Chrome normal baixou áudio com hash igual.
-- Phase 4: resolver HTTPS/proxy/login web (Origin403/WINDOWS13) e revalidar consulta/download no endpoint permanente; piloto MCP local temporário encerrado.
-- 04-05-02: acesso operacional restrito e permanente funcionando; concessão temporária de root revogada. Runtime nativo, proxy/HTTPS/login e backup externo pré-migração com restauração verificados. Fonte finalmente fenced/parada; transferência final, restore, promoção assinada e recuperação de senha somente no destino concluídos. Backend único offline responde HTTPS200; conferência dos895originais pelo endpoint está em andamento. Backup da VPS, restart/update, agenda e aceite final continuam pendentes; nenhum OPS concluído.
+- Phase4 atual: HTTPS/login e Chrome/Codex permanentes/restaurados passaram26 gates vivos. Não houve reboot integral nem prova da GUI do Codex Desktop; futuro backup depende do notebook ligado/conectado. Artefatos públicos auditados separadamente; histórico das ferramentas não é declarado absolutamente isento de dados pessoais.
+- 04-05/06 concluídos operacionalmente: fonte original fenced/parada e preservada; novo aceite passou26/26 em42min24,7s com unidade status0,910 originais integrais e cleanup/perfil/config/timer preservados. Concessão temporária Root permanece revogada. OPS-01–04 aguardam verificador; retomada do coletor somente no destino G cabe ao orquestrador.
 
 ### Roadmap Evolution
 
@@ -159,9 +161,9 @@ Nenhum impedimento para iniciar o planejamento.
 
 ## Session Continuity
 
-Last session: 2026-10-13T02:53:01.342Z
-Stopped at: 04-05-02 executing: real profile migrated/promoted; permanent HTTPS originals verification in progress
-Resume file: .planning/phases/04-opera-o-e-restaura-o-na-vps/04-05-SUMMARY.md
+Last session: 2026-10-14T02:28:10.881Z
+Stopped at: Completed 04-06-PLAN.md; awaiting independent phase verification
+Resume file: .planning/phases/04-opera-o-e-restaura-o-na-vps/04-06-SUMMARY.md
 
 - [Phase 01] Override explícito: comparação manual no celular dispensada em favor do WhatsApp Web. Nenhuma intervenção humana pendente; dados/segredos continuam privados.
 

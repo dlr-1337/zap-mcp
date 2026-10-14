@@ -118,7 +118,7 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 - [x] 04-05-PLAN.md
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 04-06-PLAN.md
+- [x] 04-06-PLAN.md
 
 **Dependências de execução:** Identificar VPS, domínio/proxy, supervisão, espaço/persistência e destino privado de backup com chave recuperável antes da implantação; reutilizar o ambiente existente quando adequado. Essas informações não impedem o planejamento inicial. A restauração do arquivo não promete que a sessão remota ainda será válida nem autoriza dois coletores.
 
@@ -140,6 +140,6 @@ O v1 entrega um arquivo privado de uma conta pessoal de WhatsApp, consultável p
 | 1. Arquivo privado com mensagens e mídias reais | 7/7 | Complete    | 2026-10-11 |
 | 2. Busca, contexto, abas e exportação no site | 6/6 | Complete    | 2026-10-12 |
 | 3. Consulta e arquivos reais no Codex | 4/4 | Complete    | 2026-10-12 |
-| 4. Operação e restauração na VPS | 4/6 | Aguardando implantação real | - |
+| 4. Operação e restauração na VPS | 6/6 | Aguardando verificação independente | - |
 
-**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez; 0 órfãos e 0 duplicações. 28 requisitos concluídos nas fases 1–3; OPS-01 a OPS-04 permanecem pendentes. 04-05 está concluído por migração/operação/backup reais;04-06 está em execução e mantém OPS pendentes até cliente/restauração/verificador.
+**Coverage:** 32/32 requisitos v1 mapeados exatamente uma vez;0 órfãos e0 duplicações.28 requisitos concluídos nas fases1–3; OPS-01 a OPS-04 permanecem pendentes.04-05 e04-06 concluíram suas tarefas reais; o novo aceite passou26/26 com Chrome/Codex, restore e cleanup/timer preservados. Fase4 permanece aberta até verificador/UAT e lifecycle pelo orquestrador.
